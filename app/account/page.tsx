@@ -41,7 +41,10 @@ setProfile(profileData);
 
     loadAccount();
   }, []);
-if (localStorage.getItem("pugpep_password_recovery") === "yes") {
+if (
+  typeof window !== "undefined" &&
+  localStorage.getItem("pugpep_password_recovery") === "yes"
+) {
   return (
     <main style={page}>
       <h1 style={{ color: "#ff45d8" }}>Password Reset Required</h1>
