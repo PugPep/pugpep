@@ -261,7 +261,11 @@ export default function InventoryManagerPage() {
     await loadDeletedProducts();
   }
 
-  async function updateOption(id: string, field: string, value: string | number) {
+ async function updateOption(
+  id: string,
+  field: string,
+  value: string | number | boolean
+) {
     const { error } = await supabase
       .from("product_options")
       .update({ [field]: value })
@@ -686,7 +690,7 @@ export default function InventoryManagerPage() {
       updateOption(
         option.id,
         "sale_active",
-        e.target.checked
+        e.target.checked,
       )
     }
   />
