@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createClient } from "../lib/supabaseClient";
 
 type Product = {
@@ -120,6 +120,16 @@ const [isMobile, setIsMobile] = useState<boolean | null>(null);
       src={isMobile ? "/hero-mobile.mp4" : "/hero-desktop.mp4"}
     />
   )}
+
+  <div style={heroOverlay}>
+    <div style={researchBadge}>
+      🧪 FOR RESEARCH PURPOSES ONLY
+      <br />
+      <span style={{ color: "#00ff99" }}>
+        NOT FOR HUMAN OR VETERINARY USE
+      </span>
+    </div>
+  </div>
 </section>
 <section style={discoverBanner}>
   <h2 style={discoverTitle}>
@@ -386,17 +396,6 @@ const researchBadge = {
   boxShadow: "0 0 18px rgba(255,45,210,.35)",
 };
 
-const qualityBar = {
-  maxWidth: 1320,
-  margin: "18px auto",
-  padding: 18,
-  border: "1px solid #333",
-  borderRadius: 16,
-  background: "rgba(10,10,10,.95)",
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: 18,
-};
 
 const qualityItem = {
   display: "flex",
@@ -566,6 +565,13 @@ const discoverText = {
 const heroVideo = {
   width: "100%",
   height: "auto",
-  display: "block",
-
+  display: "block" as const,
+};
+const heroOverlay = {
+  position: "absolute" as const,
+  bottom: 25,
+  width: "100%",
+  display: "flex",
+  justifyContent: "center",
+  pointerEvents: "none" as const,
 };
