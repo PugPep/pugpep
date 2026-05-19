@@ -1,7 +1,7 @@
 export type ProductOption = {
   dosage: string;
   price: number;
-  status: "in stock" | "pre-sale" | "out of stock";
+  status: "in stock" | "pre-sale";
   purchaseType: "single" | "kit";
 };
 

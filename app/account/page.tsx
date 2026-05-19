@@ -112,8 +112,19 @@ if (
             <div key={order.id} style={orderCard}>
               <strong>{order.order_number}</strong>
               <p>Total: ${Number(order.total || 0).toFixed(2)}</p>
-              <p>Status: {order.status}</p>
-              <p>Shipping: {order.shipping_status || "not shipped"}</p>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
+  <span style={getPaymentBadge(order.status)}>
+    {order.status === "paid" ? "PAID" : "PENDING PAYMENT"}
+  </span>
+
+  <span style={getShippingBadge(order.shipping_status)}>
+    {order.shipping_status === "shipped"
+      ? "SHIPPED"
+      : order.shipping_status === "delivered"
+      ? "DELIVERED"
+      : "NOT SHIPPED"}
+  </span>
+</div>
               {order.tracking_number && (
                 <p>Tracking: {order.tracking_number}</p>
               )}
@@ -124,7 +135,50 @@ if (
     </main>
   );
 }
+function getPaymentBadge(status: string) {
+  return {
+    padding: "6px 12px",
+    borderRadius: 999,
+    fontWeight: "bold",
+    fontSize: 12,
+    background:
+      status === "paid"
+        ? "rgba(255,191,0,.12)"
+        : "rgba(255,77,77,.12)",
+    color: status === "paid" ? "#ffcc00" : "#ff4d4d",
+    border:
+      status === "paid"
+        ? "1px solid #ffcc00"
+        : "1px solid #ff4d4d",
+  };
+}
 
+function getShippingBadge(status: string) {
+  return {
+    padding: "6px 12px",
+    borderRadius: 999,
+    fontWeight: "bold",
+    fontSize: 12,
+    background:
+      status === "delivered"
+        ? "rgba(0,255,153,.12)"
+        : status === "shipped"
+        ? "rgba(0,217,255,.12)"
+        : "rgba(255,255,255,.08)",
+    color:
+      status === "delivered"
+        ? "#00ff99"
+        : status === "shipped"
+        ? "#00d9ff"
+        : "#aaa",
+    border:
+      status === "delivered"
+        ? "1px solid #00ff99"
+        : status === "shipped"
+        ? "1px solid #00d9ff"
+        : "1px solid #444",
+  };
+}
 const page = {
   minHeight: "100vh",
   background: "#000",

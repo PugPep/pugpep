@@ -176,7 +176,7 @@ ${order.items
 
         {method === "applepay" && (
           <PaymentInstructions
-            title="Apple Pay Payment"
+            title="Apple Cash"
             accent="#cfd3d8"
             amount={order.total}
             copyOrderDetails={copyOrderDetails}

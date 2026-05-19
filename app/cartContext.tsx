@@ -10,6 +10,7 @@ type CartItem = {
   purchaseType: "single" | "kit";
   price: number;
   quantity: number;
+  status?: string;
 };
 
 type CartContextType = {

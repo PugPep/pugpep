@@ -116,7 +116,7 @@ setOptions(sortedOptions);
 
   if (option.status === "pre-sale") return true;
 
-  if (option.status === "out of stock") return false;
+
 
   if (option.purchase_type === "kit") {
     return availableQuantity >= 10;
@@ -128,10 +128,7 @@ setOptions(sortedOptions);
   function handleAddToCart() {
     if (!product || !selectedOption) return;
 
-    if (!isOptionAvailable(selectedOption)) {
-      alert("This option is currently out of stock.");
-      return;
-    }
+    
 
     addToCart({
       name: product.name,
@@ -145,6 +142,7 @@ setOptions(sortedOptions);
         (Number(selectedOption.sale_percent) / 100)
     : Number(selectedOption.price),
       purchaseType: selectedOption.purchase_type as "single" | "kit",
+      status: selectedOption.status,
     });
 
     alert(`${product.name} added to cart.`);
@@ -218,7 +216,24 @@ setOptions(sortedOptions);
           <div style={disclaimerBox}>
             For research purposes only. Not for human or veterinary use.
           </div>
-
+{selectedOption?.status === "pre-sale" && (
+  <div
+    style={{
+      marginTop: 16,
+      padding: 16,
+      border: "1px solid #ffbf00",
+      borderRadius: 10,
+      background: "rgba(255,191,0,.08)",
+      color: "#ffcc66",
+      fontWeight: "bold",
+      lineHeight: 1.6,
+    }}
+  >
+    ⚠️ PRE-SALE ITEM
+    <br />
+    Estimated delivery time may take up to 2 weeks.
+  </div>
+)}
           <h2 style={{ color: "#00d9ff", marginTop: 30 }}>
             Select Option
           </h2>
@@ -306,7 +321,7 @@ setOptions(sortedOptions);
   ? option.purchase_type === "kit"
     ? `${maxKits} kit(s) available`
     : `${availableQuantity} vial(s) available`
-  : "out of stock"}
+  : "pre-sale"}
                   </span>
                 </button>
               );

@@ -286,7 +286,7 @@ export default function InventoryManagerPage() {
       .from("inventory")
       .update({
         quantity: safeQuantity,
-        status: safeQuantity > 0 ? "in stock" : "out of stock",
+        status: safeQuantity > 0 ? "in stock" : "pre-sale",
         updated_at: new Date().toISOString(),
       })
       .eq("id", id);
@@ -327,7 +327,7 @@ export default function InventoryManagerPage() {
         purchase_type: "single",
         quantity: Number(newOption.quantity || 0),
         status:
-          Number(newOption.quantity || 0) > 0 ? "in stock" : "out of stock",
+          Number(newOption.quantity || 0) > 0 ? "in stock" : "pre-sale",
       });
 
       if (inventoryError) {
@@ -563,7 +563,7 @@ export default function InventoryManagerPage() {
                 >
                   <option value="in stock">in stock</option>
                   <option value="pre-sale">pre-sale</option>
-                  <option value="out of stock">out of stock</option>
+                  
                 </select>
 
                 <input
@@ -679,7 +679,7 @@ export default function InventoryManagerPage() {
                             >
                               <option value="in stock">in stock</option>
                               <option value="pre-sale">pre-sale</option>
-                              <option value="out of stock">out of stock</option>
+                              
                             </select>
                           </td>
 <td style={td}>

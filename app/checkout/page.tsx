@@ -23,6 +23,9 @@ export default function CheckoutPage() {
   const [hasLifetimeFreeShipping, setHasLifetimeFreeShipping] = useState(false);
 const shipping = hasLifetimeFreeShipping || total >= 250 ? 0 : 10;
  const finalTotal = Math.max(0, total - promoDiscount + shipping);
+ const hasPreSaleItems = cart.some(
+  (item: any) => item.status === "pre-sale"
+);
 
   const [customer, setCustomer] = useState({
     name: "",
@@ -247,7 +250,25 @@ if (userId) {
       <h1 style={{ color: "#ff45d8" }}>Checkout</h1>
 
       <div style={freeShippingBanner}>🚚 FREE U.S. Shipping on orders over $250</div>
-
+{hasPreSaleItems && (
+  <div
+    style={{
+      padding: 15,
+      marginBottom: 25,
+      border: "1px solid #ffbf00",
+      borderRadius: 10,
+      background: "rgba(255,191,0,.08)",
+      color: "#ffcc66",
+      fontWeight: "bold",
+      textAlign: "center",
+      lineHeight: 1.6,
+    }}
+  >
+    ⚠️ One or more items in your cart are currently on pre-sale.
+    <br />
+    Estimated delivery time may take up to 2 weeks.
+  </div>
+)}
       <div style={checkoutGrid}>
         <section>
           <div style={promoBox}>

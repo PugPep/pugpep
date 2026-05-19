@@ -32,12 +32,37 @@ export default function AdminMenu() {
 
       {open && (
         <div style={dropdown}>
-  <Link href="/admin" style={item}>Orders</Link>
-  <Link href="/admin/inventory" style={item}>Products / Inventory</Link>
-  <Link href="/admin/promos" style={item}>Promo Codes</Link>
-  <Link href="/admin/customers" style={item}>
-  Customers
-</Link>
+  <Link
+    href="/admin"
+    style={item}
+    onClick={() => setOpen(false)}
+  >
+    Orders
+  </Link>
+
+  <Link
+    href="/admin/inventory"
+    style={item}
+    onClick={() => setOpen(false)}
+  >
+    Products / Inventory
+  </Link>
+
+  <Link
+    href="/admin/promos"
+    style={item}
+    onClick={() => setOpen(false)}
+  >
+    Promo Codes
+  </Link>
+
+  <Link
+    href="/admin/customers"
+    style={item}
+    onClick={() => setOpen(false)}
+  >
+    Customers
+  </Link>
 </div>
       )}
     </div>

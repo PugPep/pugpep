@@ -13,6 +13,7 @@ type Order = {
   customer_email: string;
   total: number;
   status: string;
+  shipping_status?: string;
   created_at: string;
 };
 
@@ -22,6 +23,7 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
+  const [filter, setFilter] = useState("all");
 
   async function loadOrders() {
     const { data, error } = await supabase
@@ -55,10 +57,7 @@ export default function AdminPage() {
     loadAdmin();
   }, []);
 
- async function togglePaid(id: string, currentStatus: string)
- 
- 
- {
+async function togglePaid(id: string, currentStatus: string) {
   const newStatus = currentStatus === "paid" ? "pending" : "paid";
 
   const { data: orderData, error: orderError } = await supabase
@@ -84,48 +83,63 @@ export default function AdminPage() {
     }
 
     for (const item of items || []) {
-  const deductAmount =
-    item.purchase_type === "kit"
-      ? Number(item.quantity || 1) * 10
-      : Number(item.quantity || 1);
+      const deductAmount =
+        item.purchase_type === "kit"
+          ? Number(item.quantity || 1) * 10
+          : Number(item.quantity || 1);
 
-  const productSlug =
-    item.product_slug ||
-    item.product_name?.toLowerCase().replaceAll(" ", "-");
+      const productSlug =
+        item.product_slug ||
+        item.product_name?.toLowerCase().replaceAll(" ", "-");
 
-  const { data: inventoryRow, error: inventoryError } = await supabase
-    .from("inventory")
-    .select("*")
-    .eq("product_slug", productSlug)
-    .eq("dosage", item.dosage)
-    .eq("purchase_type", "single")
-    .maybeSingle();
+      const { data: inventoryRow, error: inventoryError } = await supabase
+        .from("inventory")
+        .select("*")
+        .eq("product_slug", productSlug)
+        .eq("dosage", item.dosage)
+        .eq("purchase_type", "single")
+        .maybeSingle();
 
-  if (inventoryError || !inventoryRow) {
-    alert(
-      `Inventory item not found for ${item.product_name} ${item.dosage}. Check product slug and dosage match inventory.`
-    );
-    return;
-  }
+      if (inventoryError || !inventoryRow) {
+        alert(
+          `Inventory item not found for ${item.product_name} ${item.dosage}. Check product slug and dosage match inventory.`
+        );
+        return;
+      }
 
       const newQuantity = Math.max(
         0,
         Number(inventoryRow.quantity || 0) - deductAmount
       );
 
-      const { error: updateInventoryError } = await supabase
-        .from("inventory")
-        .update({
-          quantity: newQuantity,
-          status: newQuantity > 0 ? "in stock" : "out of stock",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", inventoryRow.id);
+      const inventoryStatus = newQuantity > 0 ? "in stock" : "pre-sale";
 
-      if (updateInventoryError) {
-        alert(updateInventoryError.message);
-        return;
-      }
+      const { error: updateInventoryError } = await supabase
+  .from("inventory")
+  .update({
+    quantity: newQuantity,
+    status: inventoryStatus,
+    updated_at: new Date().toISOString(),
+  })
+  .eq("id", inventoryRow.id);
+
+if (updateInventoryError) {
+  alert(updateInventoryError.message);
+  return;
+}
+
+const { error: updateOptionError } = await supabase
+  .from("product_options")
+  .update({
+    status: inventoryStatus,
+  })
+  .eq("product_slug", productSlug)
+  .eq("dosage", item.dosage);
+
+if (updateOptionError) {
+  alert(updateOptionError.message);
+  return;
+}
     }
 
     const { error: paidError } = await supabase
@@ -195,11 +209,109 @@ async function deleteOrder(id: string) {
       </main>
     );
   }
+  const pendingCount = orders.filter(
+  (o) => o.status === "pending"
+).length;
 
+const paidCount = orders.filter(
+  (o) =>
+    o.status === "paid" &&
+    o.shipping_status !== "shipped"
+).length;
+
+const shippedCount = orders.filter(
+  (o) => o.shipping_status === "shipped"
+).length;
+
+const deliveredCount = orders.filter(
+  (o) => o.shipping_status === "delivered"
+).length;
+const filteredOrders = orders.filter((order) => {
+  if (filter === "all") return true;
+
+  if (filter === "pending") {
+    return order.status === "pending";
+  }
+
+  if (filter === "paid") {
+    return (
+      order.status === "paid" &&
+      order.shipping_status !== "shipped"
+    );
+  }
+
+  if (filter === "shipped") {
+    return order.shipping_status === "shipped";
+  }
+
+  if (filter === "delivered") {
+    return order.shipping_status === "delivered";
+  }
+
+  return true;
+});
   return (
     <main style={pageStyle}>
       <h1 style={{ color: "#ff45d8" }}>Admin Dashboard</h1>
+<div
+  style={{
+    display: "flex",
+    gap: 12,
+    flexWrap: "wrap",
+    marginBottom: 25,
+  }}
+>
+  {[
+  {
+    key: "all",
+    label: `ALL (${orders.length})`,
+  },
+  {
+    key: "pending",
+    label: `PENDING (${pendingCount})`,
+  },
+  {
+    key: "paid",
+    label: `PAID (${paidCount})`,
+  },
+  {
+    key: "shipped",
+    label: `SHIPPED (${shippedCount})`,
+  },
+  {
+    key: "delivered",
+    label: `DELIVERED (${deliveredCount})`,
+  },
+].map((item) => (
+  <button
+    key={item.key}
+    onClick={() => setFilter(item.key)}
+    style={{
+      padding: "10px 16px",
+      borderRadius: 10,
+      border:
+        filter === item.key
+          ? "1px solid #00ff99"
+          : "1px solid #333",
 
+      background:
+        filter === item.key
+          ? "rgba(0,255,153,.12)"
+          : "#111",
+
+      color:
+        filter === item.key
+          ? "#00ff99"
+          : "#ccc",
+
+      cursor: "pointer",
+      fontWeight: "bold",
+    }}
+  >
+    {item.label}
+  </button>
+))}
+</div>
       {orders.length === 0 ? (
         <p>No orders found.</p>
       ) : (
@@ -217,7 +329,7 @@ async function deleteOrder(id: string) {
           </thead>
 
           <tbody>
-            {orders.map((order) => (
+            {filteredOrders.map((order) => (
               <tr key={order.id}
   onClick={() => (window.location.href = `/admin/orders/${order.id}`)}
   style={{
@@ -232,13 +344,39 @@ async function deleteOrder(id: string) {
 
                 <td style={td}>
                   <span
-                    style={{
-                      color: order.status === "paid" ? "#00ff99" : "#ffcc00",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    {order.status}
-                  </span>
+  style={{
+    padding: "6px 12px",
+    borderRadius: 999,
+    fontWeight: "bold",
+    fontSize: 13,
+
+    background:
+      order.shipping_status === "delivered"
+        ? "rgba(0,255,153,.12)"
+        : order.shipping_status === "shipped"
+        ? "rgba(0,217,255,.12)"
+        : order.status === "paid"
+        ? "rgba(255,191,0,.12)"
+        : "rgba(255,77,77,.12)",
+
+    color:
+      order.shipping_status === "delivered"
+        ? "#00ff99"
+        : order.shipping_status === "shipped"
+        ? "#00d9ff"
+        : order.status === "paid"
+        ? "#ffcc00"
+        : "#ff4d4d",
+  }}
+>
+  {order.shipping_status === "delivered"
+    ? "DELIVERED"
+    : order.shipping_status === "shipped"
+    ? "SHIPPED"
+    : order.status === "paid"
+    ? "PAID"
+    : "PENDING"}
+</span>
                 </td>
 
                 <td style={td}>

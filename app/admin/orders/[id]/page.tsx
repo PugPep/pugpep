@@ -80,41 +80,59 @@ export default function OrderDetailsPage() {
   }
 
   async function sendShippingEmail() {
-    if (!order) return;
+  if (!order) return;
 
-    setSendingEmail(true);
+  setSendingEmail(true);
 
-    try {
-      await emailjs.send(
-        EMAILJS_SERVICE_ID,
-        SHIPPING_TEMPLATE_ID,
-        {
-          name: order.customer_name,
-          email: order.customer_email,
-          order_number: order.order_number,
-          shipping_status: shippingStatus,
-          tracking_number:
-            trackingNumber || "Tracking number not available yet",
-          shipping_address: `${order.shipping_address}, ${order.city}, ${order.state} ${order.zip}`,
-          order_total: Number(order.total).toFixed(2),
-          items: items.map((item) => ({
-            name: item.product_name,
-            dosage: item.dosage,
-            purchase_type: item.purchase_type,
-            price: Number(item.price).toFixed(2),
-          })),
-        },
-        EMAILJS_PUBLIC_KEY
-      );
+  try {
+    await emailjs.send(
+      EMAILJS_SERVICE_ID,
+      SHIPPING_TEMPLATE_ID,
+      {
+        name: order.customer_name,
+        email: order.customer_email,
+        order_number: order.order_number,
+        shipping_status: "shipped",
+        tracking_number:
+          trackingNumber || "Tracking number not available yet",
+        shipping_address: `${order.shipping_address}, ${order.city}, ${order.state} ${order.zip}`,
+        order_total: Number(order.total).toFixed(2),
+        items: items.map((item) => ({
+          name: item.product_name,
+          dosage: item.dosage,
+          purchase_type: item.purchase_type,
+          price: Number(item.price).toFixed(2),
+        })),
+      },
+      EMAILJS_PUBLIC_KEY
+    );
 
-      alert("Shipping email sent.");
-    } catch (error) {
-      console.error(error);
-      alert("Email failed to send.");
+    // AUTO UPDATE ORDER STATUS
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        shipping_status: "shipped",
+        tracking_number: trackingNumber,
+      })
+      .eq("id", id);
+
+    if (error) {
+      alert(error.message);
+      return;
     }
 
-    setSendingEmail(false);
+    setShippingStatus("shipped");
+
+    alert("Shipping email sent and order marked as shipped.");
+
+    await loadOrder();
+  } catch (error) {
+    console.error(error);
+    alert("Email failed to send.");
   }
+
+  setSendingEmail(false);
+}
 function startScanner() {
   setScannerOpen(true);
 

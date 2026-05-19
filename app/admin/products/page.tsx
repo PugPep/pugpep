@@ -360,7 +360,7 @@ export default function AdminProductsPage() {
               >
                 <option value="in stock">in stock</option>
                 <option value="pre-sale">pre-sale</option>
-                <option value="out of stock">out of stock</option>
+                
               </select>
 
               <button onClick={addOption} style={button}>
@@ -439,7 +439,7 @@ export default function AdminProductsPage() {
                         >
                           <option value="in stock">in stock</option>
                           <option value="pre-sale">pre-sale</option>
-                          <option value="out of stock">out of stock</option>
+                          
                         </select>
                       </td>
                     </tr>
