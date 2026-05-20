@@ -112,13 +112,17 @@ async function togglePaid(id: string, currentStatus: string) {
         Number(inventoryRow.quantity || 0) - deductAmount
       );
 
-      const inventoryStatus = newQuantity > 0 ? "in stock" : "pre-sale";
+      const singleStatus =
+  newQuantity > 0 ? "in stock" : "out of stock";
+
+const kitStatus =
+  newQuantity >= 10 ? "in stock" : "pre-sale";
 
       const { error: updateInventoryError } = await supabase
   .from("inventory")
   .update({
     quantity: newQuantity,
-    status: inventoryStatus,
+    status: singleStatus,
     updated_at: new Date().toISOString(),
   })
   .eq("id", inventoryRow.id);
@@ -128,20 +132,34 @@ if (updateInventoryError) {
   return;
 }
 
-const { error: updateOptionError } = await supabase
+const { error: updateSingleOptionError } = await supabase
   .from("product_options")
   .update({
-    status: inventoryStatus,
+    status: singleStatus,
   })
   .eq("product_slug", productSlug)
-  .eq("dosage", item.dosage);
+  .eq("dosage", item.dosage)
+  .eq("purchase_type", "single");
 
-if (updateOptionError) {
-  alert(updateOptionError.message);
+if (updateSingleOptionError) {
+  alert(updateSingleOptionError.message);
+  return;
+}
+
+const { error: updateKitOptionError } = await supabase
+  .from("product_options")
+  .update({
+    status: kitStatus,
+  })
+  .eq("product_slug", productSlug)
+  .eq("dosage", item.dosage)
+  .eq("purchase_type", "kit");
+
+if (updateKitOptionError) {
+  alert(updateKitOptionError.message);
   return;
 }
     }
-
     const { error: paidError } = await supabase
       .from("orders")
       .update({

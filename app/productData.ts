@@ -1,8 +1,8 @@
 export type ProductOption = {
   dosage: string;
   price: number;
-  status: "in stock" | "pre-sale";
-  purchaseType: "single" | "kit";
+  status: "in stock" | "pre-sale" | "out of stock";
+  purchaseType: "single" | "kit"; 
 };
 
 export type Product = {
@@ -27,8 +27,8 @@ export const products: Product[] = [
     options: [
       { dosage: "30mg", price: 60, status: "in stock", purchaseType: "single" },
       { dosage: "60mg", price: 100, status: "in stock", purchaseType: "single" },
-      { dosage: "100mg", price: 155, status: "pre-sale", purchaseType: "single" },
-      { dosage: "120mg", price: 185, status: "pre-sale", purchaseType: "single" },
+      { dosage: "100mg", price: 155, status: "out of stock", purchaseType: "single" },
+      { dosage: "120mg", price: 185, status: "out of stock", purchaseType: "single" },
       { dosage: "30mg", price: 360, status: "in stock", purchaseType: "kit" },
       { dosage: "60mg", price: 600, status: "in stock", purchaseType: "kit" },
       { dosage: "100mg", price: 1200, status: "pre-sale", purchaseType: "kit" },
@@ -160,16 +160,5 @@ export const products: Product[] = [
       { dosage: "10mg", price: 65, status: "in stock", purchaseType: "single" },
     ],
   },
-  {
-    name: "Off-Cat",
-    slug: "off-cat",
-    color: "#111111",
-    image: "/off-cat.png",
-    shortDescription: "Off-catalog research item.",
-    description:
-      "Off-Cat is an off-catalog research item category for specialty requests and non-standard product availability. Contact PUGPEP for current details.",
-    options: [
-      { dosage: "Custom", price: 0, status: "pre-sale", purchaseType: "single" },
-    ],
-  },
+  
 ];

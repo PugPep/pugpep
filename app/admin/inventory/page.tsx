@@ -280,33 +280,63 @@ export default function InventoryManagerPage() {
   }
 
   async function updateInventory(id: string, quantity: number) {
-    const safeQuantity = Math.max(0, Number(quantity));
+  const safeQuantity = Math.max(0, Number(quantity));
 
-    const { error } = await supabase
-      .from("inventory")
-      .update({
-        quantity: safeQuantity,
-        status: safeQuantity > 0 ? "in stock" : "pre-sale",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
+  const inventoryRow = inventory.find((row) => row.id === id);
 
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    if (selectedSlug) await loadInventory(selectedSlug);
+  if (!inventoryRow) {
+    alert("Inventory row not found.");
+    return;
   }
 
-  async function addOptionAndInventory() {
-    if (!selectedSlug) return alert("Select a product first.");
+  // SINGLE VIAL LOGIC
+  const singleStatus =
+    safeQuantity > 0 ? "in stock" : "out of stock";
 
-    if (!newOption.dosage || !newOption.price) {
-      alert("Dosage and price are required.");
-      return;
-    }
+  // KIT LOGIC
+  const kitStatus =
+    safeQuantity >= 10 ? "in stock" : "pre-sale";
 
+  const { error } = await supabase
+    .from("inventory")
+    .update({
+      quantity: safeQuantity,
+      status: singleStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  // UPDATE SINGLE PRODUCT OPTION
+  await supabase
+    .from("product_options")
+    .update({
+      status: singleStatus,
+    })
+    .eq("product_slug", inventoryRow.product_slug)
+    .eq("dosage", inventoryRow.dosage)
+    .eq("purchase_type", "single");
+
+  // UPDATE KIT PRODUCT OPTION
+  await supabase
+    .from("product_options")
+    .update({
+      status: kitStatus,
+    })
+    .eq("product_slug", inventoryRow.product_slug)
+    .eq("dosage", inventoryRow.dosage)
+    .eq("purchase_type", "kit");
+
+  if (selectedSlug) {
+    await loadOptions(selectedSlug);
+    await loadInventory(selectedSlug);
+  }
+}
+async function addOptionAndInventory() {
     const { error: optionError } = await supabase.from("product_options").insert({
       product_slug: selectedSlug,
       dosage: newOption.dosage,
@@ -327,7 +357,7 @@ export default function InventoryManagerPage() {
         purchase_type: "single",
         quantity: Number(newOption.quantity || 0),
         status:
-          Number(newOption.quantity || 0) > 0 ? "in stock" : "pre-sale",
+          Number(newOption.quantity || 0) > 0 ? "in stock" : "out of stock",
       });
 
       if (inventoryError) {
@@ -561,8 +591,9 @@ export default function InventoryManagerPage() {
                   }
                   style={input}
                 >
-                  <option value="in stock">in stock</option>
-                  <option value="pre-sale">pre-sale</option>
+                <option value="in stock">in stock</option>
+<option value="pre-sale">pre-sale</option>
+<option value="out of stock">out of stock</option>
                   
                 </select>
 
@@ -677,9 +708,9 @@ export default function InventoryManagerPage() {
                               }
                               style={smallInput}
                             >
-                              <option value="in stock">in stock</option>
-                              <option value="pre-sale">pre-sale</option>
-                              
+                             <option value="in stock">in stock</option>
+<option value="pre-sale">pre-sale</option>
+<option value="out of stock">out of stock</option>
                             </select>
                           </td>
 <td style={td}>

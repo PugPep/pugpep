@@ -1,7 +1,7 @@
 export type ProductOption = {
   dosage: string;
   price: number;
-  status: "in stock" | "pre-sale";
+  status: "in stock" | "pre-sale" | "out of stock";
   purchaseType: "single" | "kit";
 };
 
@@ -27,12 +27,12 @@ export const products: Product[] = [
     options: [
       { dosage: "30mg", price: 60, status: "in stock", purchaseType: "single" },
       { dosage: "60mg", price: 100, status: "in stock", purchaseType: "single" },
-      { dosage: "100mg", price: 155, status: "pre-sale", purchaseType: "single" },
-      { dosage: "120mg", price: 185, status: "pre-sale", purchaseType: "single" },
+      { dosage: "100mg", price: 155, status: "out of stock", purchaseType: "single" },
+      { dosage: "120mg", price: 185, status: "out of stock", purchaseType: "single" },
       { dosage: "30mg", price: 360, status: "in stock", purchaseType: "kit" },
       { dosage: "60mg", price: 600, status: "in stock", purchaseType: "kit" },
-      { dosage: "100mg", price: 1200, status: "pre-sale", purchaseType: "kit" },
-      { dosage: "120mg", price: 1400, status: "pre-sale", purchaseType: "kit" },
+      { dosage: "100mg", price: 1200, status: "out of stock", purchaseType: "kit" },
+      { dosage: "120mg", price: 1400, status: "out of stock", purchaseType: "kit" },
     ],
   },
   {

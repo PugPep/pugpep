@@ -111,24 +111,29 @@ setOptions(sortedOptions);
     return inventoryItem?.quantity || 0;
   }
 
-  function isOptionAvailable(option: ProductOption) {
+ function isOptionAvailable(option: ProductOption) {
   const availableQuantity = getAvailableQuantity(option);
 
-  if (option.status === "pre-sale") return true;
-
-
+  if (option.purchase_type === "single") {
+    return availableQuantity >= 1 && option.status !== "out of stock";
+  }
 
   if (option.purchase_type === "kit") {
+    if (option.status === "pre-sale") return true;
+    if (option.status === "out of stock") return false;
     return availableQuantity >= 10;
   }
 
-  return availableQuantity >= 1;
+  return false;
 }
 
   function handleAddToCart() {
     if (!product || !selectedOption) return;
 
-    
+    if (!isOptionAvailable(selectedOption)) {
+  alert("This option is currently out of stock.");
+  return;
+}
 
     addToCart({
       name: product.name,
@@ -315,13 +320,13 @@ setOptions(sortedOptions);
                       color: canBuy ? "#00ff99" : "#ff4d4d",
                     }}
                   >
-                    {option.status === "pre-sale"
+                    {option.purchase_type === "single"
+  ? availableQuantity >= 1
+    ? `${availableQuantity} vial(s) available`
+    : "out of stock"
+  : option.status === "pre-sale"
   ? "pre-sale"
-  : canBuy
-  ? option.purchase_type === "kit"
-    ? `${maxKits} kit(s) available`
-    : `${availableQuantity} vial(s) available`
-  : "pre-sale"}
+  : `${maxKits} kit(s) available`}
                   </span>
                 </button>
               );
