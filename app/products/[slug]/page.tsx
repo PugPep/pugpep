@@ -41,7 +41,7 @@ export default function ProductDetailPage() {
   const [inventory, setInventory] = useState<any[]>([]);
   const [selectedOption, setSelectedOption] = useState<ProductOption | null>(null);
   const [loading, setLoading] = useState(true);
-
+const [quantity, setQuantity] = useState(1);
   useEffect(() => {
     async function loadProduct() {
       setLoading(true);
@@ -128,30 +128,64 @@ setOptions(sortedOptions);
 }
 
   function handleAddToCart() {
-    if (!product || !selectedOption) return;
+  if (!product || !selectedOption) return;
 
-    if (!isOptionAvailable(selectedOption)) {
-  alert("This option is currently out of stock.");
-  return;
-}
+  const availableQuantity =
+    getAvailableQuantity(selectedOption);
 
-    addToCart({
+  const maxKits = Math.floor(
+    availableQuantity / 10
+  );
+
+  // SINGLE VIAL RULES
+  if (selectedOption.purchase_type === "single") {
+    if (quantity > availableQuantity) {
+      alert(
+        `Only ${availableQuantity} vial(s) currently available.`
+      );
+      return;
+    }
+  }
+
+  // KIT RULES
+  const isKitPresale =
+    selectedOption.purchase_type === "kit" &&
+    quantity > maxKits;
+
+  addToCart(
+    {
       name: product.name,
       slug: product.slug,
       image: product.image,
       dosage: selectedOption.dosage,
       price:
-  selectedOption.sale_active && Number(selectedOption.sale_percent || 0) > 0
-    ? Number(selectedOption.price) -
-      Number(selectedOption.price) *
-        (Number(selectedOption.sale_percent) / 100)
-    : Number(selectedOption.price),
-      purchaseType: selectedOption.purchase_type as "single" | "kit",
-      status: selectedOption.status,
-    });
+        selectedOption.sale_active &&
+        Number(selectedOption.sale_percent || 0) > 0
+          ? Number(selectedOption.price) -
+            Number(selectedOption.price) *
+              (Number(selectedOption.sale_percent) / 100)
+          : Number(selectedOption.price),
 
+      purchaseType:
+        selectedOption.purchase_type as
+          | "single"
+          | "kit",
+
+      status: isKitPresale
+        ? "pre-sale"
+        : selectedOption.status,
+    },
+    quantity
+  );
+
+  if (isKitPresale) {
+    alert(
+      "Some kits in this order will be fulfilled as pre-sale and may take up to 2 weeks."
+    );
+  } else {
     alert(`${product.name} added to cart.`);
   }
+}
 
   if (loading) {
     return <main style={pageStyle}>Loading product...</main>;
@@ -333,9 +367,83 @@ setOptions(sortedOptions);
             })}
           </div>
 
-          <button onClick={handleAddToCart} style={addButton}>
-            Add to Cart
-          </button>
+          <div
+  style={{
+    display: "flex",
+    gap: 12,
+    alignItems: "center",
+    marginTop: 25,
+  }}
+>
+  <button
+    onClick={() =>
+      setQuantity((prev) => Math.max(1, prev - 1))
+    }
+    style={qtyButton}
+  >
+    -
+  </button>
+
+  <span
+    style={{
+      minWidth: 40,
+      textAlign: "center",
+      fontWeight: "bold",
+      fontSize: 18,
+    }}
+  >
+    {quantity}
+  </span>
+
+  <button
+    onClick={() => setQuantity((prev) => prev + 1)}
+    style={qtyButton}
+  >
+    +
+  </button>
+</div>
+{selectedOption && (
+  <div
+    style={{
+      marginTop: 16,
+      padding: 14,
+      borderRadius: 10,
+      border: "1px solid rgba(255,255,255,.18)",
+      background: "rgba(255,255,255,.05)",
+      color: "#ccc",
+      lineHeight: 1.6,
+      fontWeight: "bold",
+    }}
+  >
+    {selectedOption.purchase_type === "single" ? (
+      quantity > getAvailableQuantity(selectedOption) ? (
+        <span style={{ color: "#ff4d4d" }}>
+          Only {getAvailableQuantity(selectedOption)} vial(s) currently available.
+          Please reduce quantity.
+        </span>
+      ) : (
+        <span style={{ color: "#00ff99" }}>
+          {getAvailableQuantity(selectedOption)} vial(s) currently available.
+        </span>
+      )
+    ) : quantity > Math.floor(getAvailableQuantity(selectedOption) / 10) ? (
+      <span style={{ color: "#ffcc66" }}>
+        {Math.floor(getAvailableQuantity(selectedOption) / 10)} kit(s) currently in stock.
+        Additional kits will be fulfilled as pre-sale and may take up to 2 weeks.
+      </span>
+    ) : (
+      <span style={{ color: "#00ff99" }}>
+        {Math.floor(getAvailableQuantity(selectedOption) / 10)} kit(s) currently available.
+      </span>
+    )}
+  </div>
+)}
+<button
+  onClick={handleAddToCart}
+  style={addButton}
+>
+  Add to Cart
+</button>
         </div>
       </section>
     </main>
@@ -373,7 +481,17 @@ const disclaimerBox = {
   background: "rgba(255,45,216,.08)",
   fontWeight: "bold",
 };
-
+const qtyButton = {
+  width: 40,
+  height: 40,
+  borderRadius: 8,
+  border: "1px solid #00d9ff",
+  background: "#111",
+  color: "#00d9ff",
+  cursor: "pointer",
+  fontWeight: "bold",
+  fontSize: 18,
+};
 const addButton = {
   marginTop: 25,
   width: "100%",
