@@ -21,8 +21,14 @@ export default function CheckoutPage() {
   const [promoDiscount, setPromoDiscount] = useState(0);
   const [promoLoading, setPromoLoading] = useState(false);
   const [hasLifetimeFreeShipping, setHasLifetimeFreeShipping] = useState(false);
+  const [rewardPoints, setRewardPoints] = useState(0);
+const [pointsToUse, setPointsToUse] = useState(0);
 const shipping = hasLifetimeFreeShipping || total >= 250 ? 0 : 10;
- const finalTotal = Math.max(0, total - promoDiscount + shipping);
+const rewardDiscount = pointsToUse / 100;
+ const finalTotal = Math.max(
+  0,
+  total - promoDiscount - rewardDiscount + shipping
+);
  const hasPreSaleItems = cart.some(
   (item: any) => item.status === "pre-sale"
 );
@@ -56,15 +62,19 @@ if (profile?.has_lifetime_free_shipping) {
 
 if (profile) {
   setCustomer((prev) => ({
-    ...prev,
-    name: profile.full_name || "",
-    phone: profile.phone || "",
-    address: profile.address || "",
-    city: profile.city || "",
-    state: profile.state || "",
-    zip: profile.zip || "",
-    email: user.email || "",
-  }));
+  ...prev,
+  name: profile.full_name || "",
+  phone: profile.phone || "",
+  address: profile.address || "",
+  city: profile.city || "",
+  state: profile.state || "",
+  zip: profile.zip || "",
+  email: user.email || "",
+}));
+
+setRewardPoints(
+  Number(profile.reward_points || 0)
+);
 }
   }
 
@@ -152,25 +162,110 @@ if (userId) {
       zip: customer.zip,
     })
     .eq("id", userId);
+}const { data: existingProfile } = await supabase
+  .from("customer_profiles")
+  .select("*")
+  .eq("id", userId)
+  .single();
+
+if (existingProfile) {
+  const newLifetimeSpend =
+    Number(existingProfile.lifetime_spend || 0) +
+    Number(finalTotal || 0);
+
+  const newRewardPoints =
+    Number(existingProfile.reward_points || 0) +
+    Math.floor(Number(finalTotal || 0));
+
+  let vipTier = "Stone";
+
+  if (newLifetimeSpend >= 50000) {
+    vipTier = "Diamond";
+  } else if (newLifetimeSpend >= 35000) {
+    vipTier = "Ruby";
+  } else if (newLifetimeSpend >= 20000) {
+    vipTier = "Sapphire";
+  } else if (newLifetimeSpend >= 10000) {
+    vipTier = "Emerald";
+  } else if (newLifetimeSpend >= 5000) {
+    vipTier = "Platinum";
+  } else if (newLifetimeSpend >= 2500) {
+    vipTier = "Gold";
+  } else if (newLifetimeSpend >= 1000) {
+    vipTier = "Silver";
+  } else if (newLifetimeSpend >= 500) {
+    vipTier = "Bronze";
+  } else if (newLifetimeSpend >= 250) {
+    vipTier = "Iron";
+  }
+
+  await supabase
+    .from("customer_profiles")
+    .update({
+      lifetime_spend: newLifetimeSpend,
+      reward_points:
+  newRewardPoints - pointsToUse,
+      vip_tier: vipTier,
+    })
+    .eq("id", userId);
 }
-    const { error: orderError } = await supabase.from("orders").insert({
-      id: orderId,
-      user_id: userId,
-      order_number: orderNumber,
-      customer_name: customer.name,
-      customer_email: customer.email,
-      customer_phone: customer.phone,
-      shipping_address: customer.address,
-      city: customer.city,
-      state: customer.state,
-      zip: customer.zip,
-      subtotal: total,
-      shipping,
-      total: finalTotal,
-      promo_code: promoData?.code || null,
-      promo_discount: promoDiscount || 0,
-      status: "pending",
-    });
+    const productCostTotal = cart.reduce(
+  (sum, item: any) =>
+    sum +
+    Number(item.cost || 0) *
+      Number(item.quantity || 1),
+  0
+);
+
+const estimatedShippingCost =
+  shipping > 0 ? 10 : 0;
+
+const estimatedPackagingCost = 3;
+
+const estimatedProfit =
+  finalTotal -
+  productCostTotal -
+  estimatedShippingCost -
+  estimatedPackagingCost;
+
+const { error: orderError } = await supabase
+  .from("orders")
+  .insert({
+    id: orderId,
+    user_id: userId,
+    order_number: orderNumber,
+    customer_name: customer.name,
+    customer_email: customer.email,
+    customer_phone: customer.phone,
+    shipping_address: customer.address,
+    city: customer.city,
+    state: customer.state,
+    zip: customer.zip,
+
+    subtotal: total,
+    shipping,
+    total: finalTotal,
+
+    reward_points_used: pointsToUse,
+    reward_discount: rewardDiscount,
+
+    promo_code: promoData?.code || null,
+    promo_discount: promoDiscount || 0,
+
+    product_cost_total: productCostTotal,
+    estimated_shipping_cost:
+      estimatedShippingCost,
+
+    estimated_packaging_cost:
+      estimatedPackagingCost,
+
+    estimated_profit: estimatedProfit,
+
+    has_lifetime_free_shipping:
+      hasLifetimeFreeShipping,
+
+    status: "pending",
+  });
 
     if (orderError) {
       setLoading(false);
@@ -185,6 +280,7 @@ if (userId) {
   dosage: item.dosage,
   purchase_type: item.purchaseType,
   price: item.price * item.quantity,
+  cost: item.cost || 0,
   quantity: item.quantity,
 }));
 
@@ -361,7 +457,51 @@ if (userId) {
 
         <section>
           <h2 style={{ color: "#00d9ff" }}>Order Summary</h2>
+<div
+  style={{
+    marginBottom: 20,
+    padding: 14,
+    border: "1px solid rgba(255,255,255,.18)",
+    borderRadius: 10,
+    background: "rgba(255,255,255,.04)",
+  }}
+>
+  <h3 style={{ color: "#00ff99", marginTop: 0 }}>
+    Reward Points
+  </h3>
 
+  <p>
+    Available Points:{" "}
+    <strong>{rewardPoints}</strong>
+  </p>
+
+  <input
+    type="number"
+    placeholder="Points to redeem"
+    value={pointsToUse}
+    onChange={(e) => {
+      const value = Math.max(
+        0,
+        Math.min(
+          Number(e.target.value),
+          rewardPoints
+        )
+      );
+
+      setPointsToUse(value);
+    }}
+    style={inputStyle}
+  />
+
+  <p style={{ color: "#00ff99" }}>
+    Reward Discount: $
+    {rewardDiscount.toFixed(2)}
+  </p>
+
+  <p style={{ color: "#888", fontSize: 13 }}>
+    100 points = $1 off
+  </p>
+</div>
           {cart.length === 0 ? (
             <p>Your cart is empty.</p>
           ) : (
@@ -401,7 +541,25 @@ if (userId) {
 
                       <button
                         type="button"
-                        onClick={() => updateQuantity(index, item.quantity + 1)}
+                        onClick={() => {
+  // SINGLE VIAL LIMITS
+  if (
+    item.purchaseType === "single" &&
+    item.status !== "pre-sale"
+  ) {
+    const maxAvailable =
+      item.maxAvailable || item.quantity;
+
+    if (item.quantity + 1 > maxAvailable) {
+      alert(
+        `Only ${maxAvailable} vial(s) currently available.`
+      );
+      return;
+    }
+  }
+
+  updateQuantity(index, item.quantity + 1);
+}}
                         style={qtyButton}
                       >
                         +

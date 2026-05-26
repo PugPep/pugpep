@@ -27,6 +27,7 @@ type ProductOption = {
   status: string;
   sale_active: boolean;
 sale_percent: number;
+cost: number;
 };
 
 export default function ProductDetailPage() {
@@ -165,7 +166,7 @@ setOptions(sortedOptions);
             Number(selectedOption.price) *
               (Number(selectedOption.sale_percent) / 100)
           : Number(selectedOption.price),
-
+cost: (selectedOption.cost || 0),
       purchaseType:
         selectedOption.purchase_type as
           | "single"
@@ -174,6 +175,7 @@ setOptions(sortedOptions);
       status: isKitPresale
         ? "pre-sale"
         : selectedOption.status,
+        maxAvailable: availableQuantity,
     },
     quantity
   );

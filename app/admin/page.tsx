@@ -270,7 +270,7 @@ const filteredOrders = orders.filter((order) => {
 });
   return (
     <main style={pageStyle}>
-      <h1 style={{ color: "#ff45d8" }}>Admin Dashboard</h1>
+      <h1 style={{ color: "#ff45d8" }}>Orders</h1>
 <div
   style={{
     display: "flex",
@@ -340,6 +340,7 @@ const filteredOrders = orders.filter((order) => {
               <th style={th}>Order #</th>
               <th style={th}>Name</th>
               <th style={th}>Email</th>
+              <th style={th}>Date</th>
               <th style={th}>Total</th>
               <th style={th}>Status</th>
               <th style={th}>Actions</th>
@@ -358,6 +359,9 @@ const filteredOrders = orders.filter((order) => {
                 <td style={td}>{order.order_number}</td>
                 <td style={td}>{order.customer_name}</td>
                 <td style={td}>{order.customer_email}</td>
+                <td style={td}>
+  {new Date(order.created_at).toLocaleString()}
+</td>
                 <td style={td}>${Number(order.total).toFixed(2)}</td>
 
                 <td style={td}>

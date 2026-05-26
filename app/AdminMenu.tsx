@@ -32,6 +32,13 @@ export default function AdminMenu() {
 
       {open && (
         <div style={dropdown}>
+      <Link
+  href="/admin/dashboard"
+  style={item}
+  onClick={() => setOpen(false)}
+>
+  Dashboard
+</Link>    
   <Link
     href="/admin"
     style={item}
@@ -47,7 +54,9 @@ export default function AdminMenu() {
   >
     Products / Inventory
   </Link>
-
+<Link href="/admin/vip" style={item} onClick={() => setOpen(false)}>
+  VIP Customers
+</Link>
   <Link
     href="/admin/promos"
     style={item}

@@ -167,6 +167,10 @@ function startScanner() {
       </button>
 
       <h1 style={{ color: "#ff45d8" }}>Order {order.order_number}</h1>
+      <p style={{ color: "#ccc" }}>
+  <strong>Order Date:</strong>{" "}
+  {new Date(order.created_at).toLocaleString()}
+</p>
 <p style={{ color: "#888" }}>
   Page ID: {id}
 </p>
@@ -178,6 +182,17 @@ function startScanner() {
         <h2 style={{ color: "#00d9ff" }}>Customer</h2>
         <p><strong>Name:</strong> {order.customer_name}</p>
         <p><strong>Email:</strong> {order.customer_email}</p>
+        {order.has_lifetime_free_shipping && (
+  <p
+    style={{
+      color: "#00ff99",
+      fontWeight: "bold",
+      marginTop: 10,
+    }}
+  >
+    🚚 Lifetime Free Shipping Member
+  </p>
+)}
         <p><strong>Phone:</strong> {order.customer_phone || "Not provided"}</p>
       </section>
 
@@ -200,6 +215,7 @@ function startScanner() {
               <strong>{item.product_name || "Product"}</strong>
               <span>{item.dosage || "-"}</span>
               <span>{item.purchase_type || "-"}</span>
+              <span>Qty: {item.quantity || 1}</span>
               <span>${Number(item.price || 0).toFixed(2)}</span>
             </div>
           ))

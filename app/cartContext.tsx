@@ -11,6 +11,8 @@ type CartItem = {
   price: number;
   quantity: number;
   status?: string;
+  cost?: number;
+  maxAvailable?: number;
 };
 
 type CartContextType = {

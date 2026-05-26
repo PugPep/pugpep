@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createClient } from "../../lib/supabaseClient";
-
+import { useRouter } from "next/navigation";
+import { useCart } from "../cartContext";
 export default function AccountPage() {
   const supabase = createClient();
-
+const router = useRouter();
+const { addToCart } = useCart();
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [orders, setOrders] = useState<any[]>([]);
@@ -51,6 +53,44 @@ if (
       <p>Please finish updating your password before viewing your account.</p>
     </main>
   );
+}async function reorder(orderId: string) {
+  const { data: items, error } = await supabase
+    .from("order_items")
+    .select("*")
+    .eq("order_id", orderId);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  if (!items || items.length === 0) {
+    alert("No items found for this order.");
+    return;
+  }
+
+  items.forEach((item) => {
+    addToCart(
+      {
+        name: item.product_name,
+        slug: item.product_slug,
+        image: item.image || "/pugpep-logo.png",
+        dosage: item.dosage,
+        price:
+          Number(item.price || 0) /
+          Number(item.quantity || 1),
+        purchaseType:
+          item.purchase_type as
+            | "single"
+            | "kit",
+        status: "in stock",
+      },
+      Number(item.quantity || 1)
+    );
+  });
+
+  alert("Order added back to cart.");
+  router.push("/checkout");
 }
   if (loading) return <main style={page}>Loading account...</main>;
 
@@ -70,7 +110,77 @@ if (
     <main style={page}>
       <h1 style={{ color: "#ff45d8" }}>My Account</h1>
       <p style={{ color: "#ccc" }}>Logged in as {email}</p>
+{profile && (
+  <section style={box}>
+    <h2 style={{ color: "#00d9ff" }}>VIP Rewards</h2>
+<div
+  style={{
+    marginTop: 12,
+    marginBottom: 18,
+    padding: 14,
+    border: "1px solid rgba(255,255,255,.12)",
+    borderRadius: 10,
+    background: "rgba(255,255,255,.04)",
+  }}
+>
+  <p style={{ margin: 0, color: "#00ff99", fontWeight: "bold" }}>
+    Current Tier: {profile.vip_tier || "Stone"}
+  </p>
 
+  <p style={{ marginTop: 10, color: "#ccc", lineHeight: 1.8 }}>
+    Stone → $0+ <br />
+    Iron → $250+ <br />
+    Bronze → $500+ <br />
+    Silver → $1,000+ <br />
+    Gold → $2,500+ <br />
+    Platinum → $5,000+ <br />
+    Emerald → $10,000+ <br />
+    Sapphire → $20,000+ <br />
+    Ruby → $35,000+ <br />
+    Diamond → $50,000+
+  </p>
+</div>
+    <p>
+      <strong>Tier:</strong>{" "}
+      <span style={{ color: "#00ff99", fontWeight: "bold" }}>
+        {profile.vip_tier || "Stone"}
+      </span>
+    </p>
+
+    <p>
+      <strong>Lifetime Spend:</strong> $
+      {Number(profile.lifetime_spend || 0).toFixed(2)}
+    </p>
+Reward points are earned with every purchase and can be redeemed for discounts on future orders. The more you spend, the higher your VIP tier and the more rewards you unlock!
+    <p style={{ color: "#ccc", fontSize: 14, marginTop: 10 }}>
+      Note: VIP tier and rewards are updated after each order is completed.
+    </p>
+    <p>
+      <strong>Reward Points:</strong>{" "}
+      {Number(profile.reward_points || 0)}
+    </p>
+    <div style={{ marginTop: 18 }}>
+  <strong style={{ color: "#00d9ff" }}>
+    Tier Benefits
+  </strong>
+
+  <ul
+    style={{
+      marginTop: 10,
+      color: "#ccc",
+      lineHeight: 1.8,
+      paddingLeft: 20,
+    }}
+  >
+    {getTierBenefits(profile.vip_tier || "Stone").map(
+      (benefit: string) => (
+        <li key={benefit}>{benefit}</li>
+      )
+    )}
+  </ul>
+</div>
+  </section>
+)}
       <section style={box}>
   <h2 style={{ color: "#00d9ff" }}>Saved Shipping Info</h2>
 
@@ -126,8 +236,17 @@ if (
   </span>
 </div>
               {order.tracking_number && (
-                <p>Tracking: {order.tracking_number}</p>
-              )}
+  <p>Tracking: {order.tracking_number}</p>
+)}
+
+<button
+  type="button"
+  onClick={() => reorder(order.id)}
+  style={reorderButton}
+>
+  Reorder
+</button>
+              
             </div>
           ))
         )}
@@ -179,6 +298,70 @@ function getShippingBadge(status: string) {
         : "1px solid #444",
   };
 }
+function getTierBenefits(tier: string) {
+  switch (tier) {
+    case "Diamond":
+      return [
+        "Highest fulfillment priority",
+        "Maximum rewards multiplier",
+        "Personal VIP support",
+      ];
+
+    case "Ruby":
+      return [
+        "Custom discount events",
+        "First-access product drops",
+      ];
+
+    case "Sapphire":
+      return [
+        "Exclusive limited products",
+        "Private VIP announcements",
+      ];
+
+    case "Emerald":
+      return [
+        "VIP-only promo events",
+        "Highest inventory priority",
+      ];
+
+    case "Platinum":
+      return [
+        "Free shipping on all orders",
+        "Priority processing",
+      ];
+
+    case "Gold":
+      return [
+        "Discounted shipping",
+        "Early access to new products",
+      ];
+
+    case "Silver":
+      return [
+        "VIP Discord access",
+        "Free shipping weekends",
+      ];
+
+    case "Bronze":
+      return [
+        "Priority support",
+        "Exclusive promo access",
+      ];
+
+    case "Iron":
+      return [
+        "Birthday promo code",
+        "Early promotion access",
+      ];
+
+    default:
+      return [
+        "Earn reward points",
+        "Access to promotions",
+      ];
+  }
+}
 const page = {
   minHeight: "100vh",
   background: "#000",
@@ -200,4 +383,14 @@ const orderCard = {
   border: "1px solid #333",
   borderRadius: 12,
   background: "#111",
+};
+const reorderButton = {
+  marginTop: 12,
+  padding: "10px 14px",
+  borderRadius: 8,
+  border: "1px solid #00ff99",
+  background: "rgba(0,34,0,.85)",
+  color: "#00ff99",
+  fontWeight: "bold",
+  cursor: "pointer",
 };

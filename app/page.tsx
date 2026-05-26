@@ -19,6 +19,8 @@ export default function HomePage() {
   const [ageVerified, setAgeVerified] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [saleMap, setSaleMap] = useState<Record<string, number>>({});
+  const [search, setSearch] = useState("");
+const [filter, setFilter] = useState("all");
 const [isMobile, setIsMobile] = useState<boolean | null>(null);
   
   useEffect(() => {
@@ -142,68 +144,139 @@ const [isMobile, setIsMobile] = useState<boolean | null>(null);
     and trusted quality standards.
   </p>
 </section>
-      
-
-      <section style={productsGrid}>
-        {products.map((product) => {
-          const salePercent = saleMap[product.slug];
-
-          return (
-            <Link
-              key={product.slug}
-              href={`/products/${product.slug}`}
-              style={{ textDecoration: "none" }}
-            >
-              <div
-                style={{
-                  ...productCard,
-                  border: `1px solid ${product.color || "#ff45d8"}`,
-                  boxShadow: `0 0 26px ${product.color || "#ff45d8"}55`,
-                }}
-              >
-                {salePercent > 0 && (
-                  <div style={saleBadge}>SALE {salePercent}% OFF</div>
-                )}
-
-                <Image
-  src={
-    typeof product.image === "string" && product.image.length > 0
-      ? product.image
-      : "/pugpep-logo.png"
-  }
-  alt={product.name}
-  width={280}
-  height={280}
+      <section
   style={{
-    width: "100%",
-    height: 360,
-    objectFit: "cover" as const,
-    borderRadius: 14,
+    maxWidth: 1320,
+    margin: "0 auto 25px",
+    padding: "0 14px",
+    display: "grid",
+    gap: 14,
   }}
-/>
+>
+  <input
+    placeholder="Search products..."
+    value={search}
+    onChange={(e) => setSearch(e.target.value)}
+    style={{
+      width: "100%",
+      padding: 14,
+      borderRadius: 10,
+      border: "1px solid #333",
+      background: "#111",
+      color: "#fff",
+      fontSize: 16,
+    }}
+  />
 
-                <h2
-                  style={{
-                    ...productName,
-                    color: product.color || "#ff45d8",
-                  }}
-                >
-                  {product.name}
-                </h2>
+  <div
+    style={{
+      display: "flex",
+      gap: 10,
+      flexWrap: "wrap",
+      justifyContent: "center",
+    }}
+  >
+    {["all", "sale"].map((item) => (
+      <button
+        key={item}
+        onClick={() => setFilter(item)}
+        style={{
+          padding: "10px 14px",
+          borderRadius: 999,
+          background: "#111",
+          border:
+            filter === item
+              ? "1px solid #00ff99"
+              : "1px solid #333",
+          color:
+            filter === item
+              ? "#00ff99"
+              : "#ccc",
+          cursor: "pointer",
+          fontWeight: "bold",
+        }}
+      >
+        {item.toUpperCase()}
+      </button>
+    ))}
+  </div>
+</section>
 
-                <div
-                  style={{
-                    ...viewButton,
-                    background: product.color || "#ff45d8",
-                  }}
-                >
-                  VIEW PRODUCT
-                </div>
-              </div>
-            </Link>
-          );
-        })}
-      </section>
+     <section style={productsGrid}>
+  {products
+    .filter((product) => {
+      const matchesSearch =
+        product.name.toLowerCase().includes(search.toLowerCase()) ||
+        product.slug.toLowerCase().includes(search.toLowerCase());
+
+      const matchesFilter =
+        filter === "all"
+          ? true
+          : filter === "sale"
+          ? saleMap[product.slug] > 0
+          : true;
+
+      return matchesSearch && matchesFilter;
+    })
+    .map((product) => {
+      const salePercent = saleMap[product.slug];
+
+      return (
+        <Link
+          key={product.slug}
+          href={`/products/${product.slug}`}
+          style={{ textDecoration: "none" }}
+        >
+          <div
+            style={{
+              ...productCard,
+              border: `1px solid ${product.color || "#ff45d8"}`,
+              boxShadow: `0 0 26px ${product.color || "#ff45d8"}55`,
+            }}
+          >
+            {salePercent > 0 && (
+              <div style={saleBadge}>SALE {salePercent}% OFF</div>
+            )}
+
+            <Image
+              src={
+                typeof product.image === "string" && product.image.length > 0
+                  ? product.image
+                  : "/pugpep-logo.png"
+              }
+              alt={product.name}
+              width={280}
+              height={280}
+              style={{
+                width: "100%",
+                height: 360,
+                objectFit: "cover" as const,
+                borderRadius: 14,
+              }}
+            />
+
+            <h2
+              style={{
+                ...productName,
+                color: product.color || "#ff45d8",
+              }}
+            >
+              {product.name}
+            </h2>
+
+            <div
+              style={{
+                ...viewButton,
+                background: product.color || "#ff45d8",
+              }}
+            >
+              VIEW PRODUCT
+            </div>
+          </div>
+        </Link>
+      );
+    })}
+</section>
 
       <section style={bottomBar}>
   <QualityItem icon="🔒" title="SECURE PACKAGING" text="Discreet & professional" />
