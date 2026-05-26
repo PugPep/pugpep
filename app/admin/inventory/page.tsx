@@ -369,13 +369,7 @@ async function addOptionAndInventory() {
       }
     }
 
-    setNewOption({
-      dosage: "",
-      purchase_type: "single",
-      price: "",
-      status: "in stock",
-      quantity: "",
-    });
+   
 
     setShowAddOption(false);
 
