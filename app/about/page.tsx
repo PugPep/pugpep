@@ -43,7 +43,7 @@ export default function AboutPage() {
         <div style={grid}>
           <InfoCard
             title="Cellular Research"
-            text="Exploration of cellular repair, signaling pathways, and structural protein mechanisms."
+            text="Exploration of cellular reformation, signaling pathways, and structural protein mechanisms."
           />
 
           <InfoCard
@@ -58,7 +58,7 @@ export default function AboutPage() {
 
           <InfoCard
             title="Longevity & Resilience"
-            text="Research involving biological resilience, tissue support, recovery mechanisms, and adaptive physiology."
+            text="Research involving biological resilience, tissue recharacterization, repairing mechanisms, and adaptive physiology."
           />
         </div>
       </section>
