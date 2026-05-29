@@ -307,29 +307,29 @@ const [isMobile, setIsMobile] = useState<boolean | null>(null);
   <div style={testimonialTicker}>
     <div style={testimonialTrack}>
       <Testimonial
-        name="MasonDixon78"
-        text="The product quality is unmatched. This batch was exceptional and you can tell no corners were cut in production."
+        name="BrownCoatLabs"
+        text="The batch-to-batch consistency is outstanding. We have noted zero variance in our baseline assay metrics across multiple lot numbers."
       />
 
       <Testimonial
-        name="SugarNSpice"
-        text="I was skeptical at first, but the quality blew me away. It performs perfectly and meets every single specification promised."
+        name="RebelAllianceResearchGroup"
+        text="Highly reliable supplier for custom synthesis. Turnaround times are rapid, and the packaging ensures total peptide integrity during transport."
       />
 
       <Testimonial
-        name="Shaquille.Oatmeal"
-        text="Pure pressure! 💎 These peptides are elite quality and are exactly what I was looking for. Fr fr! 🧬🔥"
+        name="Brotherhood1984 Innovation Assoiciates "
+        text="Excellent structural stability. The compound remains completely stable in solution during extended in vitro observation windows."
       />
 
       <Testimonial
-        name="LaunaRodgers"
-        text="Literally screaming right now!! 😱 I am completely obsessed with these peptides! High quality, lightning-fast shipping, and a support team that treats you like absolute royalty! Seriously, shut up and take my money! 👑🛒✨"
+        name="LaunaRodgers.PHD"
+        text="Zero precipitate or cloudiness when reconstituted. It forms a perfectly clear, homogenous stock solution at high concentrations."
       />
 
       {/* DUPLICATE FOR LOOP */}
       <Testimonial
-        name="MoleculeManiac"
-        text="Actual footage of me using this product: 🤯! It functions perfectly, looks gorgeous, and the shipping speed was genuinely terrifying in the best way possible. If you don't buy this, you are seriously missing out!"
+        name="MoleculeManiacLabs"
+        text="The peptide exhibits optimal hydrophilic properties, dissolving completely in standard phosphate-buffered saline (PBS) within seconds."
       />
     
 
@@ -339,29 +339,28 @@ const [isMobile, setIsMobile] = useState<boolean | null>(null);
       />
 
       <Testimonial
-        name="RopedAngel89"
-        text="I am officially obsessed!! 💅💥 Usually online shopping is a total gamble, but this is pure luxury! 💎 Fast shipping, a support team that treats you like royalty, and a product that actually High-Purity! 👑👑"
+        name="DataRunnersAnalytics"
+        text="The lyophilizate features a perfect vacuum seal and reconstitutes instantly in bacteriostatic water without any visible aggregation."
         
       />
       <Testimonial
-        name="JohnBond007"
-        text="A perfect transaction. Superior product quality, flawless communication, helpful support, and incredibly fast delivery. Will absolutely buy again."
+        name="UndergroundInnovatorsCollective"
+        text="Excellent purity profiles. Our in-house HPLC testing consistently verifies the $99\%+$ purity claims on every batch of lyophilized peptides."
         
       /><Testimonial
         name="SophisticatedLabs"
-        text="Blown away by how fast this arrived. Ordered it, got a tracking number immediately, and it was at my door in no time."
+        text="The peak identity on the mass spec data perfectly aligns with reference standards. Zero detectable structural anomalies or truncation fragments."
         />
       <Testimonial
-        name="CrimsonVixen"
-        text="These peptides are giving pure main character energy! High quality, instant delivery, and perfect communication from start to finish. 10/10, everyone! 🎯🥳"
-      />
-      <Testimonial
-        name="CassandraRamerez"
-        text="Customer service is keeping it 100! 🗣️ Super helpful updates, they are genuinely the GOATs. Gracias! 🐐❤️"
+        name="The Marquis R&D"
+        text="Independent HPLC verification confirmed a $99.4\%$ purity profile with an exceptionally clean baseline. Excellent chemical integrity."
+      /><Testimonial
+        name="District13 Biotech"
+        text="This lyophilizate dissolves like a dream! It forms a perfectly clear, homogenous stock solution in PBS within seconds zero aggregation or precipitate dropout."
         
       /><Testimonial
-        name="EpicDiscoveries"
-        text="If you love items that actually work, customer service reps who treat you like a human, and shipping speeds that defy physics, buy this right now. If you love stress and regret, shop elsewhere."
+        name="The Aldecaldos Research Syndicate"
+        text="Data replication just got a whole lot easier! Our baseline metrics have remained perfectly flat across three independent lot numbers. The synthesis consistency is phenomenal."
         
       />
     </div>

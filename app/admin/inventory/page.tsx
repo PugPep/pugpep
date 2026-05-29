@@ -22,11 +22,10 @@ type Option = {
   dosage: string;
   purchase_type: string;
   price: number;
+  cost: number;
   status: string;
-
   sale_active: boolean;
   sale_percent: number;
-  cost: number;
 };
 
 type InventoryItem = {
@@ -56,6 +55,15 @@ export default function InventoryManagerPage() {
   const [showDeleted, setShowDeleted] = useState(false);
   const [showAddOption, setShowAddOption] = useState(false);
 
+  const emptyNewOption = {
+    dosage: "",
+    purchase_type: "single",
+    price: "",
+    cost: "",
+    status: "in stock",
+    quantity: "",
+  };
+
   const [newProduct, setNewProduct] = useState({
     name: "",
     slug: "",
@@ -66,14 +74,7 @@ export default function InventoryManagerPage() {
     is_active: true,
   });
 
-  const [newOption, setNewOption] = useState({
-    dosage: "",
-    purchase_type: "single",
-    price: "",
-    status: "in stock",
-    quantity: "",
-    cost: "",
-  });
+  const [newOption, setNewOption] = useState(emptyNewOption);
 
   useEffect(() => {
     async function init() {
@@ -94,6 +95,14 @@ export default function InventoryManagerPage() {
 
     init();
   }, []);
+
+  function getSingleStatus(quantity: number) {
+    return quantity > 0 ? "in stock" : "out of stock";
+  }
+
+  function getKitStatus(quantity: number) {
+    return quantity >= 10 ? "in stock" : "pre-sale";
+  }
 
   async function loadProducts() {
     const { data, error } = await supabase
@@ -263,11 +272,11 @@ export default function InventoryManagerPage() {
     await loadDeletedProducts();
   }
 
- async function updateOption(
-  id: string,
-  field: string,
-  value: string | number | boolean
-) {
+  async function updateOption(
+    id: string,
+    field: string,
+    value: string | number | boolean
+  ) {
     const { error } = await supabase
       .from("product_options")
       .update({ [field]: value })
@@ -282,70 +291,89 @@ export default function InventoryManagerPage() {
   }
 
   async function updateInventory(id: string, quantity: number) {
-  const safeQuantity = Math.max(0, Number(quantity));
+    const safeQuantity = Math.max(0, Number(quantity));
 
-  const inventoryRow = inventory.find((row) => row.id === id);
+    const inventoryRow = inventory.find((row) => row.id === id);
 
-  if (!inventoryRow) {
-    alert("Inventory row not found.");
-    return;
+    if (!inventoryRow) {
+      alert("Inventory row not found.");
+      return;
+    }
+
+    const singleStatus = getSingleStatus(safeQuantity);
+    const kitStatus = getKitStatus(safeQuantity);
+
+    const { error: inventoryError } = await supabase
+      .from("inventory")
+      .update({
+        quantity: safeQuantity,
+        status: singleStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+
+    if (inventoryError) {
+      alert(inventoryError.message);
+      return;
+    }
+
+    const { error: singleError } = await supabase
+      .from("product_options")
+      .update({ status: singleStatus })
+      .eq("product_slug", inventoryRow.product_slug)
+      .eq("dosage", inventoryRow.dosage)
+      .eq("purchase_type", "single");
+
+    if (singleError) {
+      alert(singleError.message);
+      return;
+    }
+
+    const { error: kitError } = await supabase
+      .from("product_options")
+      .update({ status: kitStatus })
+      .eq("product_slug", inventoryRow.product_slug)
+      .eq("dosage", inventoryRow.dosage)
+      .eq("purchase_type", "kit");
+
+    if (kitError) {
+      alert(kitError.message);
+      return;
+    }
+
+    if (selectedSlug) {
+      await loadOptions(selectedSlug);
+      await loadInventory(selectedSlug);
+    }
   }
 
-  // SINGLE VIAL LOGIC
-  const singleStatus =
-    safeQuantity > 0 ? "in stock" : "out of stock";
+  async function addOptionAndInventory() {
+    if (!selectedSlug) {
+      alert("Select a product first.");
+      return;
+    }
 
-  // KIT LOGIC
-  const kitStatus =
-    safeQuantity >= 10 ? "in stock" : "pre-sale";
+    if (!newOption.dosage || !newOption.price) {
+      alert("Dosage and price are required.");
+      return;
+    }
 
-  const { error } = await supabase
-    .from("inventory")
-    .update({
-      quantity: safeQuantity,
-      status: singleStatus,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
+    const qty = Math.max(0, Number(newOption.quantity || 0));
 
-  if (error) {
-    alert(error.message);
-    return;
-  }
+    const autoStatus =
+      newOption.purchase_type === "kit"
+        ? getKitStatus(qty)
+        : getSingleStatus(qty);
 
-  // UPDATE SINGLE PRODUCT OPTION
-  await supabase
-    .from("product_options")
-    .update({
-      status: singleStatus,
-    })
-    .eq("product_slug", inventoryRow.product_slug)
-    .eq("dosage", inventoryRow.dosage)
-    .eq("purchase_type", "single");
-
-  // UPDATE KIT PRODUCT OPTION
-  await supabase
-    .from("product_options")
-    .update({
-      status: kitStatus,
-    })
-    .eq("product_slug", inventoryRow.product_slug)
-    .eq("dosage", inventoryRow.dosage)
-    .eq("purchase_type", "kit");
-
-  if (selectedSlug) {
-    await loadOptions(selectedSlug);
-    await loadInventory(selectedSlug);
-  }
-}
-async function addOptionAndInventory() {
     const { error: optionError } = await supabase.from("product_options").insert({
       product_slug: selectedSlug,
       dosage: newOption.dosage,
       purchase_type: newOption.purchase_type,
       price: Number(newOption.price),
-      status: newOption.status,
       cost: Number(newOption.cost || 0),
+      status: autoStatus,
+      sale_active: false,
+      sale_percent: 0,
     });
 
     if (optionError) {
@@ -358,19 +386,24 @@ async function addOptionAndInventory() {
         product_slug: selectedSlug,
         dosage: newOption.dosage,
         purchase_type: "single",
-        quantity: Number(newOption.quantity || 0),
-        status:
-          Number(newOption.quantity || 0) > 0 ? "in stock" : "out of stock",
+        quantity: qty,
+        status: getSingleStatus(qty),
       });
 
       if (inventoryError) {
         alert(inventoryError.message);
         return;
       }
+
+      await supabase
+        .from("product_options")
+        .update({ status: getKitStatus(qty) })
+        .eq("product_slug", selectedSlug)
+        .eq("dosage", newOption.dosage)
+        .eq("purchase_type", "kit");
     }
 
-   
-
+    setNewOption(emptyNewOption);
     setShowAddOption(false);
 
     await loadOptions(selectedSlug);
@@ -378,13 +411,13 @@ async function addOptionAndInventory() {
   }
 
   function getInventoryForOption(option: Option) {
-  return inventory.find(
-    (row) =>
-      row.product_slug === option.product_slug &&
-      row.dosage === option.dosage &&
-      (row.purchase_type === "single" || row.purchase_type === "kit")
-  );
-}
+    return inventory.find(
+      (row) =>
+        row.product_slug === option.product_slug &&
+        row.dosage === option.dosage &&
+        row.purchase_type === "single"
+    );
+  }
 
   if (loading) return <main style={page}>Loading...</main>;
 
@@ -531,434 +564,367 @@ async function addOptionAndInventory() {
           </button>
         </section>
       )}
-<section style={box}>
-            <div style={tableHeader}>
-              <h2 style={{ color: "#00d9ff", margin: 0 }}>
-                Pricing / Inventory
-              </h2>
 
-              <button
-                type="button"
-                onClick={() => setShowAddOption(!showAddOption)}
-                style={plusButton}
-              >
-                + Add Dosage
-              </button>
-            </div>
+      <section style={box}>
+        <div style={tableHeader}>
+          <h2 style={{ color: "#00d9ff", margin: 0 }}>Pricing / Inventory</h2>
 
-            {showAddOption && (
-              <div style={addOptionBox}>
-                <input
-                  placeholder="Dosage"
-                  value={newOption.dosage}
-                  onChange={(e) =>
-                    setNewOption({ ...newOption, dosage: e.target.value })
-                  }
-                  style={input}
-                />
-
-                <select
-                  value={newOption.purchase_type}
-                  onChange={(e) =>
-                    setNewOption({
-                      ...newOption,
-                      purchase_type: e.target.value,
-                    })
-                  }
-                  style={input}
-                >
-                  <option value="single">single</option>
-                  <option value="kit">kit</option>
-                </select>
-
-                <input
-                  placeholder="Price"
-                  type="number"
-                  value={newOption.price}
-                  onChange={(e) =>
-                    setNewOption({ ...newOption, price: e.target.value })
-                  }
-                  style={input}
-                />
-<input
-  placeholder="Cost"
-  type="number"
-  value={newOption.cost}
-  onChange={(e) =>
-    setNewOption({
-      ...newOption,
-      cost: e.target.value,
-    })
-  }
-  style={input}
-/>
-                <select
-                  value={newOption.status}
-                  onChange={(e) =>
-                    setNewOption({ ...newOption, status: e.target.value })
-                  }
-                  style={input}
-                >
-                <option value="in stock">in stock</option>
-<option value="pre-sale">pre-sale</option>
-<option value="out of stock">out of stock</option>
-                  
-                </select>
-
-                <input
-                  placeholder="Inventory Qty"
-                  type="number"
-                  value={newOption.quantity}
-                  onChange={(e) =>
-                    setNewOption({ ...newOption, quantity: e.target.value })
-                  }
-                  style={input}
-                />
-
-                <button
-                  type="button"
-                  onClick={addOptionAndInventory}
-                  style={button}
-                >
-                  Save New Option
-                </button>
-              </div>
-            )}
-
-            <p style={{ color: "#aaa" }}>
-              Kit availability is calculated from single vial inventory. Example:
-              25 vials = 2 kits available.
-            </p>
-
-            {options.length === 0 ? (
-              <p style={{ color: "#ccc" }}>No pricing options found.</p>
-            ) : (
-              <div style={tableWrapper}>
-                <table style={table}>
-                  <thead>
-                    <tr>
-                      <th style={th}>Dosage</th>
-                      <th style={th}>Type</th>
-                      <th style={th}>Price</th>
-                      <th style={th}>Cost</th>
-<th style={th}>Profit</th>
-<th style={th}>Margin %</th>
-                      <th style={th}>Status</th>
-<th style={th}>Sale Active</th>
-<th style={th}>Sale %</th>
-<th style={th}>Inventory</th>
-                      <th style={th}>Kits</th>
-                      <th style={th}>Actions</th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-  {options.map((option) => {
-    const inv = getInventoryForOption(option);
-
-    const profit =
-      Number(option.price || 0) -
-      Number(option.cost || 0);
-
-    const margin =
-      Number(option.price || 0) > 0
-        ? ((profit / Number(option.price || 0)) * 100).toFixed(1)
-        : "0";
-
-    return (
-      <tr
-        key={option.id}
-        style={{ borderBottom: "1px solid #333" }}
-      >
-        {/* DOSAGE */}
-        <td style={td}>
-          <input
-            defaultValue={option.dosage}
-            onBlur={(e) =>
-              updateOption(
-                option.id,
-                "dosage",
-                e.target.value
-              )
-            }
-            style={smallInput}
-          />
-        </td>
-
-        {/* TYPE */}
-        <td style={td}>
-          <select
-            defaultValue={option.purchase_type}
-            onChange={(e) =>
-              updateOption(
-                option.id,
-                "purchase_type",
-                e.target.value
-              )
-            }
-            style={smallInput}
+          <button
+            type="button"
+            onClick={() => setShowAddOption(!showAddOption)}
+            style={plusButton}
           >
-            <option value="single">single</option>
-            <option value="kit">kit</option>
-          </select>
-        </td>
+            + Add Dosage
+          </button>
+        </div>
 
-        {/* PRICE */}
-        <td style={td}>
-          <input
-            type="number"
-            defaultValue={option.price}
-            onBlur={(e) =>
-              updateOption(
-                option.id,
-                "price",
-                Number(e.target.value)
-              )
-            }
-            style={smallInput}
-          />
-        </td>
-
-        {/* COST */}
-        <td style={td}>
-          <input
-            type="number"
-            defaultValue={option.cost || 0}
-            onBlur={(e) =>
-              updateOption(
-                option.id,
-                "cost",
-                Number(e.target.value)
-              )
-            }
-            style={smallInput}
-          />
-        </td>
-
-        {/* PROFIT */}
-        <td style={td}>
-          ${profit.toFixed(2)}
-        </td>
-
-        {/* MARGIN */}
-        <td style={td}>
-          {margin}%
-        </td>
-
-        {/* STATUS */}
-        <td style={td}>
-          <select
-            defaultValue={option.status}
-            onChange={(e) =>
-              updateOption(
-                option.id,
-                "status",
-                e.target.value
-              )
-            }
-            style={smallInput}
-          >
-            <option value="in stock">in stock</option>
-            <option value="pre-sale">pre-sale</option>
-            <option value="out of stock">
-              out of stock
-            </option>
-          </select>
-        </td>
-
-        {/* SALE ACTIVE */}
-        <td style={td}>
-          <input
-            type="checkbox"
-            checked={option.sale_active || false}
-            onChange={(e) =>
-              updateOption(
-                option.id,
-                "sale_active",
-                e.target.checked
-              )
-            }
-          />
-        </td>
-
-        {/* SALE % */}
-        <td style={td}>
-          <input
-            type="number"
-            defaultValue={option.sale_percent || 0}
-            onBlur={(e) =>
-              updateOption(
-                option.id,
-                "sale_percent",
-                Number(e.target.value)
-              )
-            }
-            style={smallInput}
-          />
-        </td>
-
-        {/* INVENTORY */}
-        <td style={td}>
-          {inv ? (
+        {showAddOption && (
+          <div style={addOptionBox}>
             <input
+              placeholder="Dosage"
+              value={newOption.dosage}
+              onChange={(e) =>
+                setNewOption({ ...newOption, dosage: e.target.value })
+              }
+              style={input}
+            />
+
+            <select
+              value={newOption.purchase_type}
+              onChange={(e) =>
+                setNewOption({
+                  ...newOption,
+                  purchase_type: e.target.value,
+                })
+              }
+              style={input}
+            >
+              <option value="single">single</option>
+              <option value="kit">kit</option>
+            </select>
+
+            <input
+              placeholder="Price"
               type="number"
-              value={inv.quantity}
+              value={newOption.price}
               onChange={(e) =>
-                setInventory((prev) =>
-                  prev.map((row) =>
-                    row.id === inv.id
-                      ? {
-                          ...row,
-                          quantity: Number(
-                            e.target.value
-                          ),
-                        }
-                      : row
-                  )
-                )
+                setNewOption({ ...newOption, price: e.target.value })
               }
-              style={smallInput}
+              style={input}
             />
-          ) : (
-            <span style={{ color: "#888" }}>
-              No inventory row
-            </span>
-          )}
-        </td>
 
-        {/* KITS */}
-        <td style={td}>
-          {inv
-            ? Math.floor(inv.quantity / 10)
-            : "-"}
-        </td>
+            <input
+              placeholder="Cost"
+              type="number"
+              value={newOption.cost}
+              onChange={(e) =>
+                setNewOption({ ...newOption, cost: e.target.value })
+              }
+              style={input}
+            />
 
-        {/* ACTIONS */}
-        <td style={td}>
-          {inv ? (
-            <>
-              <button
-                type="button"
-                style={button}
-                onClick={() =>
-                  updateInventory(
-                    inv.id,
-                    inv.quantity
-                  )
-                }
-              >
-                Save
-              </button>
+            <input
+              placeholder="Inventory Qty"
+              type="number"
+              value={newOption.quantity}
+              onChange={(e) =>
+                setNewOption({ ...newOption, quantity: e.target.value })
+              }
+              style={input}
+            />
 
-              <button
-                type="button"
-                style={minusButton}
-                onClick={() =>
-                  updateInventory(
-                    inv.id,
-                    inv.quantity - 1
-                  )
-                }
-              >
-                -1
-              </button>
+            <button type="button" onClick={addOptionAndInventory} style={button}>
+              Save New Option
+            </button>
+          </div>
+        )}
 
-              <button
-                type="button"
-                style={plusButtonSmall}
-                onClick={() =>
-                  updateInventory(
-                    inv.id,
-                    inv.quantity + 1
-                  )
-                }
-              >
-                +1
-              </button>
-            </>
-          ) : (
-            <span style={{ color: "#888" }}>
-              N/A
-            </span>
-          )}
-        </td>
-      </tr>
-    );
-  })}
-</tbody>
-                </table>
-              </div>
-            )}
-          </section>
+        <p style={{ color: "#aaa" }}>
+          Singles: 0 inventory = out of stock. Kits: under 10 vials = pre-sale.
+        </p>
+
+        {options.length === 0 ? (
+          <p style={{ color: "#ccc" }}>No pricing options found.</p>
+        ) : (
+          <div style={tableWrapper}>
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={th}>Dosage</th>
+                  <th style={th}>Type</th>
+                  <th style={th}>Price</th>
+                  <th style={th}>Cost</th>
+                  <th style={th}>Profit</th>
+                  <th style={th}>Margin %</th>
+                  <th style={th}>Status</th>
+                  <th style={th}>Sale Active</th>
+                  <th style={th}>Sale %</th>
+                  <th style={th}>Inventory</th>
+                  <th style={th}>Kits</th>
+                  <th style={th}>Actions</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {options.map((option) => {
+                  const inv = getInventoryForOption(option);
+                  const quantity = inv ? Number(inv.quantity || 0) : 0;
+
+                  const autoStatus =
+                    option.purchase_type === "kit"
+                      ? getKitStatus(quantity)
+                      : getSingleStatus(quantity);
+
+                  const profit =
+                    Number(option.price || 0) - Number(option.cost || 0);
+
+                  const margin =
+                    Number(option.price || 0) > 0
+                      ? ((profit / Number(option.price || 0)) * 100).toFixed(1)
+                      : "0";
+
+                  return (
+                    <tr key={option.id} style={{ borderBottom: "1px solid #333" }}>
+                      <td style={td}>
+                        <input
+                          defaultValue={option.dosage}
+                          onBlur={(e) =>
+                            updateOption(option.id, "dosage", e.target.value)
+                          }
+                          style={smallInput}
+                        />
+                      </td>
+
+                      <td style={td}>
+                        <select
+                          defaultValue={option.purchase_type}
+                          onChange={(e) =>
+                            updateOption(
+                              option.id,
+                              "purchase_type",
+                              e.target.value
+                            )
+                          }
+                          style={smallInput}
+                        >
+                          <option value="single">single</option>
+                          <option value="kit">kit</option>
+                        </select>
+                      </td>
+
+                      <td style={td}>
+                        <input
+                          type="number"
+                          defaultValue={option.price}
+                          onBlur={(e) =>
+                            updateOption(
+                              option.id,
+                              "price",
+                              Number(e.target.value)
+                            )
+                          }
+                          style={smallInput}
+                        />
+                      </td>
+
+                      <td style={td}>
+                        <input
+                          type="number"
+                          defaultValue={option.cost || 0}
+                          onBlur={(e) =>
+                            updateOption(
+                              option.id,
+                              "cost",
+                              Number(e.target.value)
+                            )
+                          }
+                          style={smallInput}
+                        />
+                      </td>
+
+                      <td style={td}>${profit.toFixed(2)}</td>
+                      <td style={td}>{margin}%</td>
+
+                      <td style={td}>
+                        <span
+                          style={{
+                            color:
+                              autoStatus === "in stock"
+                                ? "#00ff99"
+                                : autoStatus === "pre-sale"
+                                ? "#ffcc00"
+                                : "#ff4d4d",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {autoStatus}
+                        </span>
+                      </td>
+
+                      <td style={td}>
+                        <input
+                          type="checkbox"
+                          checked={option.sale_active || false}
+                          onChange={(e) =>
+                            updateOption(
+                              option.id,
+                              "sale_active",
+                              e.target.checked
+                            )
+                          }
+                        />
+                      </td>
+
+                      <td style={td}>
+                        <input
+                          type="number"
+                          defaultValue={option.sale_percent || 0}
+                          onBlur={(e) =>
+                            updateOption(
+                              option.id,
+                              "sale_percent",
+                              Number(e.target.value)
+                            )
+                          }
+                          style={smallInput}
+                        />
+                      </td>
+
+                      <td style={td}>
+                        {inv ? (
+                          <input
+                            type="number"
+                            value={inv.quantity}
+                            onChange={(e) =>
+                              setInventory((prev) =>
+                                prev.map((row) =>
+                                  row.id === inv.id
+                                    ? {
+                                        ...row,
+                                        quantity: Number(e.target.value),
+                                      }
+                                    : row
+                                )
+                              )
+                            }
+                            style={smallInput}
+                          />
+                        ) : (
+                          <span style={{ color: "#888" }}>
+                            Uses single vial inventory
+                          </span>
+                        )}
+                      </td>
+
+                      <td style={td}>{Math.floor(quantity / 10)}</td>
+
+                      <td style={td}>
+                        {inv ? (
+                          <>
+                            <button
+                              type="button"
+                              style={button}
+                              onClick={() => updateInventory(inv.id, inv.quantity)}
+                            >
+                              Save
+                            </button>
+
+                            <button
+                              type="button"
+                              style={minusButton}
+                              onClick={() =>
+                                updateInventory(inv.id, inv.quantity - 1)
+                              }
+                            >
+                              -1
+                            </button>
+
+                            <button
+                              type="button"
+                              style={plusButtonSmall}
+                              onClick={() =>
+                                updateInventory(inv.id, inv.quantity + 1)
+                              }
+                            >
+                              +1
+                            </button>
+                          </>
+                        ) : (
+                          <span style={{ color: "#888" }}>N/A</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       {selectedSlug && (
-        <>
-          <section style={box}>
-            <h2 style={{ color: "#00d9ff" }}>Edit Product Details</h2>
+        <section style={box}>
+          <h2 style={{ color: "#00d9ff" }}>Edit Product Details</h2>
 
+          <input
+            value={selectedProduct.name || ""}
+            onChange={(e) => updateProductField("name", e.target.value)}
+            style={input}
+          />
+
+          <input
+            value={selectedProduct.slug || ""}
+            onChange={(e) => updateProductField("slug", e.target.value)}
+            style={input}
+          />
+
+          <input
+            value={selectedProduct.image || ""}
+            onChange={(e) => updateProductField("image", e.target.value)}
+            style={input}
+          />
+
+          <label style={label}>Color</label>
+          <input
+            type="color"
+            value={selectedProduct.color || "#ff45d8"}
+            onChange={(e) => updateProductField("color", e.target.value)}
+            style={colorInput}
+          />
+
+          <textarea
+            value={selectedProduct.short_description || ""}
+            onChange={(e) =>
+              updateProductField("short_description", e.target.value)
+            }
+            style={textarea}
+          />
+
+          <textarea
+            value={selectedProduct.description || ""}
+            onChange={(e) => updateProductField("description", e.target.value)}
+            style={bigTextarea}
+          />
+
+          <label style={checkboxRow}>
             <input
-              value={selectedProduct.name || ""}
-              onChange={(e) => updateProductField("name", e.target.value)}
-              style={input}
-            />
-
-            <input
-              value={selectedProduct.slug || ""}
-              onChange={(e) => updateProductField("slug", e.target.value)}
-              style={input}
-            />
-
-            <input
-              value={selectedProduct.image || ""}
-              onChange={(e) => updateProductField("image", e.target.value)}
-              style={input}
-            />
-
-            <label style={label}>Color</label>
-            <input
-              type="color"
-              value={selectedProduct.color || "#ff45d8"}
-              onChange={(e) => updateProductField("color", e.target.value)}
-              style={colorInput}
-            />
-
-            <textarea
-              value={selectedProduct.short_description || ""}
+              type="checkbox"
+              checked={selectedProduct.is_active ?? true}
               onChange={(e) =>
-                updateProductField("short_description", e.target.value)
+                updateProductField("is_active", e.target.checked)
               }
-              style={textarea}
             />
+            Active / show on site
+          </label>
 
-            <textarea
-              value={selectedProduct.description || ""}
-              onChange={(e) =>
-                updateProductField("description", e.target.value)
-              }
-              style={bigTextarea}
-            />
+          <button type="button" onClick={saveProductChanges} style={button}>
+            Save Product Changes
+          </button>
 
-            <label style={checkboxRow}>
-              <input
-                type="checkbox"
-                checked={selectedProduct.is_active ?? true}
-                onChange={(e) =>
-                  updateProductField("is_active", e.target.checked)
-                }
-              />
-              Active / show on site
-            </label>
-
-            <button type="button" onClick={saveProductChanges} style={button}>
-              Save Product Changes
-            </button>
-
-            <button type="button" onClick={deleteProduct} style={deleteButton}>
-              Delete Product
-            </button>
-          </section>
-
-          
-        </>
+          <button type="button" onClick={deleteProduct} style={deleteButton}>
+            Delete Product
+          </button>
+        </section>
       )}
     </main>
   );
@@ -1122,7 +1088,7 @@ const tableWrapper = {
 
 const table = {
   width: "100%",
-  minWidth: 980,
+  minWidth: 1180,
   borderCollapse: "collapse" as const,
 };
 
