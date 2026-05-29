@@ -58,7 +58,7 @@ export default function AboutPage() {
 
           <InfoCard
             title="Longevity & Resilience"
-            text="Research involving biological resilience, tissue recharacterization, repairing mechanisms, and adaptive physiology."
+            text="Research involving biological resilience, cellular and tissue biology research, repairing mechanisms, and adaptive physiology."
           />
         </div>
       </section>
