@@ -13,11 +13,10 @@ export default function QualityPage() {
       </section>
 
       <section style={box}>
-        <h2 style={heading}>COAs Available Upon Request</h2>
+        <h2 style={heading}>Each Product is Thoroughly Tested by our Trusted 3rd Party Independent Laboratories</h2>
 
         <p style={text}>
-          Certificates of Analysis (COAs) may be available for qualifying
-          research materials upon request.
+          Certificates of Analysis (COAs) for applicable research materials and batch  verification are available upon request.
         </p>
 
         <p style={text}>
