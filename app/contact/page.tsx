@@ -21,7 +21,7 @@ export default function ContactPage() {
         </h1>
 
         <p style={{ color: "#ccc", fontSize: 20, lineHeight: 1.6 }}>
-          Have questions about products, orders, payments, or crypto checkout?
+          Have questions about products, orders, payments, or checkout?
           Reach us through our official community and social channels.
         </p>
 
