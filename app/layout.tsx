@@ -47,17 +47,13 @@ export default function RootLayout({
               <span>3rd-PARTY TESTED</span>
               <span>MULTIPLE PAYMENT OPTIONS</span>
               
-              <span>
-                WE SUPPORT OUR ACTIVE DUTY MILITARY, VETERANS & FIRST RESPONDERS
-              </span>
+              <span>We support our active duty military, veterans & first responders</span>
 
               <span>FREE U.S. SHIPPING ON ORDERS OVER $250</span>
               <span>3rd-PARTY TESTED</span>
               <span>MULTIPLE PAYMENT OPTIONS</span>
              
-              <span>
-                WE SUPPORT OUR ACTIVE DUTY MILITARY, VETERANS & FIRST RESPONDERS
-              </span>
+              <span>We support our active duty military, veterans & first responders</span>
             </div>
           </div>
 
