@@ -9,8 +9,9 @@ type Product = {
   id: string;
   name: string;
   slug: string;
-  color: string;
   image: string;
+  color: string;
+  category: string;
 };
 
 export default function HomePage() {
@@ -45,8 +46,8 @@ const [isMobile, setIsMobile] = useState<boolean | null>(null);
 
   async function loadProducts() {
     const { data: productData } = await supabase
-      .from("products")
-      .select("id, name, slug, color, image")
+  .from("products")
+  .select("id, name, slug, color, image, category")
       .eq("is_active", true)
       .order("name", { ascending: true });
 
@@ -176,7 +177,7 @@ const [isMobile, setIsMobile] = useState<boolean | null>(null);
       justifyContent: "center",
     }}
   >
-    {["all", "sale"].map((item) => (
+    {["all", "sale", "peptides", "lab materials"].map((item) => (
       <button
         key={item}
         onClick={() => setFilter(item)}
@@ -209,16 +210,36 @@ const [isMobile, setIsMobile] = useState<boolean | null>(null);
         product.name.toLowerCase().includes(search.toLowerCase()) ||
         product.slug.toLowerCase().includes(search.toLowerCase());
 
-      const matchesFilter =
-        filter === "all"
-          ? true
-          : filter === "sale"
-          ? saleMap[product.slug] > 0
-          : true;
+     
+
+const category = String(product.category || "")
+  .toLowerCase()
+  .trim();
+
+const matchesFilter =
+  filter === "all"
+    ? true
+    : filter === "sale"
+    ? saleMap[product.slug] > 0
+    : filter === "peptides"
+    ? category === "peptide"
+    : filter === "lab materials"
+    ? category === "lab-material"
+    : true;
 
       return matchesSearch && matchesFilter;
     })
-    .map((product) => {
+.sort((a, b) => {
+  if (a.category === b.category) {
+    return a.name.localeCompare(b.name);
+  }
+
+  if (a.category === "peptide") return -1;
+  if (b.category === "peptide") return 1;
+
+  return 0;
+})
+.map((product) => {
       const salePercent = saleMap[product.slug];
 
       return (
@@ -238,22 +259,33 @@ const [isMobile, setIsMobile] = useState<boolean | null>(null);
               <div style={saleBadge}>SALE {salePercent}% OFF</div>
             )}
 
-            <Image
-              src={
-                typeof product.image === "string" && product.image.length > 0
-                  ? product.image
-                  : "/pugpep-logo.png"
-              }
-              alt={product.name}
-              width={280}
-              height={280}
-              style={{
-                width: "100%",
-                height: 360,
-                objectFit: "cover" as const,
-                borderRadius: 14,
-              }}
-            />
+           <Image
+  src={
+    typeof product.image === "string" &&
+    product.image.length > 0
+      ? product.image
+      : "/pugpep-logo.png"
+  }
+  alt={product.name}
+  width={280}
+  height={280}
+  style={{
+    width: "100%",
+    height: 360,
+
+    objectFit:
+      product.slug === "compoundmicroscope"
+        ? "fill"
+        : "cover",
+
+    transform:
+      product.slug === "compoundmicroscope"
+        ? "scale(1)"
+        : "none",
+
+    borderRadius: 12,
+  }}
+/>
 
             <h2
               style={{
@@ -512,6 +544,11 @@ const productName = {
   margin: "10px 0",
   fontSize: 22,
   textTransform: "uppercase" as const,
+
+  height: 60,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 };
 
 const viewButton = {

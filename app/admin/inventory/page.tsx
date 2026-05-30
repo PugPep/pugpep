@@ -13,6 +13,7 @@ type Product = {
   image: string;
   short_description: string;
   description: string;
+  category: string;
   is_active: boolean;
 };
 
@@ -65,14 +66,15 @@ export default function InventoryManagerPage() {
   };
 
   const [newProduct, setNewProduct] = useState({
-    name: "",
-    slug: "",
-    color: "#ff45d8",
-    image: "",
-    short_description: "",
-    description: "",
-    is_active: true,
-  });
+  name: "",
+  slug: "",
+  color: "#ff45d8",
+  image: "",
+  short_description: "",
+  description: "",
+  category: "peptide",
+  is_active: true,
+});
 
   const [newOption, setNewOption] = useState(emptyNewOption);
 
@@ -174,14 +176,15 @@ export default function InventoryManagerPage() {
     const { error } = await supabase
       .from("products")
       .update({
-        name: selectedProduct.name,
-        slug: selectedProduct.slug,
-        color: selectedProduct.color,
-        image: selectedProduct.image,
-        short_description: selectedProduct.short_description,
-        description: selectedProduct.description,
-        is_active: selectedProduct.is_active,
-      })
+  name: selectedProduct.name,
+  slug: selectedProduct.slug,
+  category: selectedProduct.category,
+  color: selectedProduct.color,
+  image: selectedProduct.image,
+  short_description: selectedProduct.short_description,
+  description: selectedProduct.description,
+  is_active: selectedProduct.is_active,
+})
       .eq("id", selectedProduct.id);
 
     if (error) {
@@ -209,15 +212,15 @@ export default function InventoryManagerPage() {
     alert("Product created.");
 
     setNewProduct({
-      name: "",
-      slug: "",
-      color: "#ff45d8",
-      image: "",
-      short_description: "",
-      description: "",
-      is_active: true,
-    });
-
+  name: "",
+  slug: "",
+  color: "#ff45d8",
+  image: "",
+  short_description: "",
+  description: "",
+  category: "peptide",
+  is_active: true,
+});
     setShowAddProduct(false);
     await loadProducts();
   }
@@ -518,7 +521,19 @@ export default function InventoryManagerPage() {
             }
             style={input}
           />
-
+<select
+  value={newProduct.category}
+  onChange={(e) =>
+    setNewProduct({
+      ...newProduct,
+      category: e.target.value,
+    })
+  }
+  style={input}
+>
+  <option value="peptide">Peptide</option>
+  <option value="lab-material">Lab Material</option>
+</select>
           <input
             placeholder="Image Path example: /tirzepatide.png"
             value={newProduct.image}
@@ -883,7 +898,16 @@ export default function InventoryManagerPage() {
             onChange={(e) => updateProductField("image", e.target.value)}
             style={input}
           />
-
+<select
+  value={selectedProduct.category || "peptide"}
+  onChange={(e) =>
+    updateProductField("category" as keyof Product, e.target.value)
+  }
+  style={input}
+>
+  <option value="peptide">Peptide</option>
+  <option value="lab-material">Lab Material</option>
+</select>
           <label style={label}>Color</label>
           <input
             type="color"

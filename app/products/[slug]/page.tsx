@@ -15,7 +15,8 @@ type Product = {
   image: string;
   short_description: string;
   description: string;
-  is_active: boolean;
+  category: string;
+is_active: boolean;
 };
 
 type ProductOption = {
@@ -127,7 +128,13 @@ setOptions(sortedOptions);
 
   return false;
 }
+function getPurchaseLabel(purchaseType: string) {
+  if (product?.category === "lab-material") {
+    return purchaseType === "kit" ? "10 Pack" : "Single Item";
+  }
 
+  return purchaseType === "kit" ? "Full Kit of 10" : "Single Vial";
+}
   function handleAddToCart() {
   if (!product || !selectedOption) return;
 
@@ -307,9 +314,7 @@ cost: (selectedOption.cost || 0),
                   }}
                 >
                   <strong>{option.dosage}</strong> —{" "}
-                  {option.purchase_type === "kit"
-                    ? "Full Kit of 10"
-                    : "Single Vial"}{" "}
+                  {getPurchaseLabel(option.purchase_type)}{" "}
                   — {option.sale_active && Number(option.sale_percent || 0) > 0 ? (
   <>
     <span
