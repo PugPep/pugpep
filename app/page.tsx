@@ -355,7 +355,7 @@ const matchesFilter =
 
       <Testimonial
         name="LaunaRodgers.PHD"
-        text="Zero precipitate or cloudiness when reconstituted. It forms a perfectly clear, homogenous stock solution at high concentrations."
+        text="Zero precipitate or cloudiness. It forms a perfectly clear, homogenous stock solution at high concentrations."
       />
 
       {/* DUPLICATE FOR LOOP */}
@@ -372,7 +372,7 @@ const matchesFilter =
 
       <Testimonial
         name="DataRunnersAnalytics"
-        text="The lyophilizate features a perfect vacuum seal and reconstitutes instantly without any visible aggregation."
+        text="The lyophilizate features a perfect vacuum seal and re-establishes instantly without any visible aggregation."
         
       />
       <Testimonial
