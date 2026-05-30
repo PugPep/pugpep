@@ -46,7 +46,7 @@ export default function RootLayout({
               <span>FREE U.S. SHIPPING ON ORDERS OVER $250</span>
               <span>3rd-PARTY TESTED</span>
               <span>MULTIPLE PAYMENT OPTIONS</span>
-              <span>CRYPTO FRIENDLY</span>
+              
               <span>
                 WE SUPPORT OUR ACTIVE DUTY MILITARY, VETERANS & FIRST RESPONDERS
               </span>
@@ -54,7 +54,7 @@ export default function RootLayout({
               <span>FREE U.S. SHIPPING ON ORDERS OVER $250</span>
               <span>3rd-PARTY TESTED</span>
               <span>MULTIPLE PAYMENT OPTIONS</span>
-              <span>CRYPTO FRIENDLY</span>
+             
               <span>
                 WE SUPPORT OUR ACTIVE DUTY MILITARY, VETERANS & FIRST RESPONDERS
               </span>

@@ -42,23 +42,23 @@ export default function AboutPage() {
 
         <div style={grid}>
           <InfoCard
-            title="Cellular Research"
-            text="Exploration of cellular reformation, signaling pathways, and structural protein mechanisms."
+            title="Cellular Discovery"
+            text="Exploration of cellular shifting, signaling pathways, and structural protein mechanisms."
           />
 
           <InfoCard
             title="Metabolic & Mitochondrial Studies"
-            text="Research involving energy systems, metabolic signaling, and adaptive biological response."
+            text="Research involving energy systems, metabolic pathway communication, and adaptive biological response."
           />
 
           <InfoCard
-            title="Neuropeptide & Cognitive Studies"
+            title="Neuropeptide Tools for Cognitive Discovery"
             text="Investigation into peptide pathways related to neurobiology and communication systems."
           />
 
           <InfoCard
-            title="Longevity & Resilience"
-            text="Research involving biological resilience, cellular and tissue biology research, repairing mechanisms, and adaptive physiology."
+            title="Biomarkers of Aging & Cellular Resilience"
+            text="Research involving biological resilience, cellular and tissue biology research, cellular repair & maintenance pathways, and cellular adaptation & stress responses."
           />
         </div>
       </section>
