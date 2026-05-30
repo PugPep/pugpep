@@ -372,12 +372,12 @@ const matchesFilter =
 
       <Testimonial
         name="DataRunnersAnalytics"
-        text="The lyophilizate features a perfect vacuum seal and re-establishes instantly without any visible aggregation."
+        text="The lyophilizate features a perfect vacuum seal and re-establishes without any visible aggregation."
         
       />
       <Testimonial
         name="UndergroundInnovatorsCollective"
-        text="Excellent purity profiles. Our in-house HPLC testing consistently verifies the $99\%+$ purity claims on every batch of lyophilized peptides."
+        text="Excellent purity profiles. Verifiable COAs. Our in-house HPLC testing consistently verifies the $99\%+$ purity claims on every batch of lyophilized peptides."
         
       /><Testimonial
         name="SophisticatedLabs"
@@ -388,7 +388,7 @@ const matchesFilter =
         text="Independent HPLC verification confirmed a $99.4\%$ purity profile with an exceptionally clean baseline. Excellent chemical integrity."
       /><Testimonial
         name="District13 Biotech"
-        text="This lyophilizate dissolves like a dream! It forms a perfectly clear, homogenous stock solution in PBS within seconds zero aggregation or precipitate dropout."
+        text="That perfect, instant solubility is exactly what you want to see, it means the lyophilization cycle was dialed in just right, the cake structure was highly porous, and the moisture content is low."
         
       /><Testimonial
         name="The Aldecaldos Research Syndicate"
