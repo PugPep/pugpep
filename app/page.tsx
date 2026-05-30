@@ -322,7 +322,7 @@ const matchesFilter =
   <QualityItem
     icon="💳"
     title="EASY PAYMENT"
-    text="Cash App, Venmo, Apple Pay, or Crypto"
+    text="Multiple secure options"
   />
 
   <QualityItem
@@ -372,7 +372,7 @@ const matchesFilter =
 
       <Testimonial
         name="DataRunnersAnalytics"
-        text="The lyophilizate features a perfect vacuum seal and reconstitutes instantly in bacteriostatic water without any visible aggregation."
+        text="The lyophilizate features a perfect vacuum seal and reconstitutes instantly without any visible aggregation."
         
       />
       <Testimonial
