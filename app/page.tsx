@@ -311,11 +311,11 @@ const matchesFilter =
 </section>
 
       <section style={bottomBar}>
-  <QualityItem icon="🔒" title="SECURE PACKAGING" text="Discreet & professional" />
+  <QualityItem icon="🔒" title="SECURE PACKAGING" text="secure, safe & professional" />
 
   <QualityItem
     icon="🚚"
-    title="FAST DISCREET & TRACKED SHIPPING"
+    title="FAST & TRACKED SHIPPING"
     text="Quick & reliable delivery"
   />
 
@@ -333,7 +333,7 @@ const matchesFilter =
 </section>
 <section style={testimonialSection}>
   <h2 style={{ color: "#ff45d8", textAlign: "center" }}>
-    Verified Customer Feedback
+    Verified Laboratory Feedback
   </h2>
 
   <div style={testimonialTicker}>
@@ -467,7 +467,7 @@ function Testimonial({ name, text }: { name: string; text: string }) {
           fontSize: 12,
         }}
       >
-        VERIFIED BUYER
+        VERIFIED Research Facility Feedback
       </div>
 
       <p style={{ color: "#ddd", lineHeight: 1.5 }}>{text}</p>
