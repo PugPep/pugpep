@@ -84,7 +84,7 @@ export default function AboutPage() {
 
           <InfoCard
             title="Secure Fulfillment"
-            text="Professional packaging, discreet shipping, and dependable processing."
+            text="Professional packaging, dependable processing, and fast shipping."
           />
 
           <InfoCard
