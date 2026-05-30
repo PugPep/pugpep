@@ -361,7 +361,7 @@ const matchesFilter =
       {/* DUPLICATE FOR LOOP */}
       <Testimonial
         name="MoleculeManiacLabs"
-        text="The peptide exhibits optimal hydrophilic properties, dissolving completely in standard phosphate-buffered saline (PBS) within seconds."
+        text="The peptide exhibits optimal hydrophilic properties, dissolving completely in standard phosphate-buffered saline within seconds."
       />
     
 
