@@ -34,6 +34,7 @@ const rewardDiscount = pointsToUse / 100;
 );
 
   const [customer, setCustomer] = useState({
+    organization:"",
     name: "",
     email: "",
     phone: "",
@@ -48,7 +49,11 @@ useEffect(() => {
     const { data: userData } = await supabase.auth.getUser();
     const user = userData.user;
 
-    if (!user) return;
+    if (!user) {
+  alert("You must create an account or log in before checkout.");
+  router.push("/login");
+  return;
+}
 
   const { data: profile } = await supabase
   .from("customer_profiles")
@@ -63,6 +68,7 @@ if (profile?.has_lifetime_free_shipping) {
 if (profile) {
   setCustomer((prev) => ({
   ...prev,
+  organization: profile.organization || "",
   name: profile.full_name || "",
   phone: profile.phone || "",
   address: profile.address || "",
@@ -134,15 +140,17 @@ setRewardPoints(
     if (cart.length === 0) return alert("Your cart is empty.");
 
     if (
-      !customer.name ||
-      !customer.email ||
-      !customer.address ||
-      !customer.city ||
-      !customer.state ||
-      !customer.zip
-    ) {
-      return alert("Please fill out name, email, and full shipping address.");
-    }
+      !customer.organization.trim() ||  
+  !customer.name.trim() ||
+  !customer.email.trim() ||
+  !customer.phone.trim() ||
+  !customer.address.trim() ||
+  !customer.city.trim() ||
+  !customer.state.trim() ||
+  !customer.zip.trim()
+) {
+  return alert("Please fill out all required checkout fields.");
+}
 
     setLoading(true);
 
@@ -154,6 +162,7 @@ if (userId) {
   await supabase
     .from("customer_profiles")
     .update({
+      organization: customer.organization,
       full_name: customer.name,
       phone: customer.phone,
       address: customer.address,
@@ -234,6 +243,7 @@ const { error: orderError } = await supabase
     id: orderId,
     user_id: userId,
     order_number: orderNumber,
+    customer_organization: customer.organization,
     customer_name: customer.name,
     customer_email: customer.email,
     customer_phone: customer.phone,
@@ -315,6 +325,7 @@ const { error: orderError } = await supabase
         "service_quxnkin",
         "template_xz4gtk9",
         {
+          organization: customer.organization,
           name: customer.name,
           email: customer.email,
           admin_email: "Support@PugPep.com",
@@ -400,8 +411,17 @@ const { error: orderError } = await supabase
           <h2 style={{ color: "#00d9ff", marginTop: 25 }}>
             Shipping Information
           </h2>
-
+<input
+  required
+  placeholder="Organization / Lab Name"
+  value={customer.organization}
+  onChange={(e) =>
+    updateField("organization", e.target.value)
+  }
+  style={inputStyle}
+/>
           <input
+          required
             placeholder="Full Name"
             value={customer.name}
             onChange={(e) => updateField("name", e.target.value)}
@@ -409,6 +429,7 @@ const { error: orderError } = await supabase
           />
 
           <input
+          required
             placeholder="Email"
             value={customer.email}
             onChange={(e) => updateField("email", e.target.value)}
@@ -416,6 +437,7 @@ const { error: orderError } = await supabase
           />
 
           <input
+          required
             placeholder="Phone Number"
             value={customer.phone}
             onChange={(e) => updateField("phone", e.target.value)}
@@ -423,6 +445,7 @@ const { error: orderError } = await supabase
           />
 
           <input
+          required
             placeholder="Shipping Address"
             value={customer.address}
             onChange={(e) => updateField("address", e.target.value)}
@@ -430,6 +453,7 @@ const { error: orderError } = await supabase
           />
 
           <input
+          required
             placeholder="City"
             value={customer.city}
             onChange={(e) => updateField("city", e.target.value)}
@@ -437,6 +461,7 @@ const { error: orderError } = await supabase
           />
 
           <input
+          required
             placeholder="State"
             value={customer.state}
             onChange={(e) => updateField("state", e.target.value)}
@@ -444,6 +469,7 @@ const { error: orderError } = await supabase
           />
 
           <input
+          required
             placeholder="ZIP Code"
             value={customer.zip}
             onChange={(e) => updateField("zip", e.target.value)}

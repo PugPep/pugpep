@@ -4,15 +4,16 @@ import { useEffect, useState } from "react";
 
 type Order = {
   orderNumber: string;
-  customer: {
-    name: string;
-    email: string;
-    phone: string;
-    address: string;
-    city: string;
-    state: string;
-    zip: string;
-  };
+ customer: {
+  organization: string;
+  name: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+};
   items: {
     name: string;
     dosage: string;
@@ -62,9 +63,11 @@ export default function PaymentPage() {
   }
 
   const orderSummary = `
+  
 Order: ${order.orderNumber}
 Name: ${order.customer.name}
 Email: ${order.customer.email}
+Organization: ${order.customer.organization}
 Total: $${order.total.toFixed(2)}
 
 Items:
@@ -72,16 +75,19 @@ ${order.items
   .map((item) => {
     const qty = item.quantity || 1;
     return `- ${item.name} ${item.dosage} ${
-      item.purchaseType === "single" ? "Single Vial" : "Full Kit of 10"
+     item.name.toLowerCase().includes("microscope")
+  ? item.purchaseType === "single"
+    ? "Single Item"
+    : "10 Pack"
+  : item.purchaseType === "single"
+  ? "Single Vial"
+  : "Full Kit of 10"
     } x${qty} - $${(item.price * qty).toFixed(2)}`;
   })
   .join("\n")}
 `;
 
-  async function copyOrderDetails() {
-    await navigator.clipboard.writeText(orderSummary);
-    alert("Order details copied.");
-  }
+ 
 
   return (
     <main style={page}>
@@ -89,7 +95,10 @@ ${order.items
 
       <div style={boxStyle}>
         <h2 style={{ color: "#00d9ff" }}>Order #{order.orderNumber}</h2>
-
+<p>
+  <strong>Organization:</strong>{" "}
+  {order.customer.organization}
+</p>
         <p>
           <strong>Name:</strong> {order.customer.name}
         </p>
@@ -122,9 +131,7 @@ ${order.items
 
         <h2 style={{ color: "#00d9ff" }}>Total: ${order.total.toFixed(2)}</h2>
 
-        <button onClick={copyOrderDetails} style={smallButton}>
-          Copy Order Details
-        </button>
+        
       </div>
 
       <section style={methodGrid}>
@@ -152,38 +159,41 @@ ${order.items
       <div style={paymentBox}>
         {method === "cashapp" && (
   <PaymentInstructions
-            title="CashApp"
+  title="Cash App"
+  accent="#1eff00"
+  amount={order.total}
+  paymentInfo="$EllieRobins22"
+  message="Include ONLY YOUR NAME in the memo/note section"
+/>
+            
+             
 
-    accent="#1eff00"
-            amount={order.total}
-            copyOrderDetails={copyOrderDetails}
-            message="Include your own unique emoji! Message us on Telegram, Email us to complete the process."
-  />
 )}
         
         
         
         {method === "venmo" && (
           <PaymentInstructions
-            title="Venmo Payment"
-            accent="#00d9ff"
-            amount={order.total}
-            copyOrderDetails={copyOrderDetails}
-            message="We are Happy to be Friends and Family on Venmo! Message us on Telegram, mail us to complete the process."
-          />
+  title="Venmo"
+  accent="#00d9ff"
+  amount={order.total}
+  paymentInfo="@OMiller1111"
+  message="Friends & Family preferred. Include ONLY YOUR NAME in the note section."
+/>
+            
+            
+          
         )}
 
-
-        {method === "applepay" && (
-          <PaymentInstructions
-            title="Apple Cash"
-            accent="#cfd3d8"
-            amount={order.total}
-            copyOrderDetails={copyOrderDetails}
-            message="Message us on Telegram, or email us to complete the process."
-          />
-        )}
-
+{method === "applepay" && (
+       <PaymentInstructions
+  title="Apple Cash"
+  accent="#cfd3d8"
+  amount={order.total}
+  paymentInfo="Message us on Telegram or Email to receive payment instructions."
+  message="Include ONLY YOUR NAME in the note section."
+/>
+)}
         {method === "crypto" && (
   <>
     <img
@@ -202,8 +212,8 @@ ${order.items
       title="Crypto Payment"
       accent="#ff45d8"
       amount={order.total}
-      copyOrderDetails={copyOrderDetails}
-      message="Message us on Telegram, or email us to complete the process."
+      
+      message="Message us on Telegram or Email to receive payment instructions."
     />
   </>
 )}
@@ -218,33 +228,59 @@ function PaymentInstructions({
   accent,
   amount,
   message,
-  copyOrderDetails,
+  paymentInfo,
 }: {
   title: string;
   accent: string;
   amount: number;
   message: string;
-  copyOrderDetails: () => void;
+  paymentInfo?: string;
 }) {
   return (
     <>
       <h2 style={{ color: accent }}>{title}</h2>
 
       <p style={{ color: "#ddd", lineHeight: 1.6 }}>{message}</p>
+{paymentInfo && (
+  <div
+    style={{
+      marginTop: 20,
+      padding: 18,
+      borderRadius: 12,
+      border: `2px solid ${accent}`,
+      background: "rgba(255,255,255,.05)",
+      textAlign: "center",
+    }}
+  >
+    <div
+      style={{
+        fontSize: 14,
+        color: "#aaa",
+        marginBottom: 8,
+      }}
+    >
+      SEND PAYMENT TO
+    </div>
 
+    <div
+      style={{
+        fontSize: 28,
+        fontWeight: "bold",
+        color: accent,
+      }}
+    >
+      {paymentInfo}
+    </div>
+  </div>
+)}
       <p>
         Amount due:{" "}
         <strong style={{ color: "#00d9ff" }}>${amount.toFixed(2)}</strong>
       </p>
 
-      <p style={{ color: "#ffcc00" }}>
-        Please click “Copy Order Details” and paste your order information when
-        messaging us.
-      </p>
+     
 
-      <button onClick={copyOrderDetails} style={smallButton}>
-        Copy Order Details
-      </button>
+      
 
       <div style={contactGrid}>
         {contactLinks.map((link) => (

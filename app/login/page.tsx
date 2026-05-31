@@ -11,18 +11,24 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
 
   async function handleLogin() {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
 
-    if (error) {
-      setMessage(error.message);
-    } else {
-      setMessage("Logged in successfully.");
-      window.location.href = "/";
-    }
+  if (error) {
+    setMessage(error.message);
+    return;
   }
+
+  const redirect =
+    localStorage.getItem("pugpep_redirect_after_login") || "/";
+
+  localStorage.removeItem("pugpep_redirect_after_login");
+
+  setMessage("Logged in successfully.");
+  window.location.href = redirect;
+}
 
   return (
     <main style={{ padding: 40, color: "#fff", background: "#000", minHeight: "100vh" }}>
