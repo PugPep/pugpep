@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   price: Number(total),
   currency: "USD",
   id: String(orderNumber),
-  callback_url: `${siteUrl}/api/aurpay/webhook`,
+ 
       
       
 
