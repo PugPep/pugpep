@@ -46,7 +46,7 @@ export default function QualityPage() {
     <main style={page}>
       <section style={hero}>
         <h1 style={title}>QUALITY & TESTING</h1>
-
+<p style={{ color: "#00ff99" }}>COA gallery live test</p>
         <p style={subtitle}>
           PUGPEP is committed to transparency, consistency, and research-grade
           quality standards.
