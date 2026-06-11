@@ -78,14 +78,50 @@ export default function OrderDetailsPage() {
     alert("Shipping information saved.");
     await loadOrder();
   }
+function formatPhoneNumber(phone: string) {
+  const digits = phone.replace(/\D/g, "");
 
-  async function sendShippingEmail() {
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+
+  if (digits.length === 11 && digits.startsWith("1")) {
+    return `+${digits}`;
+  }
+
+  return phone;
+}
+ 
+  async function notifyCustomer() {
   if (!order) return;
+
+  if (!trackingNumber) {
+    alert("Please scan or enter a tracking number before notifying the customer.");
+    return;
+  }
 
   setSendingEmail(true);
 
-  try {
-    await emailjs.send(
+try {
+  // 1. Save tracking number and mark shipped first
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      shipping_status: "shipped",
+      tracking_number: trackingNumber,
+    })
+    .eq("id", id);
+
+  if (error) {
+    alert("Order update failed: " + error.message);
+    setSendingEmail(false);
+    return;
+  }
+
+  setShippingStatus("shipped");
+
+  // 2. Then send email
+  await emailjs.send(
       EMAILJS_SERVICE_ID,
       SHIPPING_TEMPLATE_ID,
       {
@@ -93,8 +129,7 @@ export default function OrderDetailsPage() {
         email: order.customer_email,
         order_number: order.order_number,
         shipping_status: "shipped",
-        tracking_number:
-          trackingNumber || "Tracking number not available yet",
+        tracking_number: trackingNumber,
         shipping_address: `${order.shipping_address}, ${order.city}, ${order.state} ${order.zip}`,
         order_total: Number(order.total).toFixed(2),
         items: items.map((item) => ({
@@ -107,32 +142,38 @@ export default function OrderDetailsPage() {
       EMAILJS_PUBLIC_KEY
     );
 
-    // AUTO UPDATE ORDER STATUS
-    const { error } = await supabase
-      .from("orders")
-      .update({
-        shipping_status: "shipped",
-        tracking_number: trackingNumber,
-      })
-      .eq("id", id);
+    const smsRes = await fetch("/api/send-shipping-sms", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+  customerPhone: formatPhoneNumber(order.customer_phone),
+  orderNumber: order.order_number,
+  shippingStatus: "shipped",
+  trackingNumber,
+}),
+    });
 
-    if (error) {
-      alert(error.message);
+    const smsData = await smsRes.json();
+
+    if (!smsData.success) {
+      alert("Email sent, but text failed: " + (smsData.error || "SMS failed."));
       return;
     }
 
-    setShippingStatus("shipped");
+    
 
-    alert("Shipping email sent and order marked as shipped.");
-
+    alert("Customer notified by email and text.");
     await loadOrder();
   } catch (error) {
     console.error(error);
-    alert("Email failed to send.");
+    alert("Customer notification failed.");
   }
 
   setSendingEmail(false);
 }
+
 function startScanner() {
   setScannerOpen(true);
 
@@ -148,10 +189,11 @@ function startScanner() {
 
     scanner.render(
       (decodedText) => {
-        setTrackingNumber(decodedText);
-        scanner.clear();
-        setScannerOpen(false);
-      },
+  setTrackingNumber(decodedText);
+  setShippingStatus("shipped");
+  scanner.clear();
+  setScannerOpen(false);
+},
       () => {}
     );
   }, 100);
@@ -285,19 +327,32 @@ function startScanner() {
           placeholder="Enter tracking number"
           style={input}
         />
-
+{!trackingNumber && (
+  <p style={{ color: "#ffcc00", marginTop: 8 }}>
+    Scan or enter a tracking number before notifying the customer.
+  </p>
+)}
         <div style={{ display: "flex", gap: 12, marginTop: 18 }}>
-          <button onClick={saveShippingInfo} style={button}>
-            {saving ? "Saving..." : "Save Shipping"}
-          </button>
-<button onClick={startScanner} style={button}>
+  <button onClick={saveShippingInfo} style={button}>
+    {saving ? "Saving..." : "Save Shipping"}
+  </button>
+
+ <button onClick={startScanner} style={button}>
   Scan Label
 </button>
-          <button onClick={sendShippingEmail} style={emailButton}>
-            {sendingEmail ? "Sending..." : "Email Customer"}
-          </button>
-          
-        </div>
+
+<button
+  onClick={notifyCustomer}
+  disabled={!trackingNumber || sendingEmail}
+  style={{
+    ...emailButton,
+    opacity: !trackingNumber || sendingEmail ? 0.5 : 1,
+    cursor: !trackingNumber || sendingEmail ? "not-allowed" : "pointer",
+  }}
+>
+ {sendingEmail ? "Notifying..." : "Notify & Mark Shipped"}
+</button>
+</div>
         {scannerOpen && (
   <div
     style={{

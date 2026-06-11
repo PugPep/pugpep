@@ -303,7 +303,21 @@ const { error: orderError } = await supabase
       alert(itemsError.message);
       return;
     }
-
+try {
+  await fetch("/api/send-order-confirmation-sms", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      customerPhone: customer.phone,
+      orderNumber,
+      orderTotal: finalTotal,
+    }),
+  });
+} catch (error) {
+  console.error("Order confirmation SMS failed:", error);
+}
     localStorage.setItem(
       "pugpep_order",
       JSON.stringify({
@@ -357,6 +371,11 @@ const { error: orderError } = await supabase
       <h1 style={{ color: "#ff45d8" }}>Checkout</h1>
 
       <div style={freeShippingBanner}>🚚 FREE U.S. Shipping on orders over $250</div>
+      <div style={{ color: "#888", fontSize: 12 }}>
+  By providing your phone number, you agree to receive transactional SMS
+  messages regarding your order, including order confirmations and shipping
+  updates. Message and data rates may apply.
+</div>
 {hasPreSaleItems && (
   <div
     style={{
