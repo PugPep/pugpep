@@ -194,7 +194,7 @@ export default function PaymentPage() {
             title="Cash App"
             accent="#1eff00"
             amount={order.total}
-            paymentInfo="$EllieRobins22"
+            paymentInfo="$PugPep1111"
             message="Include ONLY YOUR NAME in the memo/note section."
           />
         )}
@@ -204,7 +204,7 @@ export default function PaymentPage() {
             title="Venmo"
             accent="#00d9ff"
             amount={order.total}
-            paymentInfo="@OMiller1111"
+            paymentInfo="@PugPep1111"
             message="Friends & Family preferred. Include ONLY YOUR NAME in the note section."
           />
         )}
