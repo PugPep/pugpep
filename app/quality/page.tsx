@@ -3,50 +3,90 @@
 import { useEffect, useState } from "react";
 import { createClient } from "../../lib/supabaseClient";
 
+type CoaFile = {
+  name: string;
+  url: string;
+};
+
+type CoaFolder = {
+  name: string;
+  displayName: string;
+  count: number;
+  files: CoaFile[];
+};
+
 export default function QualityPage() {
   const supabase = createClient();
-  const [coas, setCoas] = useState<any[]>([]);
+  const [folders, setFolders] = useState<CoaFolder[]>([]);
+  const [selectedFolder, setSelectedFolder] = useState<CoaFolder | null>(null);
 
   useEffect(() => {
-    loadCoas();
+    loadCoaFolders();
   }, []);
 
-  async function loadCoas() {
-    const { data, error } = await supabase.storage
+  function formatName(name: string) {
+    return name
+      .replaceAll("-", " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase())
+      .replace("Nad Plus", "NAD+")
+      .replace("GhK Cu", "GHK-Cu")
+      .replace("Igf Lr3", "IGF-LR3")
+      .replace("Ss 31", "SS-31")
+      .replace("Mt2", "MT2")
+      .replace("Mots C", "MOTS-C")
+      .replace("Bpc 157", "BPC-157");
+  }
+
+  async function loadCoaFolders() {
+    const { data: folderData, error } = await supabase.storage
       .from("coas")
-      .list("", {
-        limit: 100,
-        sortBy: { column: "name", order: "asc" },
-      });
+      .list("", { limit: 100 });
 
     if (error) {
       console.error(error);
       return;
     }
 
-    const files =
-      data
-        ?.filter((file) => file.name !== ".emptyFolderPlaceholder")
-        .map((file) => {
-          const { data: publicUrlData } = supabase.storage
-            .from("coas")
-            .getPublicUrl(file.name);
+    const folderResults = await Promise.all(
+      (folderData || []).map(async (folder) => {
+        const { data: files } = await supabase.storage
+          .from("coas")
+          .list(folder.name, { limit: 100 });
 
-          return {
-            name: file.name.replace(/\.[^/.]+$/, "").replaceAll("-", " "),
-            url: publicUrlData.publicUrl,
-            fileName: file.name,
-          };
-        }) || [];
+        const coaFiles =
+          files
+            ?.filter((file) =>
+              file.name.toLowerCase().match(/\.(png|jpg|jpeg)$/)
+            )
+            .map((file) => {
+              const path = `${folder.name}/${file.name}`;
 
-    setCoas(files);
+              const { data } = supabase.storage
+                .from("coas")
+                .getPublicUrl(path);
+
+              return {
+                name: file.name.replace(/\.[^/.]+$/, "").replaceAll("-", " "),
+                url: data.publicUrl,
+              };
+            }) || [];
+
+        return {
+          name: folder.name,
+          displayName: formatName(folder.name),
+          count: coaFiles.length,
+          files: coaFiles,
+        };
+      })
+    );
+
+    setFolders(folderResults);
   }
 
   return (
     <main style={page}>
       <section style={hero}>
         <h1 style={title}>QUALITY & TESTING</h1>
-
         <p style={subtitle}>
           PUGPEP is committed to transparency, consistency, and research-grade
           quality standards.
@@ -61,37 +101,57 @@ export default function QualityPage() {
 
         <p style={text}>
           Certificates of Analysis (COAs) for applicable research materials and
-          batch verification are available below.
-        </p>
-
-        <p style={text}>
-          For questions regarding testing documentation, batch verification, or
-          analytical information, please contact PUGPEP support through our
-          official communication channels.
+          batch verification are organized by product below.
         </p>
       </section>
 
       <section style={gallery}>
         <h2 style={heading}>Certificates of Analysis</h2>
 
-        {coas.length === 0 ? (
-          <p style={text}>No COAs have been uploaded yet.</p>
-        ) : (
+        {!selectedFolder ? (
           <div style={grid}>
-            {coas.map((coa) => (
-              <a
-                key={coa.fileName}
-                href={coa.url}
-                target="_blank"
-                rel="noopener noreferrer"
+            {folders.map((folder) => (
+              <button
+                key={folder.name}
+                onClick={() => setSelectedFolder(folder)}
                 style={card}
               >
-                <img src={coa.url} alt={coa.name} style={coaImage} />
-
-                <div style={cardTitle}>{coa.name}</div>
-              </a>
+                <h3 style={cardTitle}>{folder.displayName}</h3>
+                <p style={text}>
+                  {folder.count > 0
+                    ? `${folder.count} COA${folder.count === 1 ? "" : "s"} Available`
+                    : "No COAs Available Yet"}
+                </p>
+              </button>
             ))}
           </div>
+        ) : (
+          <>
+            <button onClick={() => setSelectedFolder(null)} style={backButton}>
+              ← Back to Products
+            </button>
+
+            <h2 style={heading}>{selectedFolder.displayName} COAs</h2>
+
+            {selectedFolder.files.length === 0 ? (
+              <p style={text}>No COAs have been uploaded for this product yet.</p>
+            ) : (
+              <div style={grid}>
+                {selectedFolder.files.map((coa) => (
+                  <a
+                    key={coa.url}
+                    href={coa.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={card}
+                  >
+                    <img src={coa.url} alt={coa.name} style={coaImage} />
+                    <div style={cardTitle}>{coa.name}</div>
+                  </a>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </section>
     </main>
@@ -154,7 +214,7 @@ const gallery = {
 
 const grid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))",
+  gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
   gap: 20,
 };
 
@@ -165,6 +225,10 @@ const card = {
   borderRadius: 16,
   overflow: "hidden",
   textDecoration: "none",
+  padding: 20,
+  cursor: "pointer",
+  color: "#fff",
+  textAlign: "center" as const,
 };
 
 const coaImage = {
@@ -174,8 +238,18 @@ const coaImage = {
 };
 
 const cardTitle = {
-  padding: 15,
   color: "#00d9ff",
   fontWeight: "bold",
   textAlign: "center" as const,
+};
+
+const backButton = {
+  marginBottom: 20,
+  padding: "10px 14px",
+  background: "#001b22",
+  color: "#00d9ff",
+  border: "1px solid #00d9ff",
+  borderRadius: 10,
+  cursor: "pointer",
+  fontWeight: "bold",
 };
