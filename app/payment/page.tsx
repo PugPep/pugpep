@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
+import emailjs from "emailjs-com";
 type Order = {
   orderNumber: string;
   customer: {
@@ -108,20 +108,70 @@ xrp: {
 };
 
 const contactLinks = [
+  { label: "Join Discord", href: "https://discord.gg/yas8DetFz" },
   { label: "Telegram", href: "https://t.me/PugPeps" },
   { label: "Email Us", href: "mailto:support@pugpep.com" },
+
 ];
 
 export default function PaymentPage() {
   const [method, setMethod] = useState("venmo");
   const [selectedCrypto, setSelectedCrypto] = useState("btc");
   const [order, setOrder] = useState<Order | null>(null);
-
+const [confirming, setConfirming] = useState(false);
   useEffect(() => {
     const savedOrder = localStorage.getItem("pugpep_order");
     if (savedOrder) setOrder(JSON.parse(savedOrder));
   }, []);
+async function confirmOrder() {
+  if (!order) return;
 
+  setConfirming(true);
+
+  try {
+    await emailjs.send(
+      "service_quxnkin",
+      "template_xz4gtk9",
+      {
+        organization: order.customer.organization,
+        name: order.customer.name,
+        email: order.customer.email,
+        admin_email: "Support@PugPep.com",
+        order_number: order.orderNumber,
+        items: order.items.map((item) => ({
+          name: `${item.name} (${item.dosage})`,
+          quantity: item.quantity || 1,
+          price: `$${(item.price * (item.quantity || 1)).toFixed(2)}`,
+        })),
+        shipping: order.shipping.toFixed(2),
+        tax: "0.00",
+        promo_code: order.promoCode || "",
+        promo_discount: Number(order.promoDiscount || 0).toFixed(2),
+        total: order.total.toFixed(2),
+      },
+      "yc_0cE0Mcl3tfzc11"
+    );
+
+    await fetch("/api/send-order-confirmation-sms", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        customerPhone: order.customer.phone,
+        orderNumber: order.orderNumber,
+        orderTotal: order.total,
+      }),
+    });
+
+    alert("Order confirmed. Confirmation email and text sent.");
+  } catch (error) {
+    console.error(error);
+    alert("Order confirmation failed.");
+  }
+
+  setConfirming(false);
+}
   if (!order) {
     return (
       <main style={page}>
@@ -165,13 +215,31 @@ export default function PaymentPage() {
         </h3>
 
         <h2 style={{ color: "#00d9ff" }}>Total: ${order.total.toFixed(2)}</h2>
+        <button
+  onClick={confirmOrder}
+  disabled={confirming}
+  style={{
+    marginTop: 20,
+    padding: "14px 22px",
+    width: "100%",
+    background: "linear-gradient(90deg, #00b7ff, #ff2fd0)",
+    color: "#fff",
+    border: "none",
+    borderRadius: 10,
+    cursor: "pointer",
+    fontWeight: "bold",
+    fontSize: 18,
+  }}
+>
+  {confirming ? "Confirming..." : "Confirm Order"}
+</button>
       </div>
 
       <section style={methodGrid}>
         {[
           ["cashapp", "Cash App"],
           ["venmo", "Venmo"],
-          ["applepay", "Apple Pay"],
+         ["applecash", "Apple Cash"],
           ["crypto", "Crypto"],
         ].map(([value, label]) => (
           <button
@@ -195,7 +263,7 @@ export default function PaymentPage() {
             accent="#1eff00"
             amount={order.total}
             paymentInfo="$PugPep1111"
-            message="Include ONLY YOUR NAME in the memo/note section."
+            message="Include ONLY YOUR NAME in the memo/note section. Message us on Discord, Telegram or Email for assistance"
           />
         )}
 
@@ -205,7 +273,7 @@ export default function PaymentPage() {
             accent="#00d9ff"
             amount={order.total}
             paymentInfo="@PugPep1111"
-            message="Friends & Family preferred. Include ONLY YOUR NAME in the note section."
+            message="Friends & Family preferred. Include ONLY YOUR NAME in the note section.Message us on Discord, Telegram or Email for assistance"
           />
         )}
 
@@ -214,22 +282,22 @@ export default function PaymentPage() {
             title="Apple Cash"
             accent="#cfd3d8"
             amount={order.total}
-            message="Message us on Telegram or Email to receive Apple Cash payment instructions."
+            message="Message us on Discord, Telegram or Email to receive Apple Cash payment instructions."
           />
         )}
 
         {method === "crypto" && (
   <>
+    <AurpayButton
+      orderNumber={order.orderNumber}
+      total={order.total}
+    />
+
     <img
       src="/crypto-banner.png"
       alt="We Accept Crypto"
       style={cryptoBanner}
     />
-<AurpayButton
-  orderNumber={order.orderNumber}
-  total={order.total}
-/>
-    
   </>
 )}
       </div>
@@ -280,7 +348,7 @@ function AurpayButton({
       return;
     }
 
-    window.location.href = checkoutUrl;
+    window.open(checkoutUrl, "_blank", "noopener,noreferrer");
   } catch (error) {
     console.error(error);
     alert("Unable to create AURPAY payment.");
@@ -288,8 +356,13 @@ function AurpayButton({
     setLoading(false);
   }
 }
-  return (
-    <div style={{ textAlign: "center" }}>
+ return (
+  <div
+    style={{
+      textAlign: "center",
+      marginBottom: 25,
+    }}
+  >
       <h2 style={{ color: "#ff45d8" }}>Crypto Payment</h2>
 
       <p style={{ color: "#ddd", lineHeight: 1.6 }}>
@@ -297,11 +370,15 @@ function AurpayButton({
       </p>
 
       <button
-        type="button"
-        onClick={startAurpayPayment}
-        disabled={loading}
-        style={contactButton}
-      >
+  type="button"
+  onClick={startAurpayPayment}
+  disabled={loading}
+  style={{
+    ...contactButton,
+    maxWidth: 320,
+    margin: "0 auto",
+  }}
+>
         {loading ? "Opening AURPAY..." : "Secure Crypto Checkout"}
       </button>
     </div>
@@ -408,6 +485,7 @@ const cryptoBanner = {
   borderRadius: 14,
   border: "1px solid #7d2cff",
   boxShadow: "0 0 25px rgba(255,45,210,.35)",
+  marginTop: 20,
   marginBottom: 20,
 };
 

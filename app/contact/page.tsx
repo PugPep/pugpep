@@ -1,68 +1,47 @@
 export default function ContactPage() {
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background:
-          "radial-gradient(circle at top left, rgba(0,217,255,.18), transparent 35%), radial-gradient(circle at top right, rgba(255,45,210,.22), transparent 35%), #000",
-        color: "#fff",
-        padding: "60px 30px",
-      }}
-    >
-      <section style={{ maxWidth: 1000, margin: "0 auto", textAlign: "center" }}>
-        <h1
-          style={{
-            fontSize: 56,
-            color: "#ff45d8",
-            textShadow: "0 0 20px rgba(255,45,216,.55)",
-          }}
-        >
-          Contact PUGPEP
-        </h1>
+    <main style={page}>
+      <section style={container}>
+        <h1 style={title}>Contact PUGPEP</h1>
 
-        <p style={{ color: "#ccc", fontSize: 20, lineHeight: 1.6 }}>
-          Have questions about products, orders, payments, or checkout?
-          Reach us through our official community and social channels.
+        <p style={subtitle}>
+          Join the official PUGPEP Discord community for order support, shipping
+          assistance, product discussions, promotions, and announcements.
         </p>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: 22,
-            marginTop: 45,
-          }}
-        >
-          
+        <div style={discordBox}>
+          <h2 style={discordTitle}>Join Our Discord Community</h2>
 
-          <ContactCard
-            title="Telegram"
-            text="Follow PUGPEP for a daily dose of updates & sales! 📲Level up with our educational content. Welcome to a community that truly cares. ❤️"
-            link="https://t.me/PugPeps"
-            button="Join Telegram"
-            color="#1877F2"
-          />
+          <p style={discordText}>
+            Need help with an order, payment, shipping update, product
+            information, promotions, or general support?
+            <br />
+            <br />
+            Join the official PUGPEP Discord server and open a support ticket.
+            Our staff and community are available to assist you.
+          </p>
 
-          <ContactCard
-            title="Email Us"
-            text="Message us for order support, product inquiries, or any questions you have. We're here to help and ensure you have the best experience with PUGPEP!"
-            link="https://www.Support.PUGPEP.com"
-            button="Email Us"
-            color="#d033ae"
-          />
+          <div style={benefits}>
+            <p>🚀 Exclusive promotions</p>
+            <p>📦 Shipping updates</p>
+            <p>💬 Community support</p>
+            <p>🎁 Giveaways and announcements</p>
+            <p>🔬 Product discussions</p>
+          </div>
+
+          <a
+            href="https://discord.gg/yas8DetFz"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={discordButton}
+          >
+            Join Discord
+          </a>
         </div>
 
-        <div
-          style={{
-            marginTop: 45,
-            padding: 24,
-            border: "1px solid #7d2cff",
-            borderRadius: 16,
-            background: "#080808",
-            boxShadow: "0 0 25px rgba(255,45,210,.18)",
-          }}
-        >
+        <div style={noticeBox}>
           <h2 style={{ color: "#00d9ff" }}>Important Notice</h2>
+
           <p style={{ color: "#ccc", lineHeight: 1.6 }}>
             All PUGPEP products are intended for research purposes only and are
             not for human consumption. Please include your order details when
@@ -74,51 +53,78 @@ export default function ContactPage() {
   );
 }
 
-function ContactCard({
-  title,
-  text,
-  link,
-  button,
-  color,
-}: {
-  title: string;
-  text: string;
-  link: string;
-  button: string;
-  color: string;
-}) {
-  return (
-    <div
-      style={{
-        padding: 25,
-        border: `1px solid ${color}`,
-        borderRadius: 18,
-        background: "#070707",
-        boxShadow: `0 0 24px ${color}55`,
-        textAlign: "left",
-      }}
-    >
-      <h2 style={{ color, marginTop: 0 }}>{title}</h2>
+const page = {
+  minHeight: "100vh",
+  background:
+    "radial-gradient(circle at top left, rgba(0,217,255,.18), transparent 35%), radial-gradient(circle at top right, rgba(255,45,210,.22), transparent 35%), #000",
+  color: "#fff",
+  padding: "60px 30px",
+};
 
-      <p style={{ color: "#ccc", lineHeight: 1.6 }}>{text}</p>
+const container = {
+  maxWidth: 1000,
+  margin: "0 auto",
+  textAlign: "center" as const,
+};
 
-      <a
-        href={link}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          display: "inline-block",
-          marginTop: 15,
-          padding: "12px 18px",
-          background: `linear-gradient(90deg, ${color}, #ff2fd0)`,
-          color: "#fff",
-          textDecoration: "none",
-          borderRadius: 10,
-          fontWeight: "bold",
-        }}
-      >
-        {button}
-      </a>
-    </div>
-  );
-}
+const title = {
+  fontSize: 56,
+  color: "#ff45d8",
+  textShadow: "0 0 20px rgba(255,45,216,.55)",
+};
+
+const subtitle = {
+  color: "#ccc",
+  fontSize: 20,
+  lineHeight: 1.6,
+};
+
+const discordBox = {
+  marginTop: 45,
+  padding: 35,
+  border: "1px solid #5865F2",
+  borderRadius: 20,
+  background: "#070707",
+  boxShadow: "0 0 30px rgba(88,101,242,.35)",
+};
+
+const discordTitle = {
+  color: "#5865F2",
+  fontSize: 36,
+  marginTop: 0,
+  marginBottom: 15,
+};
+
+const discordText = {
+  color: "#ccc",
+  fontSize: 18,
+  lineHeight: 1.8,
+  marginBottom: 25,
+};
+
+const benefits = {
+  color: "#00ff99",
+  fontWeight: "bold",
+  lineHeight: 1.8,
+  marginBottom: 28,
+};
+
+const discordButton = {
+  display: "inline-block",
+  padding: "16px 28px",
+  background: "linear-gradient(90deg, #5865F2, #ff2fd0)",
+  color: "#fff",
+  textDecoration: "none",
+  borderRadius: 12,
+  fontWeight: "bold",
+  fontSize: 18,
+};
+
+const noticeBox = {
+  marginTop: 45,
+  padding: 24,
+  border: "1px solid #7d2cff",
+  borderRadius: 16,
+  background: "#080808",
+  boxShadow: "0 0 25px rgba(255,45,210,.18)",
+};

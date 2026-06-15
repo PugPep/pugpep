@@ -1,6 +1,6 @@
 "use client";
 
-import emailjs from "emailjs-com";
+
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -303,21 +303,7 @@ const { error: orderError } = await supabase
       alert(itemsError.message);
       return;
     }
-try {
-  await fetch("/api/send-order-confirmation-sms", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      customerPhone: customer.phone,
-      orderNumber,
-      orderTotal: finalTotal,
-    }),
-  });
-} catch (error) {
-  console.error("Order confirmation SMS failed:", error);
-}
+
     localStorage.setItem(
       "pugpep_order",
       JSON.stringify({
@@ -334,32 +320,7 @@ try {
       })
     );
 
-    try {
-      await emailjs.send(
-        "service_quxnkin",
-        "template_xz4gtk9",
-        {
-          organization: customer.organization,
-          name: customer.name,
-          email: customer.email,
-          admin_email: "Support@PugPep.com",
-          order_number: orderNumber,
-          items: cart.map((item) => ({
-            name: `${item.name} (${item.dosage})`,
-            quantity: item.quantity,
-            price: `$${(item.price * item.quantity).toFixed(2)}`,
-          })),
-          shipping: shipping.toFixed(2),
-          tax: "0.00",
-          promo_code: promoData?.code || "",
-          promo_discount: promoDiscount.toFixed(2),
-          total: finalTotal.toFixed(2),
-        },
-        "yc_0cE0Mcl3tfzc11"
-      );
-    } catch (error) {
-      console.error("Email failed:", error);
-    }
+    
 
     setLoading(false);
     clearCart();

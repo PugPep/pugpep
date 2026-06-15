@@ -102,7 +102,23 @@ export default function PromoManagerPage() {
 
     await loadPromos();
   }
+async function deletePromo(id: string, code: string) {
+  const confirmed = confirm(`Delete promo code ${code}?`);
+  if (!confirmed) return;
 
+  const { error } = await supabase
+    .from("promo_codes")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  alert("Promo code deleted.");
+  await loadPromos();
+}
   if (loading) {
     return (
       <main style={page}>
@@ -220,21 +236,22 @@ export default function PromoManagerPage() {
                   </td>
 
                   <td style={td}>
-                    <button
-                      onClick={() =>
-                        togglePromo(promo.id, promo.is_active)
-                      }
-                      style={
-                        promo.is_active
-                          ? deactivateButton
-                          : activateButton
-                      }
-                    >
-                      {promo.is_active
-                        ? "Deactivate"
-                        : "Activate"}
-                    </button>
-                  </td>
+  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <button
+      onClick={() => togglePromo(promo.id, promo.is_active)}
+      style={promo.is_active ? deactivateButton : activateButton}
+    >
+      {promo.is_active ? "Deactivate" : "Activate"}
+    </button>
+
+    <button
+      onClick={() => deletePromo(promo.id, promo.code)}
+      style={deleteButton}
+    >
+      Delete
+    </button>
+  </div>
+</td>
                 </tr>
               ))}
             </tbody>
@@ -319,4 +336,13 @@ const th = {
 
 const td = {
   padding: 10,
+};
+const deleteButton = {
+  padding: "10px 14px",
+  borderRadius: 8,
+  border: "1px solid #ff4d4d",
+  background: "#330000",
+  color: "#ff4d4d",
+  cursor: "pointer",
+  fontWeight: "bold",
 };
