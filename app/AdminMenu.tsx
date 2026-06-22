@@ -38,7 +38,14 @@ export default function AdminMenu() {
   onClick={() => setOpen(false)}
 >
   Dashboard
-</Link>    
+</Link>  
+<Link
+    href="/admin/analytics"
+    style={item}
+    onClick={() => setOpen(false)}
+  >
+    Analytics
+  </Link>  
   <Link
     href="/admin"
     style={item}
