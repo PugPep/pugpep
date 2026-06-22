@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import emailjs from "emailjs-com";
+import { trackEvent } from "../../lib/trackEvent";
 type Order = {
   orderNumber: string;
   customer: {
@@ -153,7 +154,7 @@ async function confirmOrder() {
     );
 
     await fetch("/api/send-order-confirmation-sms", {
-      method: "POST",
+   method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
@@ -164,7 +165,14 @@ async function confirmOrder() {
       }),
     });
 
-    alert("Order confirmed. Confirmation email and text sent.");
+    alert("Order confirmed. Confirmation email sent.");
+    await trackEvent({
+  event_type: "order_confirmed",
+  order_number: order.orderNumber,
+  metadata: {
+    total: order.total,
+  },
+});
   } catch (error) {
     console.error(error);
     alert("Order confirmation failed.");
@@ -244,7 +252,17 @@ async function confirmOrder() {
         ].map(([value, label]) => (
           <button
             key={value}
-            onClick={() => setMethod(value)}
+            onClick={() => {
+  setMethod(value);
+
+  if (order) {
+    trackEvent({
+      event_type: "payment_method_selected",
+      payment_method: value,
+      order_number: order.orderNumber,
+    });
+  }
+}}
             style={{
               ...methodButton,
               border: method === value ? "2px solid #ff45d8" : "1px solid #333",

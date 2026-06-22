@@ -11,16 +11,33 @@ export default function UpdatePasswordPage() {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    async function checkRecovery() {
-      const { data } = await supabase.auth.getSession();
+  async function checkRecovery() {
+    const { data, error } = await supabase.auth.getSession();
 
-      if (data.session) {
-        setReady(true);
-      }
+    if (error) {
+      console.error(error);
     }
 
-    checkRecovery();
-  }, []);
+    if (data.session) {
+      setReady(true);
+      return;
+    }
+
+    setTimeout(async () => {
+      const { data: delayedData } = await supabase.auth.getSession();
+
+      if (delayedData.session) {
+        setReady(true);
+      } else {
+        setMessage(
+          "Reset link could not be verified. Please request a new password reset email."
+        );
+      }
+    }, 1000);
+  }
+
+  checkRecovery();
+}, []);
 
   async function updatePassword() {
     if (!password) {

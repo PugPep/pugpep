@@ -271,6 +271,44 @@ const filteredOrders = orders.filter((order) => {
   return (
     <main style={pageStyle}>
       <h1 style={{ color: "#ff45d8" }}>Orders</h1>
+      <div
+  style={{
+    display: "flex",
+    gap: 12,
+    flexWrap: "wrap",
+    marginBottom: 20,
+  }}
+>
+  <Link
+    href="/admin/promos"
+    style={{
+      padding: "10px 16px",
+      borderRadius: 10,
+      border: "1px solid #00d9ff",
+      background: "#111",
+      color: "#00d9ff",
+      textDecoration: "none",
+      fontWeight: "bold",
+    }}
+  >
+    Promo Codes
+  </Link>
+
+  <Link
+    href="/admin/analytics"
+    style={{
+      padding: "10px 16px",
+      borderRadius: 10,
+      border: "1px solid #00ff99",
+      background: "#111",
+      color: "#00ff99",
+      textDecoration: "none",
+      fontWeight: "bold",
+    }}
+  >
+    Analytics
+  </Link>
+</div>
 <div
   style={{
     display: "flex",

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useCart } from "../cartContext";
 import { createClient } from "../../lib/supabaseClient";
-
+import { trackEvent } from "../../lib/trackEvent";
 export default function CheckoutPage() {
   const { cart, total, removeFromCart, updateQuantity, clearCart } = useCart();
 
@@ -44,7 +44,12 @@ const rewardDiscount = pointsToUse / 100;
     
     zip: "",
   });
+ 
 useEffect(() => {
+   trackEvent({
+  event_type: "checkout_started",
+  page_path: "/checkout",
+});
   async function checkLifetimeShipping() {
     const { data: userData } = await supabase.auth.getUser();
     const user = userData.user;
@@ -303,7 +308,15 @@ const { error: orderError } = await supabase
       alert(itemsError.message);
       return;
     }
-
+await trackEvent({
+  event_type: "order_created",
+  order_number: orderNumber,
+  promo_code: promoData?.code || null,
+  metadata: {
+    total: finalTotal,
+    itemCount: cart.length,
+  },
+});
     localStorage.setItem(
       "pugpep_order",
       JSON.stringify({

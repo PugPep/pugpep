@@ -13,7 +13,7 @@ export default function ForgotPasswordPage() {
     if (!email) return alert("Enter your email.");
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-     redirectTo: "http://pugpep.com/update-password",
+     redirectTo: "https://pugpep.com/update-password",
     });
 localStorage.setItem("pugpep_password_recovery", "yes");
     if (error) {
