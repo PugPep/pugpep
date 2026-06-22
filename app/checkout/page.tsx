@@ -462,16 +462,28 @@ await trackEvent({
           />
 
           <input
-          required
-            placeholder="ZIP Code"
-            value={customer.zip}
-            onChange={(e) => updateField("zip", e.target.value)}
-            style={inputStyle}
-          />
+  required
+  placeholder="ZIP Code"
+  value={customer.zip}
+  onChange={(e) => updateField("zip", e.target.value)}
+  style={inputStyle}
+/>
 
-          <button onClick={proceedToPayment} style={buttonStyle}>
-            {loading ? "Saving Order..." : "Proceed to Payment"}
-          </button>
+<p
+  style={{
+    color: "#ffcc66",
+    fontSize: 14,
+    marginBottom: 12,
+    textAlign: "center",
+    fontWeight: "bold",
+  }}
+>
+  * All fields are required to proceed to payment.
+</p>
+
+<button onClick={proceedToPayment} style={buttonStyle}>
+  {loading ? "Saving Order..." : "Proceed to Payment"}
+</button>
         </section>
 
         <section>
