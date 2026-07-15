@@ -331,73 +331,7 @@ const matchesFilter =
     text="Quality you can trust"
   />
 </section>
-<section style={testimonialSection}>
-  <h2 style={{ color: "#ff45d8", textAlign: "center" }}>
-    Verified Laboratory Feedback
-  </h2>
 
-  <div style={testimonialTicker}>
-    <div style={testimonialTrack}>
-      <Testimonial
-        name="BrownCoatLabs"
-        text="The batch-to-batch consistency is outstanding. We have noted zero variance in our baseline assay metrics across multiple lot numbers."
-      />
-
-      <Testimonial
-        name="RebelAllianceResearchGroup"
-        text="Highly reliable supplier for custom synthesis. Turnaround times are rapid, and the packaging ensures total peptide integrity during transport."
-      />
-
-      <Testimonial
-        name="Brotherhood1984 Innovation Assoiciates "
-        text="Excellent structural stability. The compound remains completely stable in solution during extended in vitro observation windows."
-      />
-
-      <Testimonial
-        name="LaunaRodgers.PHD"
-        text="Zero precipitate or cloudiness. It forms a perfectly clear, homogenous stock solution at high concentrations."
-      />
-
-      {/* DUPLICATE FOR LOOP */}
-      <Testimonial
-        name="MoleculeManiacLabs"
-        text="The peptide exhibits optimal hydrophilic properties, dissolving completely in standard phosphate-buffered saline within seconds."
-      />
-    
-
-      <Testimonial
-        name="HomeLabHero27"
-        text="Pleasently surprised, which honestly shouldn't feel like a miracle in 2026, but here we are. Fast shipping, great communication, and zero headache. 10/10, no notes."
-      />
-
-      <Testimonial
-        name="DataRunnersAnalytics"
-        text="The lyophilizate features a perfect vacuum seal and re-establishes without any visible aggregation."
-        
-      />
-      <Testimonial
-        name="UndergroundInnovatorsCollective"
-        text="Excellent purity profiles. Verifiable COAs. Our in-house HPLC testing consistently verifies the $99\%+$ purity claims on every batch of lyophilized peptides."
-        
-      /><Testimonial
-        name="SophisticatedLabs"
-        text="The peak identity on the mass spec data perfectly aligns with reference standards. Zero detectable structural anomalies or truncation fragments."
-        />
-      <Testimonial
-        name="The Marquis R&D"
-        text="Independent HPLC verification confirmed a $99.4\%$ purity profile with an exceptionally clean baseline. Excellent chemical integrity."
-      /><Testimonial
-        name="District13 Biotech"
-        text="That perfect, instant solubility is exactly what you want to see, it means the lyophilization cycle was dialed in just right, the cake structure was highly porous, and the moisture content is low."
-        
-      /><Testimonial
-        name="The Aldecaldos Research Syndicate"
-        text="Data replication just got a whole lot easier! Our baseline metrics have remained perfectly flat across three independent lot numbers. The synthesis consistency is phenomenal."
-        
-      />
-    </div>
-  </div>
-</section>
 <footer style={footer}>
   <p style={{ marginBottom: 18, color: "#00d9ff", fontWeight: "bold" }}>
     PUGPEP © 2026 All Rights Reserved
