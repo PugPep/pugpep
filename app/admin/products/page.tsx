@@ -11,8 +11,13 @@ type Product = {
   slug: string;
   color: string;
   image: string;
+  category: string;
   short_description: string;
   description: string;
+  research_category: string;
+  research_targets: string;
+  research_focus: string;
+  storage: string;
   is_active: boolean;
 };
 
@@ -114,8 +119,13 @@ export default function AdminProductsPage() {
           slug: product.slug,
           color: product.color,
           image: product.image,
+          category: product.category,
           short_description: product.short_description,
           description: product.description,
+          research_category: product.research_category,
+          research_targets: product.research_targets,
+          research_focus: product.research_focus,
+          storage: product.storage,
           is_active: product.is_active,
         })
         .eq("id", selectedId);
@@ -132,8 +142,13 @@ export default function AdminProductsPage() {
         slug: product.slug,
         color: product.color || "#ff45d8",
         image: product.image || "",
+        category: product.category || "research-product",
         short_description: product.short_description || "",
         description: product.description || "",
+        research_category: product.research_category || "",
+        research_targets: product.research_targets || "",
+        research_focus: product.research_focus || "",
+        storage: product.storage || "",
         is_active: product.is_active ?? true,
       });
 
@@ -206,8 +221,13 @@ export default function AdminProductsPage() {
       slug: "",
       color: "#ff45d8",
       image: "",
+      category: "research-product",
       short_description: "",
       description: "",
+      research_category: "",
+      research_targets: "",
+      research_focus: "",
+      storage: "",
       is_active: true,
     });
   }
@@ -282,12 +302,80 @@ export default function AdminProductsPage() {
           style={colorInput}
         />
 
+        <label style={{ color: "#ccc" }}>Website Product Type</label>
+        <select
+          value={product.category || "research-product"}
+          onChange={(e) => updateField("category", e.target.value)}
+          style={input}
+        >
+          <option value="research-product">Research Product</option>
+          <option value="lab-material">Lab Material</option>
+        </select>
+
+        <h3 style={{ color: "#ff65dc", marginTop: 24 }}>
+          Simple Overview
+        </h3>
+        <p style={{ color: "#999", lineHeight: 1.5 }}>
+          This appears beside the purchase section in simple,
+          beginner-friendly language.
+        </p>
+
         <textarea
           placeholder="Short Description"
           value={product.short_description || ""}
           onChange={(e) => updateField("short_description", e.target.value)}
           style={textarea}
         />
+
+        <h3 style={{ color: "#ff65dc", marginTop: 24 }}>
+          Research Snapshot
+        </h3>
+        <p style={{ color: "#999", lineHeight: 1.5 }}>
+          These four fields appear underneath the product image.
+        </p>
+
+        <input
+          placeholder="Research Category, example: Triple Receptor Agonist"
+          value={product.research_category || ""}
+          onChange={(e) =>
+            updateField("research_category", e.target.value)
+          }
+          style={input}
+        />
+
+        <input
+          placeholder="Primary Targets, example: GIP • GLP-1 • Glucagon"
+          value={product.research_targets || ""}
+          onChange={(e) =>
+            updateField("research_targets", e.target.value)
+          }
+          style={input}
+        />
+
+        <input
+          placeholder="Research Focus, example: Metabolic Health"
+          value={product.research_focus || ""}
+          onChange={(e) =>
+            updateField("research_focus", e.target.value)
+          }
+          style={input}
+        />
+
+        <input
+          placeholder="Storage, example: Refrigerated at 2–8°C"
+          value={product.storage || ""}
+          onChange={(e) => updateField("storage", e.target.value)}
+          style={input}
+        />
+
+        <h3 style={{ color: "#ff65dc", marginTop: 24 }}>
+          Full Research Description
+        </h3>
+        <p style={{ color: "#999", lineHeight: 1.5 }}>
+          Suggested headings: Category, Research Summary,
+          Scientific Overview, Mechanism of Action, Pathways
+          Studied, Areas of Ongoing Research, and Research Use.
+        </p>
 
         <textarea
           placeholder="Full Description"
