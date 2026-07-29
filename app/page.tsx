@@ -88,7 +88,7 @@ const [isMobile, setIsMobile] = useState<boolean | null>(null);
       {!ageVerified && (
         <div style={overlay}>
           <div style={modal}>
-            <Image src="/pugpep-logo.png" alt="PUGPEP" width={150} height={150} />
+            <Image src="pugpep-logo.png" alt="PUGPEP" width={150} height={150} />
 
             <h1 style={{ color: "#ff45d8" }}>PUGPEP Disclaimer</h1>
 
