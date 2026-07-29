@@ -12,10 +12,50 @@ type Order = {
   customer_name: string;
   customer_email: string;
   total: number;
+  net_revenue?: number;
+  product_cost_total?: number;
+  estimated_shipping_cost?: number;
+  estimated_packaging_cost?: number;
+  estimated_profit?: number;
+  profit_margin_percent?: number;
+  promo_code?: string | null;
+  promo_discount?: number;
+  reward_discount?: number;
+  reward_points_used?: number;
+  rewards_points_earned?: number;
+  rewards_applied?: boolean;
+  user_id?: string | null;
+  total_discount?: number;
+  payment_method?: string;
   status: string;
   shipping_status?: string;
   created_at: string;
 };
+
+function getOrderRevenue(order: Order) {
+  const storedRevenue = Number(order.net_revenue || 0);
+  const orderTotal = Number(order.total || 0);
+
+  return storedRevenue > 0 ? storedRevenue : orderTotal;
+}
+
+function getOrderCost(order: Order) {
+  return (
+    Number(order.product_cost_total || 0) +
+    Number(order.estimated_shipping_cost || 0) +
+    Number(order.estimated_packaging_cost || 0)
+  );
+}
+
+function getOrderProfit(order: Order) {
+  return getOrderRevenue(order) - getOrderCost(order);
+}
+
+function getOrderMargin(order: Order) {
+  const revenue = getOrderRevenue(order);
+  if (revenue <= 0) return 0;
+  return (getOrderProfit(order) / revenue) * 100;
+}
 
 export default function AdminPage() {
   const supabase = createClient();
@@ -57,9 +97,7 @@ export default function AdminPage() {
     loadAdmin();
   }, []);
 
-async function togglePaid(id: string, currentStatus: string) {
-  const newStatus = currentStatus === "paid" ? "pending" : "paid";
-
+async function markPaid(id: string) {
   const { data: orderData, error: orderError } = await supabase
     .from("orders")
     .select("*")
@@ -71,17 +109,22 @@ async function togglePaid(id: string, currentStatus: string) {
     return;
   }
 
-  if (newStatus === "paid" && !orderData.inventory_deducted) {
-    const { data: items, error: itemsError } = await supabase
-      .from("order_items")
-      .select("*")
-      .eq("order_id", id);
+  if (orderData.status === "paid") {
+    alert("This order is already marked paid.");
+    return;
+  }
 
-    if (itemsError) {
-      alert(itemsError.message);
-      return;
-    }
+  const { data: items, error: itemsError } = await supabase
+    .from("order_items")
+    .select("*")
+    .eq("order_id", id);
 
+  if (itemsError) {
+    alert(itemsError.message);
+    return;
+  }
+
+  if (!orderData.inventory_deducted) {
     for (const item of items || []) {
       const deductAmount =
         item.purchase_type === "kit"
@@ -112,76 +155,56 @@ async function togglePaid(id: string, currentStatus: string) {
         Number(inventoryRow.quantity || 0) - deductAmount
       );
 
-      const singleStatus =
-  newQuantity > 0 ? "in stock" : "out of stock";
-
-const kitStatus =
-  newQuantity >= 10 ? "in stock" : "pre-sale";
+      const singleStatus = newQuantity > 0 ? "in stock" : "out of stock";
+      const kitStatus = newQuantity >= 10 ? "in stock" : "pre-sale";
 
       const { error: updateInventoryError } = await supabase
-  .from("inventory")
-  .update({
-    quantity: newQuantity,
-    status: singleStatus,
-    updated_at: new Date().toISOString(),
-  })
-  .eq("id", inventoryRow.id);
+        .from("inventory")
+        .update({
+          quantity: newQuantity,
+          status: singleStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", inventoryRow.id);
 
-if (updateInventoryError) {
-  alert(updateInventoryError.message);
-  return;
-}
+      if (updateInventoryError) {
+        alert(updateInventoryError.message);
+        return;
+      }
 
-const { error: updateSingleOptionError } = await supabase
-  .from("product_options")
-  .update({
-    status: singleStatus,
-  })
-  .eq("product_slug", productSlug)
-  .eq("dosage", item.dosage)
-  .eq("purchase_type", "single");
+      const { error: updateSingleOptionError } = await supabase
+        .from("product_options")
+        .update({ status: singleStatus })
+        .eq("product_slug", productSlug)
+        .eq("dosage", item.dosage)
+        .eq("purchase_type", "single");
 
-if (updateSingleOptionError) {
-  alert(updateSingleOptionError.message);
-  return;
-}
+      if (updateSingleOptionError) {
+        alert(updateSingleOptionError.message);
+        return;
+      }
 
-const { error: updateKitOptionError } = await supabase
-  .from("product_options")
-  .update({
-    status: kitStatus,
-  })
-  .eq("product_slug", productSlug)
-  .eq("dosage", item.dosage)
-  .eq("purchase_type", "kit");
+      const { error: updateKitOptionError } = await supabase
+        .from("product_options")
+        .update({ status: kitStatus })
+        .eq("product_slug", productSlug)
+        .eq("dosage", item.dosage)
+        .eq("purchase_type", "kit");
 
-if (updateKitOptionError) {
-  alert(updateKitOptionError.message);
-  return;
-}
+      if (updateKitOptionError) {
+        alert(updateKitOptionError.message);
+        return;
+      }
     }
-    const { error: paidError } = await supabase
-      .from("orders")
-      .update({
-        status: "paid",
-        inventory_deducted: true,
-      })
-      .eq("id", id);
+  }
 
-    if (paidError) {
-      alert(paidError.message);
-      return;
-    }
-  } else {
-    const { error } = await supabase
-      .from("orders")
-      .update({ status: newStatus })
-      .eq("id", id);
+  const { error: markPaidError } = await supabase.rpc("mark_order_paid", {
+    target_order_id: id,
+  });
 
-    if (error) {
-      alert(error.message);
-      return;
-    }
+  if (markPaidError) {
+    alert(markPaidError.message);
+    return;
   }
 
   await loadOrders();
@@ -268,6 +291,19 @@ const filteredOrders = orders.filter((order) => {
 
   return true;
 });
+  const visibleRevenue = filteredOrders.reduce(
+    (sum, order) => sum + getOrderRevenue(order),
+    0
+  );
+  const visibleProfit = filteredOrders.reduce(
+    (sum, order) => sum + getOrderProfit(order),
+    0
+  );
+  const visibleDiscounts = filteredOrders.reduce(
+    (sum, order) => sum + Number(order.total_discount || 0),
+    0
+  );
+
   return (
     <main style={pageStyle}>
       <h1 style={{ color: "#ff45d8" }}>Orders</h1>
@@ -368,18 +404,28 @@ const filteredOrders = orders.filter((order) => {
   </button>
 ))}
 </div>
+<div style={summaryGrid}>
+  <div style={summaryCard}><span style={summaryLabel}>Visible Order Revenue</span><strong style={summaryValue}>${visibleRevenue.toFixed(2)}</strong></div>
+  <div style={summaryCard}><span style={summaryLabel}>Visible Profit</span><strong style={{ ...summaryValue, color: visibleProfit >= 0 ? "#00ff99" : "#ff4d4d" }}>${visibleProfit.toFixed(2)}</strong></div>
+  <div style={summaryCard}><span style={summaryLabel}>Visible Discounts</span><strong style={summaryValue}>${visibleDiscounts.toFixed(2)}</strong></div>
+</div>
       {orders.length === 0 ? (
         <p>No orders found.</p>
       ) : (
         <div style={{ overflowX: "auto" }}>
-  <table style={{ width: "100%", minWidth: 850, borderCollapse: "collapse" }}>
+  <table style={{ width: "100%", minWidth: 1280, borderCollapse: "collapse" }}>
           <thead>
             <tr>
               <th style={th}>Order #</th>
               <th style={th}>Name</th>
               <th style={th}>Email</th>
               <th style={th}>Date</th>
-              <th style={th}>Total</th>
+              <th style={th}>Revenue</th>
+              <th style={th}>Cost</th>
+              <th style={th}>Profit</th>
+              <th style={th}>Margin</th>
+              <th style={th}>Payment</th>
+              <th style={th}>Promo Code</th>
               <th style={th}>Status</th>
               <th style={th}>Actions</th>
             </tr>
@@ -400,7 +446,20 @@ const filteredOrders = orders.filter((order) => {
                 <td style={td}>
   {new Date(order.created_at).toLocaleString()}
 </td>
-                <td style={td}>${Number(order.total).toFixed(2)}</td>
+                <td style={td}>${getOrderRevenue(order).toFixed(2)}</td>
+                <td style={td}>${getOrderCost(order).toFixed(2)}</td>
+                <td style={{ ...td, color: getOrderProfit(order) >= 0 ? "#00ff99" : "#ff4d4d", fontWeight: "bold" }}>
+                  ${getOrderProfit(order).toFixed(2)}
+                </td>
+                <td style={td}>{getOrderMargin(order).toFixed(1)}%</td>
+                <td style={td}>{order.payment_method || "-"}</td>
+                <td style={td}>
+                  {order.promo_code ? (
+                    <span style={promoBadge}>{order.promo_code}</span>
+                  ) : (
+                    <span style={{ color: "#777" }}>None</span>
+                  )}
+                </td>
 
                 <td style={td}>
                   <span
@@ -450,11 +509,16 @@ const filteredOrders = orders.filter((order) => {
                   <button
   onClick={(e) => {
     e.stopPropagation();
-    togglePaid(order.id, order.status);
+    markPaid(order.id);
   }}
-  style={order.status === "paid" ? unpaidButton : paidButton}
+  disabled={order.status === "paid"}
+  style={{
+    ...paidButton,
+    opacity: order.status === "paid" ? 0.45 : 1,
+    cursor: order.status === "paid" ? "not-allowed" : "pointer",
+  }}
 >
-  {order.status === "paid" ? "Mark Unpaid" : "Mark Paid"}
+  {order.status === "paid" ? "Paid" : "Mark Paid"}
 </button>
 <button
   onClick={(e) => {
@@ -502,14 +566,6 @@ const paidButton = {
   cursor: "pointer",
 };
 
-const unpaidButton = {
-  padding: "6px 10px",
-  background: "#330000",
-  color: "#ff4d4d",
-  border: "1px solid #ff4d4d",
-  borderRadius: 6,
-  cursor: "pointer",
-};
 const deleteButton = {
   padding: "6px 10px",
   marginLeft: 8,
@@ -519,3 +575,19 @@ const deleteButton = {
   borderRadius: 6,
   cursor: "pointer",
 };
+
+const promoBadge = {
+  display: "inline-block",
+  padding: "5px 9px",
+  borderRadius: 999,
+  border: "1px solid #00ff99",
+  background: "rgba(0,255,153,.10)",
+  color: "#00ff99",
+  fontWeight: "bold",
+  fontSize: 12,
+};
+
+const summaryGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14, marginBottom: 24 };
+const summaryCard = { padding: 16, border: "1px solid #333", borderRadius: 12, background: "#111", display: "grid", gap: 8 };
+const summaryLabel = { color: "#aaa", fontSize: 13, textTransform: "uppercase" as const, letterSpacing: 0.6 };
+const summaryValue = { color: "#00d9ff", fontSize: 24 };

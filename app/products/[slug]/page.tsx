@@ -239,6 +239,15 @@ export default function ProductDetailPage() {
         image: product.image,
         dosage: selectedOption.dosage,
         price: getSalePrice(selectedOption),
+        regularPrice: Number(selectedOption.price || 0),
+        salePrice: getSalePrice(selectedOption),
+        wasOnSale: Boolean(
+          selectedOption.sale_active &&
+          Number(selectedOption.sale_percent || 0) > 0
+        ),
+        salePercent: selectedOption.sale_active
+          ? Number(selectedOption.sale_percent || 0)
+          : 0,
         cost: Number(selectedOption.cost || 0),
 
         purchaseType:

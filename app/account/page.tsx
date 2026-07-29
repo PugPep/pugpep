@@ -1,340 +1,283 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "../../lib/supabaseClient";
 import { useCart } from "../cartContext";
 
-type CustomerProfile = {
-  id: string;
-  full_name?: string | null;
-  phone?: string | null;
-  address?: string | null;
-  city?: string | null;
-  state?: string | null;
-  zip?: string | null;
-  vip_tier?: string | null;
-  lifetime_spend?: number | null;
-  reward_points?: number | null;
-  has_lifetime_free_shipping?: boolean | null;
+type CurrentProduct = {
+  name: string;
+  slug: string;
+  image: string | null;
+  is_active: boolean;
 };
 
-type Order = {
-  id: string;
-  order_number?: string | null;
-  total?: number | null;
-  status?: string | null;
-  shipping_status?: string | null;
-  tracking_number?: string | null;
-  created_at?: string | null;
+type CurrentProductOption = {
+  product_slug: string;
+  dosage: string;
+  purchase_type: string;
+  price: number;
+  status: string;
+  sale_active: boolean;
+  sale_percent: number;
+  cost: number | null;
 };
 
-type ShippingForm = {
-  full_name: string;
-  phone: string;
-  address: string;
-  city: string;
-  state: string;
-  zip: string;
-};
-
-const emptyShippingForm: ShippingForm = {
-  full_name: "",
-  phone: "",
-  address: "",
-  city: "",
-  state: "",
-  zip: "",
+type CurrentInventory = {
+  quantity: number;
 };
 
 export default function AccountPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const { addToCart } = useCart();
 
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [profile, setProfile] = useState<CustomerProfile | null>(null);
-
+  const [orders, setOrders] = useState<any[]>([]);
+  const [profile, setProfile] = useState<any>(null);
   const [passwordRecoveryRequired, setPasswordRecoveryRequired] =
     useState(false);
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
 
-  const [editingShipping, setEditingShipping] = useState(false);
-  const [savingShipping, setSavingShipping] = useState(false);
-  const [shippingMessage, setShippingMessage] = useState("");
-  const [shippingError, setShippingError] = useState(false);
-
-  const [shippingForm, setShippingForm] =
-    useState<ShippingForm>(emptyShippingForm);
+  useEffect(() => {
+    setPasswordRecoveryRequired(
+      localStorage.getItem("pugpep_password_recovery") === "yes"
+    );
+  }, []);
 
   useEffect(() => {
     async function loadAccount() {
-      try {
-        const recoveryRequired =
-          localStorage.getItem("pugpep_password_recovery") === "yes";
+      setLoading(true);
 
-        setPasswordRecoveryRequired(recoveryRequired);
+      const { data: userData, error: userError } =
+        await supabase.auth.getUser();
 
-        if (recoveryRequired) {
-          setLoading(false);
-          return;
-        }
-
-        const {
-          data: userData,
-          error: userError,
-        } = await supabase.auth.getUser();
-
-        if (userError) {
-          console.error("User loading error:", userError);
-        }
-
-        const user = userData.user;
-
-        if (!user) {
-          setLoading(false);
-          return;
-        }
-
-        setEmail(user.email || "");
-
-        const {
-          data: profileData,
-          error: profileError,
-        } = await supabase
-          .from("customer_profiles")
-          .select("*")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (profileError) {
-          console.error("Profile loading error:", profileError);
-        }
-
-        if (profileData) {
-          setProfile(profileData);
-
-          setShippingForm({
-            full_name: profileData.full_name || "",
-            phone: profileData.phone || "",
-            address: profileData.address || "",
-            city: profileData.city || "",
-            state: profileData.state || "",
-            zip: profileData.zip || "",
-          });
-        } else {
-          setProfile(null);
-          setShippingForm(emptyShippingForm);
-        }
-
-        const {
-          data: orderData,
-          error: orderError,
-        } = await supabase
-          .from("orders")
-          .select("*")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false });
-
-        if (orderError) {
-          console.error("Order loading error:", orderError);
-        }
-
-        setOrders(orderData || []);
-      } catch (error) {
-        console.error("Account loading error:", error);
-      } finally {
+      if (userError) {
+        console.error("Account loading error:", userError);
         setLoading(false);
+        return;
       }
-    }
-
-    loadAccount();
-  }, []);
-
-  function updateShippingField(
-    field: keyof ShippingForm,
-    value: string
-  ) {
-    setShippingForm((current) => ({
-      ...current,
-      [field]: value,
-    }));
-  }
-
-  function startEditingShipping() {
-    setShippingMessage("");
-    setShippingError(false);
-    setEditingShipping(true);
-  }
-
-  function cancelEditingShipping() {
-    setShippingForm({
-      full_name: profile?.full_name || "",
-      phone: profile?.phone || "",
-      address: profile?.address || "",
-      city: profile?.city || "",
-      state: profile?.state || "",
-      zip: profile?.zip || "",
-    });
-
-    setShippingMessage("");
-    setShippingError(false);
-    setEditingShipping(false);
-  }
-
-  async function saveShippingInfo() {
-    setShippingMessage("");
-    setShippingError(false);
-
-    const fullName = shippingForm.full_name.trim();
-    const phone = shippingForm.phone.trim();
-    const address = shippingForm.address.trim();
-    const city = shippingForm.city.trim();
-    const state = shippingForm.state.trim().toUpperCase();
-    const zip = shippingForm.zip.trim();
-
-    if (!fullName || !address || !city || !state || !zip) {
-      setShippingError(true);
-      setShippingMessage(
-        "Please complete all required shipping fields."
-      );
-      return;
-    }
-
-    if (state.length !== 2) {
-      setShippingError(true);
-      setShippingMessage(
-        "Please enter the two-letter state abbreviation."
-      );
-      return;
-    }
-
-    setSavingShipping(true);
-
-    try {
-      const {
-        data: userData,
-        error: userError,
-      } = await supabase.auth.getUser();
 
       const user = userData.user;
 
-      if (userError || !user) {
-        setShippingError(true);
-        setShippingMessage(
-          "Your login session expired. Please log in again."
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      setEmail(user.email || "");
+
+      const { data: profileData, error: profileError } = await supabase
+        .from("customer_profiles")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error("Profile loading error:", profileError);
+      }
+
+      setProfile(profileData || null);
+
+      const { data: orderData, error: orderError } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (orderError) {
+        console.error("Orders loading error:", orderError);
+      }
+
+      setOrders(orderData || []);
+      setLoading(false);
+    }
+
+    loadAccount();
+  }, [supabase]);
+
+  async function reorder(orderId: string) {
+    setReorderingId(orderId);
+
+    try {
+      const { data: items, error: itemsError } = await supabase
+        .from("order_items")
+        .select("*")
+        .eq("order_id", orderId);
+
+      if (itemsError) {
+        alert(itemsError.message);
+        return;
+      }
+
+      if (!items || items.length === 0) {
+        alert("No items found for this order.");
+        return;
+      }
+
+      let addedItems = 0;
+      const skippedItems: string[] = [];
+
+      for (const item of items) {
+        const productName = String(
+          item.product_name || "Previous Order Item"
+        );
+        const productSlug = String(item.product_slug || "");
+        const dosage = String(item.dosage || "");
+        const purchaseType: "single" | "kit" =
+          item.purchase_type === "kit" ? "kit" : "single";
+        const requestedQuantity = Math.max(
+          1,
+          Number(item.quantity || 1)
+        );
+
+        if (!productSlug || !dosage) {
+          skippedItems.push(
+            `${productName}: missing product slug or dosage.`
+          );
+          continue;
+        }
+
+        const { data: productData, error: productError } = await supabase
+          .from("products")
+          .select("name, slug, image, is_active")
+          .eq("slug", productSlug)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (productError || !productData) {
+          skippedItems.push(
+            `${productName} ${dosage}: product is no longer available.`
+          );
+          continue;
+        }
+
+        const product = productData as CurrentProduct;
+
+        const { data: optionData, error: optionError } = await supabase
+          .from("product_options")
+          .select(
+            "product_slug, dosage, purchase_type, price, status, sale_active, sale_percent, cost"
+          )
+          .eq("product_slug", productSlug)
+          .eq("dosage", dosage)
+          .eq("purchase_type", purchaseType)
+          .maybeSingle();
+
+        if (optionError || !optionData) {
+          skippedItems.push(
+            `${productName} ${dosage} ${purchaseType}: this option no longer exists.`
+          );
+          continue;
+        }
+
+        const option = optionData as CurrentProductOption;
+
+        const { data: inventoryData, error: inventoryError } = await supabase
+          .from("inventory")
+          .select("quantity")
+          .eq("product_slug", productSlug)
+          .eq("dosage", dosage)
+          .eq("purchase_type", "single")
+          .maybeSingle();
+
+        if (inventoryError) {
+          skippedItems.push(
+            `${productName} ${dosage}: inventory could not be checked.`
+          );
+          continue;
+        }
+
+        const inventory = inventoryData as CurrentInventory | null;
+        const availableSingleUnits = Number(inventory?.quantity || 0);
+        const optionStatus = String(option.status || "in stock");
+        const isPreSale = optionStatus === "pre-sale";
+        const isOutOfStock = optionStatus === "out of stock";
+
+        let maxAvailable: number | undefined;
+
+        if (purchaseType === "single") {
+          maxAvailable = availableSingleUnits;
+
+          if (isOutOfStock || availableSingleUnits < requestedQuantity) {
+            skippedItems.push(
+              `${productName} ${dosage}: only ${availableSingleUnits} currently available.`
+            );
+            continue;
+          }
+        } else if (!isPreSale) {
+          maxAvailable = Math.floor(availableSingleUnits / 10);
+
+          if (isOutOfStock || maxAvailable < requestedQuantity) {
+            skippedItems.push(
+              `${productName} ${dosage} kit: only ${maxAvailable} kit(s) currently available.`
+            );
+            continue;
+          }
+        }
+
+        const regularPrice = Number(option.price || 0);
+        const salePercent = Number(option.sale_percent || 0);
+        const wasOnSale =
+          Boolean(option.sale_active) && salePercent > 0;
+        const salePrice = wasOnSale
+          ? Number(
+              (regularPrice * (1 - salePercent / 100)).toFixed(2)
+            )
+          : regularPrice;
+        const currentPrice = wasOnSale
+          ? salePrice
+          : regularPrice;
+
+        addToCart(
+          {
+            name: String(product.name || productName),
+            slug: productSlug,
+            image: String(
+              product.image || item.image || "/pugpep-logo.png"
+            ),
+            dosage,
+            purchaseType,
+            price: currentPrice,
+            regularPrice,
+            salePrice,
+            wasOnSale,
+            salePercent: wasOnSale ? salePercent : 0,
+            status: optionStatus,
+            cost: Number(option.cost || 0),
+            maxAvailable,
+          },
+          requestedQuantity
+        );
+
+        addedItems += 1;
+      }
+
+      if (addedItems === 0) {
+        alert(
+          `Nothing was added to the cart.\n\n${skippedItems.join("\n")}`
         );
         return;
       }
 
-      const updatedShipping = {
-        id: user.id,
-        full_name: fullName,
-        phone,
-        address,
-        city,
-        state,
-        zip,
-      };
-
-      const {
-        data,
-        error,
-      } = await supabase
-        .from("customer_profiles")
-        .upsert(updatedShipping, {
-          onConflict: "id",
-        })
-        .select("*")
-        .single();
-
-      if (error) {
-        console.error("Shipping update error:", error);
-        setShippingError(true);
-        setShippingMessage(error.message);
-        return;
+      if (skippedItems.length > 0) {
+        alert(
+          `${addedItems} item type(s) added using current pricing and inventory.\n\nThe following could not be added:\n${skippedItems.join(
+            "\n"
+          )}`
+        );
+      } else {
+        alert(
+          "Order added back to cart using current pricing and inventory."
+        );
       }
 
-      setProfile(data);
-
-      setShippingForm({
-        full_name: data.full_name || "",
-        phone: data.phone || "",
-        address: data.address || "",
-        city: data.city || "",
-        state: data.state || "",
-        zip: data.zip || "",
-      });
-
-      setEditingShipping(false);
-      setShippingError(false);
-      setShippingMessage(
-        "Shipping information updated successfully."
-      );
-    } catch (error) {
-      console.error("Shipping save error:", error);
-      setShippingError(true);
-      setShippingMessage(
-        "Shipping information could not be saved."
-      );
+      router.push("/checkout");
     } finally {
-      setSavingShipping(false);
+      setReorderingId(null);
     }
-  }
-
-  async function reorder(orderId: string) {
-    const {
-      data: items,
-      error,
-    } = await supabase
-      .from("order_items")
-      .select("*")
-      .eq("order_id", orderId);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    if (!items || items.length === 0) {
-      alert("No items found for this order.");
-      return;
-    }
-
-    items.forEach((item) => {
-      const quantity = Number(item.quantity || 1);
-      const totalPrice = Number(item.price || 0);
-
-      addToCart(
-        {
-          name: item.product_name,
-          slug: item.product_slug,
-          image: item.image || "/pugpep-logo.png",
-          dosage: item.dosage,
-          price:
-            quantity > 0
-              ? totalPrice / quantity
-              : totalPrice,
-          purchaseType:
-            item.purchase_type as "single" | "kit",
-          status: "in stock",
-        },
-        quantity
-      );
-    });
-
-    alert("Order added back to cart.");
-    router.push("/checkout");
-  }
-
-  if (loading) {
-    return (
-      <main style={page}>
-        <p>Loading account...</p>
-      </main>
-    );
   }
 
   if (passwordRecoveryRequired) {
@@ -343,24 +286,22 @@ export default function AccountPage() {
         <h1 style={{ color: "#ff45d8" }}>
           Password Reset Required
         </h1>
-
         <p>
-          Please finish updating your password before viewing
-          your account.
+          Please finish updating your password before viewing your account.
         </p>
       </main>
     );
   }
 
+  if (loading) {
+    return <main style={page}>Loading account...</main>;
+  }
+
   if (!email) {
     return (
       <main style={page}>
-        <h1 style={{ color: "#ff45d8" }}>
-          My Account
-        </h1>
-
+        <h1 style={{ color: "#ff45d8" }}>My Account</h1>
         <p>Please log in to view your account.</p>
-
         <Link href="/login" style={{ color: "#00d9ff" }}>
           Go to Login
         </Link>
@@ -370,21 +311,23 @@ export default function AccountPage() {
 
   return (
     <main style={page}>
-      <h1 style={{ color: "#ff45d8" }}>
-        My Account
-      </h1>
-
-      <p style={{ color: "#ccc" }}>
-        Logged in as {email}
-      </p>
+      <h1 style={{ color: "#ff45d8" }}>My Account</h1>
+      <p style={{ color: "#ccc" }}>Logged in as {email}</p>
 
       {profile && (
         <section style={box}>
-          <h2 style={{ color: "#00d9ff" }}>
-            VIP Rewards
-          </h2>
+          <h2 style={{ color: "#00d9ff" }}>VIP Rewards</h2>
 
-          <div style={tierOverview}>
+          <div
+            style={{
+              marginTop: 12,
+              marginBottom: 18,
+              padding: 14,
+              border: "1px solid rgba(255,255,255,.12)",
+              borderRadius: 10,
+              background: "rgba(255,255,255,.04)",
+            }}
+          >
             <p
               style={{
                 margin: 0,
@@ -395,70 +338,41 @@ export default function AccountPage() {
               Current Tier: {profile.vip_tier || "Stone"}
             </p>
 
-            <p
-              style={{
-                marginTop: 10,
-                color: "#ccc",
-                lineHeight: 1.8,
-              }}
-            >
-              Stone → $0+
-              <br />
-              Iron → $250+
-              <br />
-              Bronze → $500+
-              <br />
-              Silver → $1,000+
-              <br />
-              Gold → $2,500+
-              <br />
-              Platinum → $5,000+
-              <br />
-              Emerald → $10,000+
-              <br />
-              Sapphire → $20,000+
-              <br />
-              Ruby → $35,000+
-              <br />
+            <p style={{ marginTop: 10, color: "#ccc", lineHeight: 1.8 }}>
+              Stone → $0+ <br />
+              Iron → $250+ <br />
+              Bronze → $500+ <br />
+              Silver → $1,000+ <br />
+              Gold → $2,500+ <br />
+              Platinum → $5,000+ <br />
+              Emerald → $10,000+ <br />
+              Sapphire → $20,000+ <br />
+              Ruby → $35,000+ <br />
               Diamond → $50,000+
             </p>
           </div>
 
           <p>
             <strong>Tier:</strong>{" "}
-            <span
-              style={{
-                color: "#00ff99",
-                fontWeight: "bold",
-              }}
-            >
+            <span style={{ color: "#00ff99", fontWeight: "bold" }}>
               {profile.vip_tier || "Stone"}
             </span>
           </p>
 
           <p>
             <strong>Lifetime Spend:</strong> $
-            {Number(
-              profile.lifetime_spend || 0
-            ).toFixed(2)}
+            {Number(profile.lifetime_spend || 0).toFixed(2)}
           </p>
 
-          <p style={{ color: "#ccc", lineHeight: 1.7 }}>
-            Reward points are earned with every purchase and
-            can be redeemed for discounts on future orders.
-            The more you spend, the higher your VIP tier and
-            the more rewards you unlock.
+          <p style={{ color: "#ccc", lineHeight: 1.6 }}>
+            Reward points are earned with every purchase and can be redeemed
+            for discounts on future orders. The more you spend, the higher
+            your VIP tier and the more rewards you unlock!
           </p>
 
-          <p
-            style={{
-              color: "#ccc",
-              fontSize: 14,
-              marginTop: 10,
-            }}
-          >
-            Note: VIP tier and rewards are updated after each
-            order is completed.
+          <p style={{ color: "#ccc", fontSize: 14, marginTop: 10 }}>
+            Note: VIP tier and rewards are updated after each order is
+            completed.
           </p>
 
           <p>
@@ -467,300 +381,103 @@ export default function AccountPage() {
           </p>
 
           <div style={{ marginTop: 18 }}>
-            <strong style={{ color: "#00d9ff" }}>
-              Tier Benefits
-            </strong>
+            <strong style={{ color: "#00d9ff" }}>Tier Benefits</strong>
 
-            <ul style={benefitsList}>
-              {getTierBenefits(
-                profile.vip_tier || "Stone"
-              ).map((benefit) => (
-                <li key={benefit}>
-                  {benefit}
-                </li>
-              ))}
+            <ul
+              style={{
+                marginTop: 10,
+                color: "#ccc",
+                lineHeight: 1.8,
+                paddingLeft: 20,
+              }}
+            >
+              {getTierBenefits(profile.vip_tier || "Stone").map(
+                (benefit: string) => (
+                  <li key={benefit}>{benefit}</li>
+                )
+              )}
             </ul>
           </div>
         </section>
       )}
 
       <section style={box}>
-        <div style={sectionHeader}>
-          <h2
-            style={{
-              color: "#00d9ff",
-              margin: 0,
-            }}
-          >
-            Saved Shipping Info
-          </h2>
+        <h2 style={{ color: "#00d9ff" }}>Saved Shipping Info</h2>
 
-          {!editingShipping && profile?.full_name && (
-            <button
-              type="button"
-              onClick={startEditingShipping}
-              style={editButton}
-            >
-              Edit Shipping Info
-            </button>
-          )}
-        </div>
-
-        {editingShipping ? (
-          <div style={{ marginTop: 20 }}>
-            <label style={shippingLabel}>
-              Full Name *
-              <input
-                type="text"
-                value={shippingForm.full_name}
-                onChange={(event) =>
-                  updateShippingField(
-                    "full_name",
-                    event.target.value
-                  )
-                }
-                autoComplete="name"
-                style={shippingInput}
-              />
-            </label>
-
-            <label style={shippingLabel}>
-              Phone Number
-              <input
-                type="tel"
-                value={shippingForm.phone}
-                onChange={(event) =>
-                  updateShippingField(
-                    "phone",
-                    event.target.value
-                  )
-                }
-                autoComplete="tel"
-                style={shippingInput}
-              />
-            </label>
-
-            <label style={shippingLabel}>
-              Street Address *
-              <input
-                type="text"
-                value={shippingForm.address}
-                onChange={(event) =>
-                  updateShippingField(
-                    "address",
-                    event.target.value
-                  )
-                }
-                autoComplete="street-address"
-                style={shippingInput}
-              />
-            </label>
-
-            <div style={shippingGrid}>
-              <label style={shippingLabel}>
-                City *
-                <input
-                  type="text"
-                  value={shippingForm.city}
-                  onChange={(event) =>
-                    updateShippingField(
-                      "city",
-                      event.target.value
-                    )
-                  }
-                  autoComplete="address-level2"
-                  style={shippingInput}
-                />
-              </label>
-
-              <label style={shippingLabel}>
-                State *
-                <input
-                  type="text"
-                  value={shippingForm.state}
-                  onChange={(event) =>
-                    updateShippingField(
-                      "state",
-                      event.target.value
-                    )
-                  }
-                  autoComplete="address-level1"
-                  maxLength={2}
-                  placeholder="FL"
-                  style={shippingInput}
-                />
-              </label>
-
-              <label style={shippingLabel}>
-                ZIP Code *
-                <input
-                  type="text"
-                  value={shippingForm.zip}
-                  onChange={(event) =>
-                    updateShippingField(
-                      "zip",
-                      event.target.value
-                    )
-                  }
-                  autoComplete="postal-code"
-                  style={shippingInput}
-                />
-              </label>
-            </div>
-
-            <div style={shippingButtonRow}>
-              <button
-                type="button"
-                onClick={saveShippingInfo}
-                disabled={savingShipping}
-                style={{
-                  ...saveButton,
-                  opacity: savingShipping ? 0.6 : 1,
-                  cursor: savingShipping
-                    ? "not-allowed"
-                    : "pointer",
-                }}
-              >
-                {savingShipping
-                  ? "Saving..."
-                  : "Save Shipping Info"}
-              </button>
-
-              <button
-                type="button"
-                onClick={cancelEditingShipping}
-                disabled={savingShipping}
-                style={cancelButton}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : profile?.full_name ? (
-          <div style={savedAddress}>
-            <p style={{ margin: 0 }}>
-              <strong>{profile.full_name}</strong>
+        {profile?.full_name ? (
+          <>
+            <p>{profile.full_name}</p>
+            <p>{profile.phone}</p>
+            <p>{profile.address}</p>
+            <p>
+              {profile.city}, {profile.state} {profile.zip}
             </p>
-
-            {profile.phone && (
-              <p style={addressLine}>
-                {profile.phone}
-              </p>
-            )}
-
-            <p style={addressLine}>
-              {profile.address}
-            </p>
-
-            <p style={addressLine}>
-              {profile.city}, {profile.state}{" "}
-              {profile.zip}
-            </p>
-          </div>
+          </>
         ) : (
-          <div style={{ marginTop: 18 }}>
-            <p style={{ color: "#ccc" }}>
-              No saved shipping information yet.
-            </p>
-
-            <button
-              type="button"
-              onClick={startEditingShipping}
-              style={editButton}
-            >
-              Add Shipping Info
-            </button>
-          </div>
-        )}
-
-        {shippingMessage && (
-          <p
-            role={shippingError ? "alert" : "status"}
-            style={{
-              marginTop: 16,
-              color: shippingError
-                ? "#ff6666"
-                : "#00ff99",
-            }}
-          >
-            {shippingMessage}
+          <p style={{ color: "#ccc" }}>
+            No saved shipping info yet. It will save after checkout.
           </p>
         )}
       </section>
 
       {profile?.has_lifetime_free_shipping && (
         <section style={box}>
-          <h2 style={{ color: "#00d9ff" }}>
-            Lifetime Free Shipping
-          </h2>
+          <h2 style={{ color: "#00d9ff" }}>Lifetime Free Shipping</h2>
 
-          <p
-            style={{
-              color: "#00ff99",
-              fontWeight: "bold",
-            }}
-          >
+          <p style={{ color: "#00ff99", fontWeight: "bold" }}>
             You have Lifetime FREE Shipping on every order.
           </p>
         </section>
       )}
 
       <section style={box}>
-        <h2 style={{ color: "#00d9ff" }}>
-          Previous Orders
-        </h2>
+        <h2 style={{ color: "#00d9ff" }}>Previous Orders</h2>
 
         {orders.length === 0 ? (
           <p>No previous orders found.</p>
         ) : (
           orders.map((order) => (
             <div key={order.id} style={orderCard}>
-              <strong>
-                {order.order_number || "Order"}
-              </strong>
+              <strong>{order.order_number}</strong>
+              <p>Total: ${Number(order.total || 0).toFixed(2)}</p>
 
-              <p>
-                Total: $
-                {Number(order.total || 0).toFixed(2)}
-              </p>
-
-              <div style={badgeRow}>
-                <span
-                  style={getPaymentBadge(
-                    order.status || ""
-                  )}
-                >
-                  {order.status === "paid"
-                    ? "PAID"
-                    : "PENDING PAYMENT"}
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  marginTop: 10,
+                }}
+              >
+                <span style={getPaymentBadge(order.status)}>
+                  {order.status === "paid" ? "PAID" : "PENDING PAYMENT"}
                 </span>
 
-                <span
-                  style={getShippingBadge(
-                    order.shipping_status || ""
-                  )}
-                >
+                <span style={getShippingBadge(order.shipping_status)}>
                   {order.shipping_status === "shipped"
                     ? "SHIPPED"
-                    : order.shipping_status ===
-                      "delivered"
+                    : order.shipping_status === "delivered"
                     ? "DELIVERED"
                     : "NOT SHIPPED"}
                 </span>
               </div>
 
               {order.tracking_number && (
-                <p>
-                  Tracking: {order.tracking_number}
-                </p>
+                <p>Tracking: {order.tracking_number}</p>
               )}
 
               <button
                 type="button"
                 onClick={() => reorder(order.id)}
-                style={reorderButton}
+                style={{
+                  ...reorderButton,
+                  opacity: reorderingId === order.id ? 0.65 : 1,
+                }}
+                disabled={reorderingId !== null}
               >
-                Reorder
+                {reorderingId === order.id
+                  ? "Checking Current Stock..."
+                  : "Reorder"}
               </button>
             </div>
           ))
@@ -780,10 +497,7 @@ function getPaymentBadge(status: string) {
       status === "paid"
         ? "rgba(255,191,0,.12)"
         : "rgba(255,77,77,.12)",
-    color:
-      status === "paid"
-        ? "#ffcc00"
-        : "#ff4d4d",
+    color: status === "paid" ? "#ffcc00" : "#ff4d4d",
     border:
       status === "paid"
         ? "1px solid #ffcc00"
@@ -846,10 +560,7 @@ function getTierBenefits(tier: string) {
       ];
 
     case "Platinum":
-      return [
-        "Free shipping on all orders",
-        "Priority processing",
-      ];
+      return ["Free shipping on all orders", "Priority processing"];
 
     case "Gold":
       return [
@@ -858,28 +569,16 @@ function getTierBenefits(tier: string) {
       ];
 
     case "Silver":
-      return [
-        "VIP Discord access",
-        "Free shipping weekends",
-      ];
+      return ["VIP Discord access", "Free shipping weekends"];
 
     case "Bronze":
-      return [
-        "Priority support",
-        "Exclusive promo access",
-      ];
+      return ["Priority support", "Exclusive promo access"];
 
     case "Iron":
-      return [
-        "Birthday promo code",
-        "Early promotion access",
-      ];
+      return ["Birthday promo code", "Early promotion access"];
 
     default:
-      return [
-        "Earn reward points",
-        "Access to promotions",
-      ];
+      return ["Earn reward points", "Access to promotions"];
   }
 }
 
@@ -898,115 +597,12 @@ const box = {
   background: "#080808",
 };
 
-const tierOverview = {
-  marginTop: 12,
-  marginBottom: 18,
-  padding: 14,
-  border: "1px solid rgba(255,255,255,.12)",
-  borderRadius: 10,
-  background: "rgba(255,255,255,.04)",
-};
-
-const benefitsList = {
-  marginTop: 10,
-  color: "#ccc",
-  lineHeight: 1.8,
-  paddingLeft: 20,
-};
-
-const sectionHeader = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
-  flexWrap: "wrap" as const,
-};
-
-const shippingLabel = {
-  display: "block",
-  marginBottom: 16,
-  color: "#ccc",
-  fontWeight: 600,
-};
-
-const shippingInput = {
-  display: "block",
-  width: "100%",
-  marginTop: 7,
-  padding: "12px 14px",
-  borderRadius: 9,
-  border: "1px solid #444",
-  background: "#111",
-  color: "#fff",
-  fontSize: 16,
-  boxSizing: "border-box" as const,
-};
-
-const shippingGrid = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(140px, 1fr))",
-  gap: 14,
-};
-
-const shippingButtonRow = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap" as const,
-  marginTop: 8,
-};
-
-const savedAddress = {
-  marginTop: 18,
-  lineHeight: 1.7,
-};
-
-const addressLine = {
-  margin: "4px 0",
-};
-
-const editButton = {
-  padding: "9px 14px",
-  borderRadius: 8,
-  border: "1px solid #00d9ff",
-  background: "rgba(0,75,90,.35)",
-  color: "#00d9ff",
-  fontWeight: "bold",
-  cursor: "pointer",
-};
-
-const saveButton = {
-  padding: "11px 16px",
-  borderRadius: 8,
-  border: "1px solid #00ff99",
-  background: "rgba(0,70,42,.5)",
-  color: "#00ff99",
-  fontWeight: "bold",
-};
-
-const cancelButton = {
-  padding: "11px 16px",
-  borderRadius: 8,
-  border: "1px solid #777",
-  background: "#222",
-  color: "#ddd",
-  fontWeight: "bold",
-  cursor: "pointer",
-};
-
 const orderCard = {
   marginTop: 14,
   padding: 16,
   border: "1px solid #333",
   borderRadius: 12,
   background: "#111",
-};
-
-const badgeRow = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap" as const,
-  marginTop: 10,
 };
 
 const reorderButton = {

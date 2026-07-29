@@ -8,7 +8,7 @@ import { useCart } from "../cartContext";
 import { createClient } from "../../lib/supabaseClient";
 import { trackEvent } from "../../lib/trackEvent";
 export default function CheckoutPage() {
-  const { cart, total, removeFromCart, updateQuantity, clearCart } = useCart();
+  const { cart, total, removeFromCart, updateQuantity } = useCart();
 
   const router = useRouter();
   const supabase = createClient();
@@ -142,202 +142,86 @@ setRewardPoints(
   }
 
   async function proceedToPayment() {
-    if (cart.length === 0) return alert("Your cart is empty.");
+    if (cart.length === 0) {
+      return alert("Your cart is empty.");
+    }
 
     if (
-      !customer.organization.trim() ||  
-  !customer.name.trim() ||
-  !customer.email.trim() ||
-  !customer.phone.trim() ||
-  !customer.address.trim() ||
-  !customer.city.trim() ||
-  !customer.state.trim() ||
-  !customer.zip.trim()
-) {
-  return alert("Please fill out all required checkout fields.");
-}
+      !customer.organization.trim() ||
+      !customer.name.trim() ||
+      !customer.email.trim() ||
+      !customer.phone.trim() ||
+      !customer.address.trim() ||
+      !customer.city.trim() ||
+      !customer.state.trim() ||
+      !customer.zip.trim()
+    ) {
+      return alert("Please fill out all required checkout fields.");
+    }
 
     setLoading(true);
 
-    const orderId = crypto.randomUUID();
-    const orderNumber = `PUG-${Date.now()}`;
-const { data: userData } = await supabase.auth.getUser();
-const userId = userData.user?.id || null;
-if (userId) {
-  await supabase
-    .from("customer_profiles")
-    .update({
-      organization: customer.organization,
-      full_name: customer.name,
-      phone: customer.phone,
-      address: customer.address,
-      city: customer.city,
-      state: customer.state,
-      zip: customer.zip,
-    })
-    .eq("id", userId);
-}const { data: existingProfile } = await supabase
-  .from("customer_profiles")
-  .select("*")
-  .eq("id", userId)
-  .single();
+    try {
+      const orderId = crypto.randomUUID();
+      const orderNumber = `PUG-${Date.now()}`;
 
-if (existingProfile) {
-  const newLifetimeSpend =
-    Number(existingProfile.lifetime_spend || 0) +
-    Number(finalTotal || 0);
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id || null;
 
-  const newRewardPoints =
-    Number(existingProfile.reward_points || 0) +
-    Math.floor(Number(finalTotal || 0));
+      if (!userId) {
+        alert("You must create an account or log in before checkout.");
+        router.push("/login");
+        return;
+      }
 
-  let vipTier = "Stone";
+      const { error: profileError } = await supabase
+        .from("customer_profiles")
+        .update({
+          organization: customer.organization,
+          full_name: customer.name,
+          phone: customer.phone,
+          address: customer.address,
+          city: customer.city,
+          state: customer.state,
+          zip: customer.zip,
+        })
+        .eq("id", userId);
 
-  if (newLifetimeSpend >= 50000) {
-    vipTier = "Diamond";
-  } else if (newLifetimeSpend >= 35000) {
-    vipTier = "Ruby";
-  } else if (newLifetimeSpend >= 20000) {
-    vipTier = "Sapphire";
-  } else if (newLifetimeSpend >= 10000) {
-    vipTier = "Emerald";
-  } else if (newLifetimeSpend >= 5000) {
-    vipTier = "Platinum";
-  } else if (newLifetimeSpend >= 2500) {
-    vipTier = "Gold";
-  } else if (newLifetimeSpend >= 1000) {
-    vipTier = "Silver";
-  } else if (newLifetimeSpend >= 500) {
-    vipTier = "Bronze";
-  } else if (newLifetimeSpend >= 250) {
-    vipTier = "Iron";
-  }
+      if (profileError) {
+        throw profileError;
+      }
 
-  await supabase
-    .from("customer_profiles")
-    .update({
-      lifetime_spend: newLifetimeSpend,
-      reward_points:
-  newRewardPoints - pointsToUse,
-      vip_tier: vipTier,
-    })
-    .eq("id", userId);
-}
-    const productCostTotal = cart.reduce(
-  (sum, item: any) =>
-    sum +
-    Number(item.cost || 0) *
-      Number(item.quantity || 1),
-  0
-);
+      localStorage.setItem(
+        "pugpep_order",
+        JSON.stringify({
+          id: orderId,
+          userId,
+          orderNumber,
+          customer,
+          items: cart,
+          subtotal: total,
+          shipping,
+          rewardPointsUsed: pointsToUse,
+          rewardDiscount,
+          promoCode: promoData?.code || null,
+          promoDiscountType: promoData?.discount_type || null,
+          promoDiscountValue: Number(promoData?.discount_value || 0),
+          promoDiscount,
+          totalDiscount: promoDiscount + rewardDiscount,
+          total: finalTotal,
+          hasLifetimeFreeShipping,
+          createdAt: new Date().toISOString(),
+          confirmed: false,
+        })
+      );
 
-const estimatedShippingCost =
-  shipping > 0 ? 10 : 0;
-
-const estimatedPackagingCost = 3;
-
-const estimatedProfit =
-  finalTotal -
-  productCostTotal -
-  estimatedShippingCost -
-  estimatedPackagingCost;
-
-const { error: orderError } = await supabase
-  .from("orders")
-  .insert({
-    id: orderId,
-    user_id: userId,
-    order_number: orderNumber,
-    customer_organization: customer.organization,
-    customer_name: customer.name,
-    customer_email: customer.email,
-    customer_phone: customer.phone,
-    shipping_address: customer.address,
-    city: customer.city,
-    state: customer.state,
-    zip: customer.zip,
-
-    subtotal: total,
-    shipping,
-    total: finalTotal,
-
-    reward_points_used: pointsToUse,
-    reward_discount: rewardDiscount,
-
-    promo_code: promoData?.code || null,
-    promo_discount: promoDiscount || 0,
-
-    product_cost_total: productCostTotal,
-    estimated_shipping_cost:
-      estimatedShippingCost,
-
-    estimated_packaging_cost:
-      estimatedPackagingCost,
-
-    estimated_profit: estimatedProfit,
-
-    has_lifetime_free_shipping:
-      hasLifetimeFreeShipping,
-
-    status: "pending",
-  });
-
-    if (orderError) {
+      router.push("/payment");
+    } catch (error: any) {
+      console.error("Proceed to payment error:", error);
+      alert(error?.message || "Unable to continue to payment.");
+    } finally {
       setLoading(false);
-      alert(orderError.message);
-      return;
     }
-
-    const orderItems = cart.map((item) => ({
-  order_id: orderId,
-  product_slug: item.slug,
-  product_name: item.name,
-  dosage: item.dosage,
-  purchase_type: item.purchaseType,
-  price: item.price * item.quantity,
-  cost: item.cost || 0,
-  quantity: item.quantity,
-}));
-
-    const { error: itemsError } = await supabase
-      .from("order_items")
-      .insert(orderItems);
-
-    if (itemsError) {
-      setLoading(false);
-      alert(itemsError.message);
-      return;
-    }
-await trackEvent({
-  event_type: "order_created",
-  order_number: orderNumber,
-  promo_code: promoData?.code || null,
-  metadata: {
-    total: finalTotal,
-    itemCount: cart.length,
-  },
-});
-    localStorage.setItem(
-      "pugpep_order",
-      JSON.stringify({
-        id: orderId,
-        orderNumber,
-        customer,
-        items: cart,
-        subtotal: total,
-        shipping,
-        promoCode: promoData?.code || null,
-        promoDiscount,
-        total: finalTotal,
-        createdAt: new Date().toISOString(),
-      })
-    );
-
-    
-
-    setLoading(false);
-    clearCart();
-    router.push("/payment");
   }
 
   return (
@@ -482,7 +366,7 @@ await trackEvent({
 </p>
 
 <button onClick={proceedToPayment} style={buttonStyle}>
-  {loading ? "Saving Order..." : "Proceed to Payment"}
+  {loading ? "Preparing Payment..." : "Proceed to Payment"}
 </button>
         </section>
 
@@ -550,6 +434,12 @@ await trackEvent({
                   <div>
                     <strong style={{ color: "#ff45d8" }}>{item.name}</strong>
 
+                    {item.wasOnSale && (
+                      <p style={{ margin: "5px 0", color: "#00ff99", fontWeight: "bold" }}>
+                        SALE {Number(item.salePercent || 0)}% OFF — regular ${Number(item.regularPrice || item.price).toFixed(2)}
+                      </p>
+                    )}
+
                     <p style={{ margin: "4px 0", color: "#ccc" }}>
                       {item.dosage} —{" "}
                       {item.purchaseType === "single"
@@ -615,6 +505,12 @@ await trackEvent({
               {promoDiscount > 0 && (
                 <h3 style={{ color: "#00ff99" }}>
                   Promo Discount: -${promoDiscount.toFixed(2)}
+                </h3>
+              )}
+
+              {rewardDiscount > 0 && (
+                <h3 style={{ color: "#00ff99" }}>
+                  Rewards Discount: -${rewardDiscount.toFixed(2)}
                 </h3>
               )}
 
