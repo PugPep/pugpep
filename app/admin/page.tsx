@@ -33,13 +33,14 @@ type Order = {
 };
 
 function getOrderRevenue(order: Order) {
-  const storedRevenue = Number(order.net_revenue || 0);
-  const orderTotal = Number(order.total || 0);
-
-  return storedRevenue > 0 ? storedRevenue : orderTotal;
+  // Historical snapshot only. Never query or recalculate from current product prices.
+  return order.net_revenue == null
+    ? Number(order.total || 0)
+    : Number(order.net_revenue);
 }
 
 function getOrderCost(order: Order) {
+  // These are the costs saved on the order when it was created.
   return (
     Number(order.product_cost_total || 0) +
     Number(order.estimated_shipping_cost || 0) +
@@ -48,10 +49,16 @@ function getOrderCost(order: Order) {
 }
 
 function getOrderProfit(order: Order) {
-  return getOrderRevenue(order) - getOrderCost(order);
+  return order.estimated_profit == null
+    ? getOrderRevenue(order) - getOrderCost(order)
+    : Number(order.estimated_profit);
 }
 
 function getOrderMargin(order: Order) {
+  if (order.profit_margin_percent != null) {
+    return Number(order.profit_margin_percent);
+  }
+
   const revenue = getOrderRevenue(order);
   if (revenue <= 0) return 0;
   return (getOrderProfit(order) / revenue) * 100;

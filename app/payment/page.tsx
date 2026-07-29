@@ -195,6 +195,8 @@ export default function PaymentPage() {
         lifetime_spend_after: lifetimeSpendAfter,
         has_lifetime_free_shipping: Boolean(order.hasLifetimeFreeShipping),
         rewards_applied: false,
+        snapshot_version: 1,
+        pricing_snapshotted_at: new Date().toISOString(),
         status: "pending",
       });
 
@@ -224,6 +226,8 @@ export default function PaymentPage() {
           sale_percent: salePercent,
           regular_unit_price: regularUnitPrice,
           sale_unit_price: saleUnitPrice,
+          actual_unit_price: unitPrice,
+          snapshot_created_at: new Date().toISOString(),
           line_revenue: lineRevenue,
           line_cost: lineCost,
           line_profit: lineRevenue - lineCost,
