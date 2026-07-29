@@ -16,10 +16,6 @@ type Product = {
   short_description?: string | null;
   description?: string | null;
   category?: string | null;
-  research_category?: string | null;
-  research_targets?: string | null;
-  research_focus?: string | null;
-  storage?: string | null;
   is_active: boolean;
 };
 
@@ -366,29 +362,6 @@ export default function ProductDetailPage() {
     );
   }
 
-  const snapshotItems = [
-    {
-      label: "Category",
-      value: product.research_category || "Investigational Research Compound",
-    },
-    {
-      label: "Primary Targets",
-      value: product.research_targets || "See Research Overview",
-    },
-    {
-      label: "Research Focus",
-      value: product.research_focus || "Laboratory Research",
-    },
-    {
-      label: "Storage",
-      value: product.storage || "Refer to product documentation",
-    },
-    {
-      label: "Research Use",
-      value: "Laboratory Research Only",
-    },
-  ];
-
   return (
     <main style={pageStyle}>
       <div style={pageContainer}>
@@ -412,24 +385,15 @@ export default function ProductDetailPage() {
 
             <aside style={snapshotCard}>
               <div style={snapshotHeader}>
-                <span style={snapshotEyebrow}>At a Glance</span>
-                <h2 style={snapshotTitle}>Research Snapshot</h2>
-              </div>
-
-              <div style={snapshotList}>
-                {snapshotItems.map((item) => (
-                  <div key={item.label} style={snapshotRow}>
-                    <span style={snapshotLabel}>{item.label}</span>
-                    <span style={snapshotValue}>{item.value}</span>
-                  </div>
-                ))}
+                <span style={snapshotEyebrow}>Product Information</span>
+                <h2 style={snapshotTitle}>Research Use Only</h2>
               </div>
 
               <div style={trustGrid}>
                 <span style={trustBadge}>✓ Third-Party Tested</span>
                 <span style={trustBadge}>✓ Secure Checkout</span>
                 <span style={trustBadge}>✓ Fast Shipping</span>
-                <span style={trustBadge}>✓ Research Use Only</span>
+                <span style={trustBadge}>✓ Laboratory Research Only</span>
               </div>
             </aside>
           </div>
