@@ -89,7 +89,7 @@ const [isMobile, setIsMobile] = useState<boolean | null>(null);
         <div style={overlay}>
           <div style={modal}>
            <Image
-  src="/pugpep-logo.png"
+  src="/pugpep-age-logo.png"
   alt="PUGPEP"
   width={150}
   height={150}
