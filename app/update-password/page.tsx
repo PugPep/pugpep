@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { createClient } from "../../lib/supabaseClient";
 
 export default function UpdatePasswordPage() {
   const supabase = useMemo(() => createClient(), []);
-  const searchParams = useSearchParams();
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -25,24 +23,24 @@ export default function UpdatePasswordPage() {
       setVerifying(true);
       setErrorMessage("");
 
-      const callbackError = searchParams.get("error");
+      try {
+        const url = new URL(window.location.href);
+        const callbackError = url.searchParams.get("error");
 
-      if (callbackError) {
-        if (mounted) {
-          setReady(false);
-          setVerifying(false);
+        if (callbackError) {
+          if (mounted) {
+            setReady(false);
 
-          setErrorMessage(
-            callbackError === "missing_recovery_code"
-              ? "The reset link did not contain a recovery code."
-              : "This password reset link is invalid, expired, or has already been used."
-          );
+            setErrorMessage(
+              callbackError === "missing_recovery_code"
+                ? "The reset link did not contain a recovery code."
+                : "This password reset link is invalid, expired, or has already been used."
+            );
+          }
+
+          return;
         }
 
-        return;
-      }
-
-      try {
         /*
          * The server callback already exchanged the reset code.
          * This page only checks that the recovery session exists.
@@ -52,12 +50,13 @@ export default function UpdatePasswordPage() {
           error,
         } = await supabase.auth.getUser();
 
-        if (error || !user) {
-          throw (
-            error ||
-            new Error(
-              "This password reset link is invalid or has expired."
-            )
+        if (error) {
+          throw error;
+        }
+
+        if (!user) {
+          throw new Error(
+            "This password reset link is invalid or has expired."
           );
         }
 
@@ -91,7 +90,7 @@ export default function UpdatePasswordPage() {
     return () => {
       mounted = false;
     };
-  }, [searchParams, supabase]);
+  }, [supabase]);
 
   async function updatePassword() {
     const newPassword = password.trim();
@@ -110,6 +109,7 @@ export default function UpdatePasswordPage() {
       setErrorMessage(
         "Your new password must contain at least 8 characters."
       );
+
       return;
     }
 
@@ -117,6 +117,7 @@ export default function UpdatePasswordPage() {
       setErrorMessage(
         "The passwords do not match."
       );
+
       return;
     }
 
@@ -132,10 +133,6 @@ export default function UpdatePasswordPage() {
         throw error;
       }
 
-      /*
-       * Sign out after the password is changed so the
-       * customer can log in normally with the new password.
-       */
       await supabase.auth.signOut();
 
       setPassword("");
