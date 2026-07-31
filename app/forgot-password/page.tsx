@@ -1,47 +1,136 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createClient } from "../../lib/supabaseClient";
 
 export default function ForgotPasswordPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [sending, setSending] = useState(false);
 
   async function sendResetEmail() {
-    if (!email) return alert("Enter your email.");
+    const normalizedEmail = email.trim().toLowerCase();
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-     redirectTo: "https://pugpep.com/update-password",
-    });
-localStorage.setItem("pugpep_password_recovery", "yes");
-    if (error) {
-      alert(error.message);
+    if (!normalizedEmail) {
+      setErrorMessage("Enter your email address.");
       return;
     }
 
-    setMessage("Password reset email sent. Check your inbox.");
+    setSending(true);
+    setMessage("");
+    setErrorMessage("");
+
+    try {
+      const callbackUrl = new URL(
+        "/auth/callback",
+        window.location.origin
+      );
+
+      callbackUrl.searchParams.set(
+        "next",
+        "/update-password"
+      );
+
+      const { error } =
+        await supabase.auth.resetPasswordForEmail(
+          normalizedEmail,
+          {
+            redirectTo: callbackUrl.toString(),
+          }
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      setMessage(
+        "Password reset email sent. Check your inbox and spam folder."
+      );
+    } catch (error) {
+      console.error(
+        "Password reset email error:",
+        error
+      );
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to send the reset email. Please try again."
+      );
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
     <main style={page}>
       <section style={box}>
-        <h1 style={{ color: "#ff45d8" }}>Forgot Password</h1>
+        <h1 style={{ color: "#ff45d8" }}>
+          Forgot Password
+        </h1>
+
+        <p
+          style={{
+            color: "#aaaaaa",
+            lineHeight: 1.6,
+          }}
+        >
+          Enter the email address connected
+          to your account.
+        </p>
 
         <input
+          type="email"
+          autoComplete="email"
           placeholder="Enter your email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(event) =>
+            setEmail(event.target.value)
+          }
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" &&
+              !sending
+            ) {
+              void sendResetEmail();
+            }
+          }}
           style={input}
         />
 
-        <button onClick={sendResetEmail} style={button}>
-            
-          Send Reset Email
+        <button
+          type="button"
+          onClick={() =>
+            void sendResetEmail()
+          }
+          disabled={sending}
+          style={{
+            ...button,
+            opacity: sending ? 0.65 : 1,
+            cursor: sending
+              ? "not-allowed"
+              : "pointer",
+          }}
+        >
+          {sending
+            ? "Sending..."
+            : "Send Reset Email"}
         </button>
 
-        {message && <p style={{ color: "#00ff99" }}>{message}</p>}
+        {message && (
+          <p style={{ color: "#00ff99" }}>
+            {message}
+          </p>
+        )}
+
+        {errorMessage && (
+          <p style={{ color: "#ff6666" }}>
+            {errorMessage}
+          </p>
+        )}
       </section>
     </main>
   );
@@ -65,6 +154,7 @@ const box = {
 
 const input = {
   width: "100%",
+  boxSizing: "border-box" as const,
   padding: 12,
   marginBottom: 14,
   background: "#111",
@@ -78,8 +168,8 @@ const button = {
   padding: 14,
   borderRadius: 10,
   border: "none",
-  background: "linear-gradient(90deg, #00b7ff, #ff2fd0)",
+  background:
+    "linear-gradient(90deg, #00b7ff, #ff2fd0)",
   color: "#fff",
   fontWeight: "bold",
-  cursor: "pointer",
 };

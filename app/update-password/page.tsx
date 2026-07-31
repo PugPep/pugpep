@@ -1,72 +1,223 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "../../lib/supabaseClient";
 
 export default function UpdatePasswordPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
+  const searchParams = useSearchParams();
 
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
   const [message, setMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const [verifying, setVerifying] = useState(true);
   const [ready, setReady] = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
-  async function checkRecovery() {
-    const { data, error } = await supabase.auth.getSession();
+    let mounted = true;
 
-    if (error) {
-      console.error(error);
-    }
+    async function verifyRecoverySession() {
+      setVerifying(true);
+      setErrorMessage("");
 
-    if (data.session) {
-      setReady(true);
-      return;
-    }
+      const callbackError = searchParams.get("error");
 
-    setTimeout(async () => {
-      const { data: delayedData } = await supabase.auth.getSession();
+      if (callbackError) {
+        if (mounted) {
+          setReady(false);
+          setVerifying(false);
 
-      if (delayedData.session) {
-        setReady(true);
-      } else {
-        setMessage(
-          "Reset link could not be verified. Please request a new password reset email."
-        );
+          setErrorMessage(
+            callbackError === "missing_recovery_code"
+              ? "The reset link did not contain a recovery code."
+              : "This password reset link is invalid, expired, or has already been used."
+          );
+        }
+
+        return;
       }
-    }, 1000);
-  }
 
-  checkRecovery();
-}, []);
+      try {
+        /*
+         * The server callback already exchanged the reset code.
+         * This page only checks that the recovery session exists.
+         */
+        const {
+          data: { user },
+          error,
+        } = await supabase.auth.getUser();
+
+        if (error || !user) {
+          throw (
+            error ||
+            new Error(
+              "This password reset link is invalid or has expired."
+            )
+          );
+        }
+
+        if (mounted) {
+          setReady(true);
+        }
+      } catch (error) {
+        console.error(
+          "Password recovery verification error:",
+          error
+        );
+
+        if (mounted) {
+          setReady(false);
+
+          setErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "This password reset link is invalid or has expired."
+          );
+        }
+      } finally {
+        if (mounted) {
+          setVerifying(false);
+        }
+      }
+    }
+
+    void verifyRecoverySession();
+
+    return () => {
+      mounted = false;
+    };
+  }, [searchParams, supabase]);
 
   async function updatePassword() {
-    if (!password) {
-      alert("Enter a new password.");
+    const newPassword = password.trim();
+    const confirmedPassword =
+      confirmPassword.trim();
+
+    setMessage("");
+    setErrorMessage("");
+
+    if (!newPassword) {
+      setErrorMessage("Enter a new password.");
       return;
     }
 
-    const { error } = await supabase.auth.updateUser({
-      password,
-    });
-
-    if (error) {
-      alert(error.message);
+    if (newPassword.length < 8) {
+      setErrorMessage(
+        "Your new password must contain at least 8 characters."
+      );
       return;
     }
 
-    localStorage.removeItem("pugpep_password_recovery");
-localStorage.removeItem("pugpep_password_recovery");
-await supabase.auth.signOut();
-setMessage("Password updated successfully. Please log in with your new password.");
+    if (newPassword !== confirmedPassword) {
+      setErrorMessage(
+        "The passwords do not match."
+      );
+      return;
+    }
+
+    setUpdating(true);
+
+    try {
+      const { error } =
+        await supabase.auth.updateUser({
+          password: newPassword,
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      /*
+       * Sign out after the password is changed so the
+       * customer can log in normally with the new password.
+       */
+      await supabase.auth.signOut();
+
+      setPassword("");
+      setConfirmPassword("");
+      setReady(false);
+
+      setMessage(
+        "Password updated successfully. You can now log in with your new password."
+      );
+    } catch (error) {
+      console.error(
+        "Password update error:",
+        error
+      );
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to update your password."
+      );
+    } finally {
+      setUpdating(false);
+    }
   }
 
-  if (!ready) {
+  if (verifying) {
     return (
       <main style={page}>
         <section style={box}>
           <h1 style={{ color: "#ff45d8" }}>
             Verifying Reset Link...
           </h1>
+
+          <p style={{ color: "#aaa" }}>
+            Please wait while we verify your
+            password reset request.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!ready) {
+    return (
+      <main style={page}>
+        <section style={box}>
+          {message ? (
+            <>
+              <h1 style={{ color: "#00ff99" }}>
+                Password Updated
+              </h1>
+
+              <p style={{ color: "#00ff99" }}>
+                {message}
+              </p>
+
+              <a
+                href="/login"
+                style={linkButton}
+              >
+                Go to Login
+              </a>
+            </>
+          ) : (
+            <>
+              <h1 style={{ color: "#ff45d8" }}>
+                Reset Link Invalid
+              </h1>
+
+              <p style={{ color: "#ff6666" }}>
+                {errorMessage ||
+                  "This password reset link is invalid or has expired."}
+              </p>
+
+              <a
+                href="/forgot-password"
+                style={linkButton}
+              >
+                Request a New Reset Link
+              </a>
+            </>
+          )}
         </section>
       </main>
     );
@@ -81,19 +232,58 @@ setMessage("Password updated successfully. Please log in with your new password.
 
         <input
           type="password"
+          autoComplete="new-password"
           placeholder="New password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(event) =>
+            setPassword(event.target.value)
+          }
           style={input}
         />
 
-        <button onClick={updatePassword} style={button}>
-          Update Password
+        <input
+          type="password"
+          autoComplete="new-password"
+          placeholder="Confirm new password"
+          value={confirmPassword}
+          onChange={(event) =>
+            setConfirmPassword(
+              event.target.value
+            )
+          }
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" &&
+              !updating
+            ) {
+              void updatePassword();
+            }
+          }}
+          style={input}
+        />
+
+        <button
+          type="button"
+          onClick={() =>
+            void updatePassword()
+          }
+          disabled={updating}
+          style={{
+            ...button,
+            opacity: updating ? 0.65 : 1,
+            cursor: updating
+              ? "not-allowed"
+              : "pointer",
+          }}
+        >
+          {updating
+            ? "Updating Password..."
+            : "Update Password"}
         </button>
 
-        {message && (
-          <p style={{ color: "#00ff99" }}>
-            {message}
+        {errorMessage && (
+          <p style={{ color: "#ff6666" }}>
+            {errorMessage}
           </p>
         )}
       </section>
@@ -119,6 +309,7 @@ const box = {
 
 const input = {
   width: "100%",
+  boxSizing: "border-box" as const,
   padding: 12,
   marginBottom: 14,
   background: "#111",
@@ -132,8 +323,23 @@ const button = {
   padding: 14,
   borderRadius: 10,
   border: "none",
-  background: "linear-gradient(90deg, #00b7ff, #ff2fd0)",
+  background:
+    "linear-gradient(90deg, #00b7ff, #ff2fd0)",
   color: "#fff",
   fontWeight: "bold",
-  cursor: "pointer",
+};
+
+const linkButton = {
+  display: "block",
+  width: "100%",
+  boxSizing: "border-box" as const,
+  marginTop: 20,
+  padding: 14,
+  borderRadius: 10,
+  background:
+    "linear-gradient(90deg, #00b7ff, #ff2fd0)",
+  color: "#fff",
+  fontWeight: "bold",
+  textAlign: "center" as const,
+  textDecoration: "none",
 };

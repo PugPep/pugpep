@@ -32,54 +32,78 @@ export default function AdminMenu() {
 
       {open && (
         <div style={dropdown}>
-      <Link
-  href="/admin/dashboard"
+          <Link
+            href="/admin/dashboard"
+            style={item}
+            onClick={() => setOpen(false)}
+          >
+            Dashboard
+          </Link>
+
+          <Link
+            href="/admin/analytics"
+            style={item}
+            onClick={() => setOpen(false)}
+          >
+            Analytics
+          </Link>
+
+          <Link
+            href="/admin"
+            style={item}
+            onClick={() => setOpen(false)}
+          >
+            Orders
+          </Link>
+
+          <Link
+            href="/admin/inventory"
+            style={item}
+            onClick={() => setOpen(false)}
+          >
+            Products / Inventory
+          </Link>
+
+          <Link
+            href="/admin/vip"
+            style={item}
+            onClick={() => setOpen(false)}
+          >
+            VIP Customers
+          </Link>
+
+          <Link
+            href="/admin/promos"
+            style={item}
+            onClick={() => setOpen(false)}
+          >
+            Promo Codes
+          </Link>
+
+          <Link
+            href="/admin/sales-reps"
+            style={item}
+            onClick={() => setOpen(false)}
+          >
+            Sales Reps
+          </Link>
+
+          <Link
+            href="/admin/customers"
+            style={item}
+            onClick={() => setOpen(false)}
+          >
+            Customers
+        
+          </Link>
+          <Link
+  href="/admin/customer-emails"
   style={item}
   onClick={() => setOpen(false)}
 >
-  Dashboard
-</Link>  
-<Link
-    href="/admin/analytics"
-    style={item}
-    onClick={() => setOpen(false)}
-  >
-    Analytics
-  </Link>  
-  <Link
-    href="/admin"
-    style={item}
-    onClick={() => setOpen(false)}
-  >
-    Orders
-  </Link>
-
-  <Link
-    href="/admin/inventory"
-    style={item}
-    onClick={() => setOpen(false)}
-  >
-    Products / Inventory
-  </Link>
-<Link href="/admin/vip" style={item} onClick={() => setOpen(false)}>
-  VIP Customers
+  Customer Emails
 </Link>
-  <Link
-    href="/admin/promos"
-    style={item}
-    onClick={() => setOpen(false)}
-  >
-    Promo Codes
-  </Link>
-
-  <Link
-    href="/admin/customers"
-    style={item}
-    onClick={() => setOpen(false)}
-  >
-    Customers
-  </Link>
-</div>
+        </div>
       )}
     </div>
   );
