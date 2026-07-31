@@ -1,32 +1,73 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../lib/supabaseClient";
 
 const ADMIN_EMAIL = "pugpep99@gmail.com";
 
 export default function AdminMenu() {
-  const supabase = createClient();
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [open, setOpen] = useState(false);
+  const supabase = useMemo(
+    () => createClient(),
+    []
+  );
+
+  const [isAdmin, setIsAdmin] =
+    useState(false);
+
+  const [open, setOpen] =
+    useState(false);
 
   useEffect(() => {
     async function checkAdmin() {
-      const { data } = await supabase.auth.getUser();
-      const email = data.user?.email;
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
 
-      setIsAdmin(email?.toLowerCase() === ADMIN_EMAIL.toLowerCase());
+      if (error) {
+        console.error(
+          "Unable to verify admin account:",
+          error
+        );
+
+        setIsAdmin(false);
+        return;
+      }
+
+      const email = user?.email;
+
+      setIsAdmin(
+        Boolean(
+          email &&
+            email.toLowerCase() ===
+              ADMIN_EMAIL.toLowerCase()
+        )
+      );
     }
 
-    checkAdmin();
-  }, []);
+    void checkAdmin();
+  }, [supabase]);
 
-  if (!isAdmin) return null;
+  if (!isAdmin) {
+    return null;
+  }
+
+  function closeMenu() {
+    setOpen(false);
+  }
 
   return (
-    <div style={{ position: "relative" }}>
-      <button onClick={() => setOpen(!open)} style={adminButton}>
+    <div style={container}>
+      <button
+        type="button"
+        onClick={() =>
+          setOpen((current) => !current)
+        }
+        style={adminButton}
+        aria-expanded={open}
+        aria-haspopup="menu"
+      >
         Admin ▾
       </button>
 
@@ -35,7 +76,7 @@ export default function AdminMenu() {
           <Link
             href="/admin/dashboard"
             style={item}
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
           >
             Dashboard
           </Link>
@@ -43,7 +84,7 @@ export default function AdminMenu() {
           <Link
             href="/admin/analytics"
             style={item}
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
           >
             Analytics
           </Link>
@@ -51,7 +92,7 @@ export default function AdminMenu() {
           <Link
             href="/admin"
             style={item}
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
           >
             Orders
           </Link>
@@ -59,55 +100,46 @@ export default function AdminMenu() {
           <Link
             href="/admin/inventory"
             style={item}
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
           >
             Products / Inventory
           </Link>
 
           <Link
-            href="/admin/vip"
+            href="/admin/customers"
             style={item}
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
           >
-            VIP Customers
+            Customers
           </Link>
 
           <Link
             href="/admin/promos"
             style={item}
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
           >
             Promo Codes
           </Link>
 
           <Link
             href="/admin/sales-reps"
-            style={item}
-            onClick={() => setOpen(false)}
+            style={{
+              ...item,
+              borderBottom: "none",
+            }}
+            onClick={closeMenu}
           >
             Sales Reps
           </Link>
-
-          <Link
-            href="/admin/customers"
-            style={item}
-            onClick={() => setOpen(false)}
-          >
-            Customers
-        
-          </Link>
-          <Link
-  href="/admin/customer-emails"
-  style={item}
-  onClick={() => setOpen(false)}
->
-  Customer Emails
-</Link>
         </div>
       )}
     </div>
   );
 }
+
+const container = {
+  position: "relative" as const,
+};
 
 const adminButton = {
   background: "#111",
@@ -123,11 +155,12 @@ const dropdown = {
   position: "absolute" as const,
   right: 0,
   top: "42px",
-  minWidth: 180,
+  minWidth: 200,
   background: "#080808",
   border: "1px solid #333",
   borderRadius: 10,
-  boxShadow: "0 0 25px rgba(0,217,255,.25)",
+  boxShadow:
+    "0 0 25px rgba(0,217,255,.25)",
   zIndex: 9999,
   overflow: "hidden",
 };
