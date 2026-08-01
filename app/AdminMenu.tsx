@@ -19,23 +19,19 @@ export default function AdminMenu() {
     useState(false);
 
   useEffect(() => {
+    let mounted = true;
+
     async function checkAdmin() {
       const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      if (error) {
-        console.error(
-          "Unable to verify admin account:",
-          error
-        );
-
-        setIsAdmin(false);
+      if (!mounted) {
         return;
       }
 
-      const email = user?.email;
+      const email =
+        session?.user?.email;
 
       setIsAdmin(
         Boolean(
@@ -47,6 +43,32 @@ export default function AdminMenu() {
     }
 
     void checkAdmin();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (!mounted) {
+          return;
+        }
+
+        const email =
+          session?.user?.email;
+
+        setIsAdmin(
+          Boolean(
+            email &&
+              email.toLowerCase() ===
+                ADMIN_EMAIL.toLowerCase()
+          )
+        );
+      }
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [supabase]);
 
   if (!isAdmin) {
