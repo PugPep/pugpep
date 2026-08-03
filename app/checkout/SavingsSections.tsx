@@ -24,15 +24,16 @@ export function RewardsSection({
         </h2>
       </div>
 
-      <p style={{ color: "#ddd" }}>
-        Available Points:{" "}
+      <p style={{ color: "#ddd", fontSize: 16 }}>
+        <strong>PugPoints Available:</strong>{" "}
         <strong style={{ color: "#00ff99" }}>
-          {rewardPoints}
+          {rewardPoints.toLocaleString()}
         </strong>
       </p>
 
       <label style={styles.label}>
-        Points to redeem
+        PugPoints to Redeem
+
         <input
           type="number"
           min="0"
@@ -55,15 +56,60 @@ export function RewardsSection({
         />
       </label>
 
-      <p style={{ color: "#999", fontSize: 13, lineHeight: 1.5 }}>
-        100 points = $1. The pricing engine may reduce redemption when an item is not eligible.
+      <p
+        style={{
+          color: "#999",
+          fontSize: 14,
+          lineHeight: 1.6,
+        }}
+      >
+        <strong>100 PugPoints = $1.00</strong>
+        <br />
+        Rewards are automatically applied by the pricing engine.
+        Certain products or promotions may not be eligible for
+        PugPoint redemption.
       </p>
 
       {pricing && (
-        <p style={{ color: "#00ff99", fontWeight: 800 }}>
-          Applied today: {pricing.rewards.pointsUsed} points (
-          {money(pricing.discounts.rewardsDiscount)})
-        </p>
+        <div
+          style={{
+            marginTop: 14,
+            padding: 14,
+            borderRadius: 10,
+            background: "rgba(0,255,153,.08)",
+            border: "1px solid rgba(0,255,153,.20)",
+          }}
+        >
+          <div
+            style={{
+              color: "#00ff99",
+              fontWeight: 800,
+              fontSize: 16,
+            }}
+          >
+            Rewards Applied
+          </div>
+
+          <div
+            style={{
+              color: "#fff",
+              marginTop: 6,
+            }}
+          >
+            {pricing.rewards.pointsUsed.toLocaleString()} PugPoints
+            redeemed
+          </div>
+
+          <div
+            style={{
+              color: "#00ff99",
+              fontWeight: 700,
+              marginTop: 4,
+            }}
+          >
+            Savings: {money(pricing.discounts.rewardsDiscount)}
+          </div>
+        </div>
       )}
     </section>
   );
