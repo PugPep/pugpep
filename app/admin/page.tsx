@@ -30,6 +30,10 @@ type Order = {
   status: string;
   shipping_status?: string;
   created_at: string;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
 };
 
 function getOrderRevenue(order: Order) {
@@ -77,6 +81,8 @@ export default function AdminPage() {
 
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [markingPaidOrderId, setMarkingPaidOrderId] = useState<string | null>(null);
+  const [restoringOrderId, setRestoringOrderId] = useState<string | null>(null);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
 
   async function loadOrders() {
     const { data, error } = await supabase
@@ -243,51 +249,53 @@ export default function AdminPage() {
 
   async function deleteOrder(id: string) {
     if (deletingOrderId) return;
-
-    const orderToDelete = orders.find((order) => order.id === id);
-    const orderLabel = orderToDelete?.order_number || id;
-
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete order ${orderLabel}?\n\nThis permanently deletes the order and its related order items and sales-rep redemption. This cannot be undone.`
-    );
-
-    if (!confirmDelete) return;
-
+    const order = orders.find((item) => item.id === id);
+    const label = order?.order_number || id;
+    if (!window.confirm(`Move order ${label} to Recently Deleted?\n\nIt can be restored later.`)) return;
     setDeletingOrderId(id);
-
+    setNotice("");
     try {
-      // order_items and sales_rep_promo_redemptions both use ON DELETE CASCADE,
-      // so deleting the parent order removes those related rows automatically.
-      const { data: deletedRows, error: deleteError } = await supabase
-        .from("orders")
-        .delete()
-        .eq("id", id)
-        .select("id, order_number");
+      const { error } = await supabase.rpc("admin_soft_delete_order", { target_order_id: id });
+      if (error) { setNotice(`Order could not be deleted: ${error.message}`); return; }
+      setNotice(`Order ${label} moved to Recently Deleted.`);
+      await loadOrders();
+    } finally { setDeletingOrderId(null); }
+  }
 
-      if (deleteError) {
-        alert(`Order could not be deleted: ${deleteError.message}`);
-        return;
-      }
+  async function restoreOrder(id: string) {
+    if (restoringOrderId) return;
+    setRestoringOrderId(id); setNotice("");
+    try {
+      const { error } = await supabase.rpc("admin_restore_order", { target_order_id: id });
+      if (error) { setNotice(`Order could not be restored: ${error.message}`); return; }
+      setNotice("Order restored."); await loadOrders();
+    } finally { setRestoringOrderId(null); }
+  }
 
-      if (!deletedRows || deletedRows.length === 0) {
-        alert(
-          "No order was deleted. The order may already be gone, or your current session may not have permission to delete it. Refresh the page and try again."
-        );
-        await loadOrders();
-        return;
-      }
+  async function cancelOrder(id: string) {
+    if (cancellingOrderId) return;
+    const order = orders.find((item) => item.id === id);
+    const label = order?.order_number || id;
+    if (!window.confirm(`Cancel unpaid order ${label}?`)) return;
+    setCancellingOrderId(id); setNotice("");
+    try {
+      const { error } = await supabase.rpc("admin_cancel_order", {
+        target_order_id: id,
+        reason: "Cancelled by administrator",
+      });
+      if (error) { setNotice(`Order could not be cancelled: ${error.message}`); return; }
+      setNotice(`Order ${label} cancelled.`); await loadOrders();
+    } finally { setCancellingOrderId(null); }
+  }
 
-      setOrders((currentOrders) =>
-        currentOrders.filter((order) => order.id !== id)
-      );
-
-      setNotice(`Order ${deletedRows[0].order_number || orderLabel} was deleted.`);
-    } catch (error) {
-      console.error("Unexpected order deletion error:", error);
-      alert("An unexpected error occurred while deleting the order.");
-    } finally {
-      setDeletingOrderId(null);
-    }
+  async function reopenCancelledOrder(id: string) {
+    if (cancellingOrderId) return;
+    setCancellingOrderId(id); setNotice("");
+    try {
+      const { error } = await supabase.rpc("admin_reopen_cancelled_order", { target_order_id: id });
+      if (error) { setNotice(`Order could not be reopened: ${error.message}`); return; }
+      setNotice("Cancelled order reopened as pending."); await loadOrders();
+    } finally { setCancellingOrderId(null); }
   }
 
   if (loading) {
@@ -310,60 +318,26 @@ export default function AdminPage() {
     );
   }
 
-  const pendingCount = orders.filter((order) => order.status === "pending").length;
-
-  const paidCount = orders.filter(
-    (order) =>
-      order.status === "paid" &&
-      order.shipping_status !== "shipped" &&
-      order.shipping_status !== "delivered"
-  ).length;
-
-  const shippedCount = orders.filter(
-    (order) => order.shipping_status === "shipped"
-  ).length;
-
-  const deliveredCount = orders.filter(
-    (order) => order.shipping_status === "delivered"
-  ).length;
+  const activeOrders = orders.filter((order) => !order.deleted_at);
+  const deletedOrders = orders.filter((order) => Boolean(order.deleted_at));
+  const pendingCount = activeOrders.filter((order) => order.status === "pending").length;
+  const paidCount = activeOrders.filter((order) => order.status === "paid" && order.shipping_status !== "shipped" && order.shipping_status !== "delivered").length;
+  const shippedCount = activeOrders.filter((order) => order.shipping_status === "shipped").length;
+  const deliveredCount = activeOrders.filter((order) => order.shipping_status === "delivered").length;
+  const cancelledCount = activeOrders.filter((order) => order.status === "cancelled").length;
 
   const filteredOrders = orders.filter((order) => {
     const query = search.trim().toLowerCase();
-
-    const matchesSearch =
-      !query ||
-      order.order_number?.toLowerCase().includes(query) ||
-      order.customer_name?.toLowerCase().includes(query) ||
-      order.customer_email?.toLowerCase().includes(query) ||
-      order.promo_code?.toLowerCase().includes(query) ||
-      order.payment_method?.toLowerCase().includes(query);
-
-    if (!matchesSearch) {
-      return false;
-    }
-
+    const matchesSearch = !query || order.order_number?.toLowerCase().includes(query) || order.customer_name?.toLowerCase().includes(query) || order.customer_email?.toLowerCase().includes(query) || order.promo_code?.toLowerCase().includes(query) || order.payment_method?.toLowerCase().includes(query);
+    if (!matchesSearch) return false;
+    if (filter === "deleted") return Boolean(order.deleted_at);
+    if (order.deleted_at) return false;
     if (filter === "all") return true;
-
-    if (filter === "pending") {
-      return order.status === "pending";
-    }
-
-    if (filter === "paid") {
-      return (
-        order.status === "paid" &&
-        order.shipping_status !== "shipped" &&
-        order.shipping_status !== "delivered"
-      );
-    }
-
-    if (filter === "shipped") {
-      return order.shipping_status === "shipped";
-    }
-
-    if (filter === "delivered") {
-      return order.shipping_status === "delivered";
-    }
-
+    if (filter === "pending") return order.status === "pending";
+    if (filter === "paid") return order.status === "paid" && order.shipping_status !== "shipped" && order.shipping_status !== "delivered";
+    if (filter === "shipped") return order.shipping_status === "shipped";
+    if (filter === "delivered") return order.shipping_status === "delivered";
+    if (filter === "cancelled") return order.status === "cancelled";
     return true;
   });
 
@@ -496,6 +470,9 @@ export default function AdminPage() {
             value={String(deliveredCount)}
             accent="#00ff99"
           />
+
+          <StatCard label="Cancelled" value={String(cancelledCount)} accent="#ff6f6f" />
+          <StatCard label="Recently Deleted" value={String(deletedOrders.length)} accent="#b8bcc4" />
         </section>
 
         <section style={toolbarPanel}>
@@ -516,11 +493,13 @@ export default function AdminPage() {
 
           <div style={filterRow}>
             {[
-              { key: "all", label: `All (${orders.length})` },
+              { key: "all", label: `All (${activeOrders.length})` },
               { key: "pending", label: `Pending (${pendingCount})` },
               { key: "paid", label: `Ready (${paidCount})` },
               { key: "shipped", label: `Shipped (${shippedCount})` },
               { key: "delivered", label: `Delivered (${deliveredCount})` },
+              { key: "cancelled", label: `Cancelled (${cancelledCount})` },
+              { key: "deleted", label: `Recently Deleted (${deletedOrders.length})` },
             ].map((item) => {
               const active = filter === item.key;
 
@@ -717,77 +696,25 @@ export default function AdminPage() {
                     </div>
 
                     <div style={actionRow}>
-                      <Link
-                        href={`/admin/orders/${order.id}`}
-                        style={viewButton}
-                      >
-                        Open Order
-                      </Link>
+                      {!order.deleted_at && <Link href={`/admin/orders/${order.id}`} style={viewButton}>Open Order</Link>}
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void markPaid(order.id);
-                        }}
-                        disabled={
-                          isPaid ||
-                          isMarkingPaid ||
-                          Boolean(markingPaidOrderId) ||
-                          Boolean(deletingOrderId)
-                        }
-                        style={{
-                          ...paidButton,
-                          opacity:
-                            isPaid ||
-                            isMarkingPaid ||
-                            Boolean(markingPaidOrderId) ||
-                            Boolean(deletingOrderId)
-                              ? 0.45
-                              : 1,
-                          cursor:
-                            isPaid ||
-                            isMarkingPaid ||
-                            Boolean(markingPaidOrderId) ||
-                            Boolean(deletingOrderId)
-                              ? "not-allowed"
-                              : "pointer",
-                        }}
-                      >
-                        {isMarkingPaid
-                          ? "Marking..."
-                          : isPaid
-                            ? "Paid"
-                            : "Mark Paid"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void deleteOrder(order.id);
-                        }}
-                        disabled={
-                          isDeleting ||
-                          Boolean(deletingOrderId) ||
-                          Boolean(markingPaidOrderId)
-                        }
-                        style={{
-                          ...deleteButton,
-                          opacity:
-                            isDeleting ||
-                            Boolean(deletingOrderId) ||
-                            Boolean(markingPaidOrderId)
-                              ? 0.45
-                              : 1,
-                          cursor:
-                            isDeleting ||
-                            Boolean(deletingOrderId) ||
-                            Boolean(markingPaidOrderId)
-                              ? "not-allowed"
-                              : "pointer",
-                        }}
-                      >
-                        {isDeleting ? "Deleting..." : "Delete"}
-                      </button>
+                      {order.deleted_at ? (
+                        <button type="button" onClick={() => void restoreOrder(order.id)} disabled={Boolean(restoringOrderId)} style={restoreButton}>
+                          {restoringOrderId === order.id ? "Restoring..." : "Restore Order"}
+                        </button>
+                      ) : order.status === "cancelled" ? (
+                        <button type="button" onClick={() => void reopenCancelledOrder(order.id)} disabled={Boolean(cancellingOrderId)} style={paidButton}>
+                          {cancellingOrderId === order.id ? "Reopening..." : "Reopen as Pending"}
+                        </button>
+                      ) : (
+                        <>
+                          <button type="button" onClick={() => void markPaid(order.id)} disabled={isPaid || isMarkingPaid || Boolean(markingPaidOrderId) || Boolean(deletingOrderId) || Boolean(cancellingOrderId)} style={{...paidButton, opacity: isPaid || isMarkingPaid || Boolean(markingPaidOrderId) || Boolean(deletingOrderId) || Boolean(cancellingOrderId) ? 0.45 : 1}}>
+                            {isMarkingPaid ? "Marking..." : isPaid ? "Paid" : "Mark Paid"}
+                          </button>
+                          {!isPaid && <button type="button" onClick={() => void cancelOrder(order.id)} disabled={Boolean(cancellingOrderId)} style={cancelButton}>{cancellingOrderId === order.id ? "Cancelling..." : "Cancel Order"}</button>}
+                          <button type="button" onClick={() => void deleteOrder(order.id)} disabled={isDeleting || Boolean(deletingOrderId) || Boolean(markingPaidOrderId) || Boolean(cancellingOrderId)} style={deleteButton}>{isDeleting ? "Moving..." : "Move to Deleted"}</button>
+                        </>
+                      )}
                     </div>
                   </article>
                 );
@@ -801,6 +728,8 @@ export default function AdminPage() {
 }
 
 function getStatusLabel(order: Order) {
+  if (order.deleted_at) return "DELETED";
+  if (order.status === "cancelled") return "CANCELLED";
   if (order.shipping_status === "delivered") return "DELIVERED";
   if (order.shipping_status === "shipped") return "SHIPPED";
   if (order.status === "paid") return "PAID";
@@ -808,27 +737,12 @@ function getStatusLabel(order: Order) {
 }
 
 function getStatusBadgeStyle(order: Order) {
+  const deleted = Boolean(order.deleted_at);
+  const cancelled = order.status === "cancelled";
   return {
-    padding: "6px 12px",
-    borderRadius: 999,
-    fontWeight: "bold",
-    fontSize: 13,
-    background:
-      order.shipping_status === "delivered"
-        ? "rgba(0,255,153,.12)"
-        : order.shipping_status === "shipped"
-        ? "rgba(0,217,255,.12)"
-        : order.status === "paid"
-        ? "rgba(255,191,0,.12)"
-        : "rgba(255,77,77,.12)",
-    color:
-      order.shipping_status === "delivered"
-        ? "#00ff99"
-        : order.shipping_status === "shipped"
-        ? "#00d9ff"
-        : order.status === "paid"
-        ? "#ffcc00"
-        : "#ff4d4d",
+    padding: "7px 11px", borderRadius: 999, fontWeight: 900, fontSize: 12,
+    background: deleted ? "rgba(184,188,196,.10)" : cancelled ? "rgba(255,111,111,.10)" : order.shipping_status === "delivered" ? "rgba(0,255,153,.12)" : order.shipping_status === "shipped" ? "rgba(0,217,255,.12)" : order.status === "paid" ? "rgba(255,191,0,.12)" : "rgba(255,77,77,.12)",
+    color: deleted ? "#b8bcc4" : cancelled ? "#ff7f7f" : order.shipping_status === "delivered" ? "#00ff99" : order.shipping_status === "shipped" ? "#00d9ff" : order.status === "paid" ? "#ffcc00" : "#ff4d4d",
   };
 }
 
@@ -1306,3 +1220,6 @@ const deleteButton = {
   fontSize: 15,
   fontWeight: 900,
 };
+
+const restoreButton = { minHeight: 44, padding: "10px 14px", border: "1px solid rgba(0,217,255,.5)", borderRadius: 9, background: "rgba(0,217,255,.07)", color: "#7df9ff", fontSize: 15, fontWeight: 900, cursor: "pointer" };
+const cancelButton = { minHeight: 44, padding: "10px 14px", border: "1px solid rgba(255,204,0,.52)", borderRadius: 9, background: "rgba(255,204,0,.07)", color: "#ffcc00", fontSize: 15, fontWeight: 900, cursor: "pointer" };
