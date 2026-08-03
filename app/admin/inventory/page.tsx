@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../../../lib/supabaseClient";
 
 const ADMIN_EMAIL = "pugpep99@gmail.com";
@@ -39,7 +39,7 @@ type InventoryItem = {
 };
 
 export default function InventoryManagerPage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
@@ -55,6 +55,10 @@ export default function InventoryManagerPage() {
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showDeleted, setShowDeleted] = useState(false);
   const [showAddOption, setShowAddOption] = useState(false);
+
+  const [search, setSearch] = useState("");
+  const [notice, setNotice] = useState("");
+
 
   const emptyNewOption = {
     dosage: "",
@@ -192,7 +196,7 @@ export default function InventoryManagerPage() {
       return;
     }
 
-    alert("Product updated.");
+    setNotice("Product updated.");
     await loadProducts();
   }
 
@@ -209,7 +213,7 @@ export default function InventoryManagerPage() {
       return;
     }
 
-    alert("Product created.");
+    setNotice("Product created.");
 
     setNewProduct({
   name: "",
@@ -247,7 +251,7 @@ export default function InventoryManagerPage() {
       return;
     }
 
-    alert("Product deleted. You can restore it from Undo Delete.");
+    setNotice("Product archived. You can restore it from Archived Products.");
 
     setSelectedSlug("");
     setSelectedProduct({});
@@ -269,7 +273,7 @@ export default function InventoryManagerPage() {
       return;
     }
 
-    alert("Product restored.");
+    setNotice("Product restored.");
 
     await loadProducts();
     await loadDeletedProducts();
@@ -422,6 +426,37 @@ export default function InventoryManagerPage() {
     );
   }
 
+  const filteredProducts = products.filter((product) => {
+    const query = search.trim().toLowerCase();
+
+    if (!query) {
+      return true;
+    }
+
+    return (
+      product.name.toLowerCase().includes(query) ||
+      product.slug.toLowerCase().includes(query) ||
+      String(product.category || "").toLowerCase().includes(query)
+    );
+  });
+
+  const totalOptions = options.length;
+
+  const totalSingleInventory = inventory.reduce(
+    (sum, row) => sum + Math.max(0, Number(row.quantity || 0)),
+    0
+  );
+
+  const preSaleOptions = options.filter(
+    (option) => option.status === "pre-sale"
+  ).length;
+
+  const saleOptions = options.filter(
+    (option) =>
+      option.sale_active &&
+      Number(option.sale_percent || 0) > 0
+  ).length;
+
   if (loading) return <main style={page}>Loading...</main>;
 
   if (!authorized) {
@@ -435,714 +470,1521 @@ export default function InventoryManagerPage() {
 
   return (
     <main style={page}>
-      <h1 style={{ color: "#ff45d8" }}>Inventory / Products / Pricing</h1>
+      <div style={container}>
+        <header style={pageHeader}>
+          <div>
+            <p style={eyebrow}>CONTROL CENTER</p>
 
-      <section style={box}>
-        <div style={topControls}>
-          <div style={{ flex: 1 }}>
-            <h2 style={{ color: "#00d9ff" }}>Select Product</h2>
+            <h1 style={pageTitle}>
+              Laboratory Inventory
+            </h1>
 
-            <select
-              value={selectedSlug}
-              onChange={(e) => selectProduct(e.target.value)}
-              style={input}
-            >
-              <option value="">-- Select Product --</option>
-              {products.map((product) => (
-                <option key={product.id} value={product.slug}>
-                  {product.name} / {product.slug}
-                </option>
-              ))}
-            </select>
+            <p style={subtitle}>
+              Manage compounds, pricing, costs, availability, and inventory from one workspace.
+            </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowAddProduct(!showAddProduct)}
-            style={plusButton}
-          >
-            + Add Product
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowDeleted(!showDeleted)}
-            style={restoreButton}
-          >
-            Undo Delete
-          </button>
-        </div>
-      </section>
-
-      {showDeleted && (
-        <section style={box}>
-          <h2 style={{ color: "#00d9ff" }}>Restore Deleted Products</h2>
-
-          {deletedProducts.length === 0 ? (
-            <p style={{ color: "#ccc" }}>No deleted products found.</p>
-          ) : (
-            deletedProducts.map((product) => (
-              <div key={product.id} style={restoreRow}>
-                <span>
-                  {product.name} / {product.slug}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() => restoreProduct(product.id)}
-                  style={restoreButton}
-                >
-                  Restore
-                </button>
-              </div>
-            ))
-          )}
-        </section>
-      )}
-
-      {showAddProduct && (
-        <section style={box}>
-          <h2 style={{ color: "#00d9ff" }}>Add New Product</h2>
-
-          <input
-            placeholder="Product Name"
-            value={newProduct.name}
-            onChange={(e) =>
-              setNewProduct({ ...newProduct, name: e.target.value })
-            }
-            style={input}
-          />
-
-          <input
-            placeholder="Slug example: tirzepatide"
-            value={newProduct.slug}
-            onChange={(e) =>
-              setNewProduct({ ...newProduct, slug: e.target.value })
-            }
-            style={input}
-          />
-<select
-  value={newProduct.category}
-  onChange={(e) =>
-    setNewProduct({
-      ...newProduct,
-      category: e.target.value,
-    })
-  }
-  style={input}
->
-  <option value="peptide">Peptide</option>
-  <option value="lab-material">Lab Material</option>
-</select>
-          <input
-            placeholder="Image Path example: /tirzepatide.png"
-            value={newProduct.image}
-            onChange={(e) =>
-              setNewProduct({ ...newProduct, image: e.target.value })
-            }
-            style={input}
-          />
-
-          <label style={label}>Color</label>
-          <input
-            type="color"
-            value={newProduct.color}
-            onChange={(e) =>
-              setNewProduct({ ...newProduct, color: e.target.value })
-            }
-            style={colorInput}
-          />
-
-          <textarea
-            placeholder="Short Description"
-            value={newProduct.short_description}
-            onChange={(e) =>
-              setNewProduct({
-                ...newProduct,
-                short_description: e.target.value,
-              })
-            }
-            style={textarea}
-          />
-
-          <textarea
-            placeholder="Full Description"
-            value={newProduct.description}
-            onChange={(e) =>
-              setNewProduct({ ...newProduct, description: e.target.value })
-            }
-            style={bigTextarea}
-          />
-
-          <button type="button" onClick={createProduct} style={button}>
-            Save New Product
-          </button>
-        </section>
-      )}
-
-      <section style={box}>
-        <div style={tableHeader}>
-          <h2 style={{ color: "#00d9ff", margin: 0 }}>Pricing / Inventory</h2>
-
-          <button
-            type="button"
-            onClick={() => setShowAddOption(!showAddOption)}
-            style={plusButton}
-          >
-            + Add Dosage
-          </button>
-        </div>
-
-        {showAddOption && (
-          <div style={addOptionBox}>
-            <input
-              placeholder="Dosage"
-              value={newOption.dosage}
-              onChange={(e) =>
-                setNewOption({ ...newOption, dosage: e.target.value })
-              }
-              style={input}
-            />
-
-            <select
-              value={newOption.purchase_type}
-              onChange={(e) =>
-                setNewOption({
-                  ...newOption,
-                  purchase_type: e.target.value,
-                })
-              }
-              style={input}
+          <div style={headerActions}>
+            <button
+              type="button"
+              onClick={() => setShowAddProduct((current) => !current)}
+              style={primaryButton}
             >
-              <option value="single">single</option>
-              <option value="kit">kit</option>
-            </select>
+              + New Product
+            </button>
 
-            <input
-              placeholder="Price"
-              type="number"
-              value={newOption.price}
-              onChange={(e) =>
-                setNewOption({ ...newOption, price: e.target.value })
-              }
-              style={input}
-            />
+            <button
+              type="button"
+              onClick={() => setShowDeleted((current) => !current)}
+              style={secondaryButton}
+            >
+              Archived Products
+            </button>
+          </div>
+        </header>
 
-            <input
-              placeholder="Cost"
-              type="number"
-              value={newOption.cost}
-              onChange={(e) =>
-                setNewOption({ ...newOption, cost: e.target.value })
-              }
-              style={input}
-            />
+        {notice && (
+          <div style={noticeBanner}>
+            <span>{notice}</span>
 
-            <input
-              placeholder="Inventory Qty"
-              type="number"
-              value={newOption.quantity}
-              onChange={(e) =>
-                setNewOption({ ...newOption, quantity: e.target.value })
-              }
-              style={input}
-            />
-
-            <button type="button" onClick={addOptionAndInventory} style={button}>
-              Save New Option
+            <button
+              type="button"
+              onClick={() => setNotice("")}
+              style={noticeClose}
+            >
+              ×
             </button>
           </div>
         )}
 
-        <p style={{ color: "#aaa" }}>
-          Singles: 0 inventory = out of stock. Kits: under 10 vials = pre-sale.
-        </p>
+        <section style={statsGrid}>
+          <StatCard
+            label="Active Products"
+            value={String(products.length)}
+            accent="#00d9ff"
+          />
 
-        {options.length === 0 ? (
-          <p style={{ color: "#ccc" }}>No pricing options found.</p>
-        ) : (
-          <div style={tableWrapper}>
-            <table style={table}>
-              <thead>
-                <tr>
-                  <th style={th}>Dosage</th>
-                  <th style={th}>Type</th>
-                  <th style={th}>Price</th>
-                  <th style={th}>Cost</th>
-                  <th style={th}>Profit</th>
-                  <th style={th}>Margin %</th>
-                  <th style={th}>Status</th>
-                  <th style={th}>Sale Active</th>
-                  <th style={th}>Sale %</th>
-                  <th style={th}>Inventory</th>
-                  <th style={th}>Kits</th>
-                  <th style={th}>Actions</th>
-                </tr>
-              </thead>
+          <StatCard
+            label="Archived Products"
+            value={String(deletedProducts.length)}
+            accent="#b8bcc4"
+          />
 
-              <tbody>
-                {options.map((option) => {
-                  const inv = getInventoryForOption(option);
-                  const quantity = inv ? Number(inv.quantity || 0) : 0;
+          <StatCard
+            label="Selected Options"
+            value={String(totalOptions)}
+            accent="#ff45d8"
+          />
 
-                  const autoStatus =
-                    option.purchase_type === "kit"
-                      ? getKitStatus(quantity)
-                      : getSingleStatus(quantity);
+          <StatCard
+            label="Single Units"
+            value={String(totalSingleInventory)}
+            accent="#00ff99"
+          />
 
-                  const profit =
-                    Number(option.price || 0) - Number(option.cost || 0);
+          <StatCard
+            label="Pre-Sale Options"
+            value={String(preSaleOptions)}
+            accent="#ffcc00"
+          />
 
-                  const margin =
-                    Number(option.price || 0) > 0
-                      ? ((profit / Number(option.price || 0)) * 100).toFixed(1)
-                      : "0";
+          <StatCard
+            label="Sale Options"
+            value={String(saleOptions)}
+            accent="#ff75df"
+          />
+        </section>
+
+        <div className="inventory-layout" style={workspace}>
+          <aside style={sidebar}>
+            <div style={sidebarHeader}>
+              <div>
+                <p style={sectionEyebrow}>CATALOG</p>
+                <h2 style={sectionTitle}>Products</h2>
+              </div>
+
+              <span style={countBadge}>
+                {filteredProducts.length}
+              </span>
+            </div>
+
+            <input
+              type="search"
+              placeholder="Search products..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              style={searchInput}
+            />
+
+            <div style={productList}>
+              {filteredProducts.length === 0 ? (
+                <p style={muted}>No matching products found.</p>
+              ) : (
+                filteredProducts.map((product) => {
+                  const selected = selectedSlug === product.slug;
 
                   return (
-                    <tr key={option.id} style={{ borderBottom: "1px solid #333" }}>
-                      <td style={td}>
-                        <input
-                          defaultValue={option.dosage}
-                          onBlur={(e) =>
-                            updateOption(option.id, "dosage", e.target.value)
-                          }
-                          style={smallInput}
-                        />
-                      </td>
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => {
+                        void selectProduct(product.slug);
+                      }}
+                      style={{
+                        ...productListItem,
+                        borderColor: selected
+                          ? product.color || "#00d9ff"
+                          : "rgba(255,255,255,.10)",
+                        background: selected
+                          ? `${product.color || "#00d9ff"}12`
+                          : "rgba(255,255,255,.025)",
+                        boxShadow: selected
+                          ? `0 0 16px ${product.color || "#00d9ff"}22`
+                          : "none",
+                      }}
+                    >
+                      <span
+                        style={{
+                          ...productColorDot,
+                          background: product.color || "#ff45d8",
+                          boxShadow: `0 0 10px ${product.color || "#ff45d8"}66`,
+                        }}
+                      />
 
-                      <td style={td}>
-                        <select
-                          defaultValue={option.purchase_type}
-                          onChange={(e) =>
-                            updateOption(
-                              option.id,
-                              "purchase_type",
-                              e.target.value
-                            )
-                          }
-                          style={smallInput}
-                        >
-                          <option value="single">single</option>
-                          <option value="kit">kit</option>
-                        </select>
-                      </td>
+                      <span style={productListCopy}>
+                        <strong>{product.name}</strong>
+                        <small>{product.slug}</small>
+                      </span>
 
-                      <td style={td}>
-                        <input
-                          type="number"
-                          defaultValue={option.price}
-                          onBlur={(e) =>
-                            updateOption(
-                              option.id,
-                              "price",
-                              Number(e.target.value)
-                            )
-                          }
-                          style={smallInput}
-                        />
-                      </td>
+                      <span style={productCategory}>
+                        {product.category === "lab-material"
+                          ? "Material"
+                          : "Compound"}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </aside>
 
-                      <td style={td}>
-                        <input
-                          type="number"
-                          defaultValue={option.cost || 0}
-                          onBlur={(e) =>
-                            updateOption(
-                              option.id,
-                              "cost",
-                              Number(e.target.value)
-                            )
-                          }
-                          style={smallInput}
-                        />
-                      </td>
+          <section style={contentStack}>
+            {showDeleted && (
+              <section style={panel}>
+                <div style={panelHeader}>
+                  <div>
+                    <p style={sectionEyebrow}>ARCHIVE</p>
+                    <h2 style={sectionTitle}>Archived Products</h2>
+                  </div>
 
-                      <td style={td}>${profit.toFixed(2)}</td>
-                      <td style={td}>{margin}%</td>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleted(false)}
+                    style={closeButton}
+                  >
+                    Close
+                  </button>
+                </div>
 
-                      <td style={td}>
-                        <span
-                          style={{
-                            color:
-                              autoStatus === "in stock"
-                                ? "#00ff99"
-                                : autoStatus === "pre-sale"
-                                ? "#ffcc00"
-                                : "#ff4d4d",
-                            fontWeight: "bold",
+                {deletedProducts.length === 0 ? (
+                  <p style={muted}>No archived products found.</p>
+                ) : (
+                  <div style={restoreGrid}>
+                    {deletedProducts.map((product) => (
+                      <div key={product.id} style={restoreCard}>
+                        <div>
+                          <strong style={restoreName}>{product.name}</strong>
+                          <span style={restoreSlug}>{product.slug}</span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void restoreProduct(product.id);
                           }}
+                          style={secondaryButton}
                         >
-                          {autoStatus}
-                        </span>
-                      </td>
+                          Restore
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
-                      <td style={td}>
-                        <input
-                          type="checkbox"
-                          checked={option.sale_active || false}
-                          onChange={(e) =>
-                            updateOption(
-                              option.id,
-                              "sale_active",
-                              e.target.checked
-                            )
-                          }
-                        />
-                      </td>
+            {showAddProduct && (
+              <section style={panel}>
+                <div style={panelHeader}>
+                  <div>
+                    <p style={sectionEyebrow}>NEW PRODUCT</p>
+                    <h2 style={sectionTitle}>Create Product</h2>
+                  </div>
 
-                      <td style={td}>
-                        <input
-                          type="number"
-                          defaultValue={option.sale_percent || 0}
-                          onBlur={(e) =>
-                            updateOption(
-                              option.id,
-                              "sale_percent",
-                              Number(e.target.value)
-                            )
-                          }
-                          style={smallInput}
-                        />
-                      </td>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddProduct(false)}
+                    style={closeButton}
+                  >
+                    Close
+                  </button>
+                </div>
 
-                      <td style={td}>
-                        {inv ? (
+                <div style={formGrid}>
+                  <Field label="Product Name">
+                    <input
+                      value={newProduct.name}
+                      onChange={(event) =>
+                        setNewProduct({
+                          ...newProduct,
+                          name: event.target.value,
+                        })
+                      }
+                      style={input}
+                    />
+                  </Field>
+
+                  <Field label="Slug">
+                    <input
+                      value={newProduct.slug}
+                      onChange={(event) =>
+                        setNewProduct({
+                          ...newProduct,
+                          slug: event.target.value,
+                        })
+                      }
+                      style={input}
+                    />
+                  </Field>
+
+                  <Field label="Product Type">
+                    <select
+                      value={newProduct.category}
+                      onChange={(event) =>
+                        setNewProduct({
+                          ...newProduct,
+                          category: event.target.value,
+                        })
+                      }
+                      style={input}
+                    >
+                      <option value="peptide">Compound</option>
+                      <option value="lab-material">Lab Material</option>
+                    </select>
+                  </Field>
+
+                  <Field label="Image Path">
+                    <input
+                      value={newProduct.image}
+                      onChange={(event) =>
+                        setNewProduct({
+                          ...newProduct,
+                          image: event.target.value,
+                        })
+                      }
+                      style={input}
+                    />
+                  </Field>
+
+                  <Field label="Accent Color">
+                    <input
+                      type="color"
+                      value={newProduct.color}
+                      onChange={(event) =>
+                        setNewProduct({
+                          ...newProduct,
+                          color: event.target.value,
+                        })
+                      }
+                      style={colorInput}
+                    />
+                  </Field>
+
+                  <Field label="Short Description" wide>
+                    <textarea
+                      value={newProduct.short_description}
+                      onChange={(event) =>
+                        setNewProduct({
+                          ...newProduct,
+                          short_description: event.target.value,
+                        })
+                      }
+                      style={textarea}
+                    />
+                  </Field>
+
+                  <Field label="Full Description" wide>
+                    <textarea
+                      value={newProduct.description}
+                      onChange={(event) =>
+                        setNewProduct({
+                          ...newProduct,
+                          description: event.target.value,
+                        })
+                      }
+                      style={bigTextarea}
+                    />
+                  </Field>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    void createProduct();
+                  }}
+                  style={primaryButton}
+                >
+                  Save New Product
+                </button>
+              </section>
+            )}
+
+            <section style={panel}>
+              <div style={panelHeader}>
+                <div>
+                  <p style={sectionEyebrow}>PRICING & STOCK</p>
+                  <h2 style={sectionTitle}>
+                    {selectedProduct.name || "Select a Product"}
+                  </h2>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAddOption((current) => !current)}
+                  disabled={!selectedSlug}
+                  style={{
+                    ...primaryButton,
+                    opacity: selectedSlug ? 1 : 0.5,
+                    cursor: selectedSlug ? "pointer" : "not-allowed",
+                  }}
+                >
+                  + Add Dosage
+                </button>
+              </div>
+
+              {!selectedSlug ? (
+                <div style={emptyState}>
+                  <div style={emptyIcon}>🧪</div>
+                  <p style={muted}>
+                    Select a product from the catalog to manage pricing and inventory.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {showAddOption && (
+                    <div style={addOptionPanel}>
+                      <div style={formGrid}>
+                        <Field label="Dosage">
+                          <input
+                            value={newOption.dosage}
+                            onChange={(event) =>
+                              setNewOption({
+                                ...newOption,
+                                dosage: event.target.value,
+                              })
+                            }
+                            style={input}
+                          />
+                        </Field>
+
+                        <Field label="Purchase Type">
+                          <select
+                            value={newOption.purchase_type}
+                            onChange={(event) =>
+                              setNewOption({
+                                ...newOption,
+                                purchase_type: event.target.value,
+                              })
+                            }
+                            style={input}
+                          >
+                            <option value="single">Single</option>
+                            <option value="kit">Kit</option>
+                          </select>
+                        </Field>
+
+                        <Field label="Price">
                           <input
                             type="number"
-                            value={inv.quantity}
-                            onChange={(e) =>
-                              setInventory((prev) =>
-                                prev.map((row) =>
-                                  row.id === inv.id
-                                    ? {
-                                        ...row,
-                                        quantity: Number(e.target.value),
-                                      }
-                                    : row
-                                )
-                              )
+                            min="0"
+                            step="0.01"
+                            value={newOption.price}
+                            onChange={(event) =>
+                              setNewOption({
+                                ...newOption,
+                                price: event.target.value,
+                              })
                             }
-                            style={smallInput}
+                            style={input}
                           />
-                        ) : (
-                          <span style={{ color: "#888" }}>
-                            Uses single vial inventory
-                          </span>
-                        )}
-                      </td>
+                        </Field>
 
-                      <td style={td}>{Math.floor(quantity / 10)}</td>
+                        <Field label="Cost">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={newOption.cost}
+                            onChange={(event) =>
+                              setNewOption({
+                                ...newOption,
+                                cost: event.target.value,
+                              })
+                            }
+                            style={input}
+                          />
+                        </Field>
 
-                      <td style={td}>
-                        {inv ? (
-                          <>
-                            <button
-                              type="button"
-                              style={button}
-                              onClick={() => updateInventory(inv.id, inv.quantity)}
-                            >
-                              Save
-                            </button>
+                        <Field label="Single Inventory">
+                          <input
+                            type="number"
+                            min="0"
+                            value={newOption.quantity}
+                            onChange={(event) =>
+                              setNewOption({
+                                ...newOption,
+                                quantity: event.target.value,
+                              })
+                            }
+                            style={input}
+                          />
+                        </Field>
+                      </div>
 
-                            <button
-                              type="button"
-                              style={minusButton}
-                              onClick={() =>
-                                updateInventory(inv.id, inv.quantity - 1)
-                              }
-                            >
-                              -1
-                            </button>
+                      <div style={actionRow}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void addOptionAndInventory();
+                          }}
+                          style={primaryButton}
+                        >
+                          Save New Option
+                        </button>
 
-                            <button
-                              type="button"
-                              style={plusButtonSmall}
-                              onClick={() =>
-                                updateInventory(inv.id, inv.quantity + 1)
-                              }
-                            >
-                              +1
-                            </button>
-                          </>
-                        ) : (
-                          <span style={{ color: "#888" }}>N/A</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                        <button
+                          type="button"
+                          onClick={() => setShowAddOption(false)}
+                          style={secondaryButton}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
-      {selectedSlug && (
-        <section style={box}>
-          <h2 style={{ color: "#00d9ff" }}>Edit Product Details</h2>
+                  <p style={helperText}>
+                    Single inventory automatically controls both single and kit availability.
+                    Kits become pre-sale when fewer than 10 single units are available.
+                  </p>
 
-          <input
-            value={selectedProduct.name || ""}
-            onChange={(e) => updateProductField("name", e.target.value)}
-            style={input}
-          />
+                  {options.length === 0 ? (
+                    <div style={emptyState}>
+                      <p style={muted}>No pricing options found.</p>
+                    </div>
+                  ) : (
+                    <div style={optionCards}>
+                      {options.map((option) => {
+                        const inv = getInventoryForOption(option);
+                        const quantity = inv
+                          ? Number(inv.quantity || 0)
+                          : 0;
 
-          <input
-            value={selectedProduct.slug || ""}
-            onChange={(e) => updateProductField("slug", e.target.value)}
-            style={input}
-          />
+                        const autoStatus =
+                          option.purchase_type === "kit"
+                            ? getKitStatus(quantity)
+                            : getSingleStatus(quantity);
 
-          <input
-            value={selectedProduct.image || ""}
-            onChange={(e) => updateProductField("image", e.target.value)}
-            style={input}
-          />
-<select
-  value={selectedProduct.category || "peptide"}
-  onChange={(e) =>
-    updateProductField("category" as keyof Product, e.target.value)
-  }
-  style={input}
->
-  <option value="peptide">Peptide</option>
-  <option value="lab-material">Lab Material</option>
-</select>
-          <label style={label}>Color</label>
-          <input
-            type="color"
-            value={selectedProduct.color || "#ff45d8"}
-            onChange={(e) => updateProductField("color", e.target.value)}
-            style={colorInput}
-          />
+                        const profit =
+                          Number(option.price || 0) -
+                          Number(option.cost || 0);
 
-          <textarea
-            value={selectedProduct.short_description || ""}
-            onChange={(e) =>
-              updateProductField("short_description", e.target.value)
+                        const margin =
+                          Number(option.price || 0) > 0
+                            ? (profit / Number(option.price || 0)) * 100
+                            : 0;
+
+                        return (
+                          <article key={option.id} style={optionCard}>
+                            <div style={optionHeader}>
+                              <div>
+                                <input
+                                  defaultValue={option.dosage}
+                                  onBlur={(event) => {
+                                    void updateOption(
+                                      option.id,
+                                      "dosage",
+                                      event.target.value
+                                    );
+                                  }}
+                                  style={optionTitleInput}
+                                />
+
+                                <select
+                                  defaultValue={option.purchase_type}
+                                  onChange={(event) => {
+                                    void updateOption(
+                                      option.id,
+                                      "purchase_type",
+                                      event.target.value
+                                    );
+                                  }}
+                                  style={compactSelect}
+                                >
+                                  <option value="single">Single</option>
+                                  <option value="kit">Kit</option>
+                                </select>
+                              </div>
+
+                              <StatusBadge status={autoStatus} />
+                            </div>
+
+                            <div style={optionMetricGrid}>
+                              <OptionMetric
+                                label="Price"
+                                value={`$${Number(option.price || 0).toFixed(2)}`}
+                              />
+
+                              <OptionMetric
+                                label="Cost"
+                                value={`$${Number(option.cost || 0).toFixed(2)}`}
+                              />
+
+                              <OptionMetric
+                                label="Profit"
+                                value={`$${profit.toFixed(2)}`}
+                                accent={profit >= 0 ? "#00ff99" : "#ff6f6f"}
+                              />
+
+                              <OptionMetric
+                                label="Margin"
+                                value={`${margin.toFixed(1)}%`}
+                              />
+
+                              <OptionMetric
+                                label="Single Units"
+                                value={String(quantity)}
+                                accent="#00d9ff"
+                              />
+
+                              <OptionMetric
+                                label="Available Kits"
+                                value={String(Math.floor(quantity / 10))}
+                                accent="#ffcc00"
+                              />
+                            </div>
+
+                            <div style={optionEditorGrid}>
+                              <Field label="Price">
+                                <input
+                                  type="number"
+                                  defaultValue={option.price}
+                                  onBlur={(event) => {
+                                    void updateOption(
+                                      option.id,
+                                      "price",
+                                      Number(event.target.value)
+                                    );
+                                  }}
+                                  style={input}
+                                />
+                              </Field>
+
+                              <Field label="Cost">
+                                <input
+                                  type="number"
+                                  defaultValue={option.cost || 0}
+                                  onBlur={(event) => {
+                                    void updateOption(
+                                      option.id,
+                                      "cost",
+                                      Number(event.target.value)
+                                    );
+                                  }}
+                                  style={input}
+                                />
+                              </Field>
+
+                              <Field label="Sale Percent">
+                                <input
+                                  type="number"
+                                  defaultValue={option.sale_percent || 0}
+                                  onBlur={(event) => {
+                                    void updateOption(
+                                      option.id,
+                                      "sale_percent",
+                                      Number(event.target.value)
+                                    );
+                                  }}
+                                  style={input}
+                                />
+                              </Field>
+
+                              <label style={saleToggle}>
+                                <input
+                                  type="checkbox"
+                                  checked={option.sale_active || false}
+                                  onChange={(event) => {
+                                    void updateOption(
+                                      option.id,
+                                      "sale_active",
+                                      event.target.checked
+                                    );
+                                  }}
+                                />
+
+                                Sale Active
+                              </label>
+                            </div>
+
+                            {inv ? (
+                              <div style={inventoryEditor}>
+                                <div>
+                                  <span style={fieldLabel}>Inventory Quantity</span>
+
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={inv.quantity}
+                                    onChange={(event) =>
+                                      setInventory((previous) =>
+                                        previous.map((row) =>
+                                          row.id === inv.id
+                                            ? {
+                                                ...row,
+                                                quantity: Number(event.target.value),
+                                              }
+                                            : row
+                                        )
+                                      )
+                                    }
+                                    style={inventoryInput}
+                                  />
+                                </div>
+
+                                <div style={inventoryActions}>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void updateInventory(inv.id, inv.quantity - 1);
+                                    }}
+                                    style={dangerButton}
+                                  >
+                                    −1
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void updateInventory(inv.id, inv.quantity + 1);
+                                    }}
+                                    style={successButton}
+                                  >
+                                    +1
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void updateInventory(inv.id, inv.quantity);
+                                    }}
+                                    style={primaryButton}
+                                  >
+                                    Save Inventory
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p style={muted}>
+                                This kit uses the matching single-unit inventory.
+                              </p>
+                            )}
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+
+            {selectedSlug && (
+              <section style={panel}>
+                <div style={panelHeader}>
+                  <div>
+                    <p style={sectionEyebrow}>PRODUCT DETAILS</p>
+                    <h2 style={sectionTitle}>Edit Product</h2>
+                  </div>
+
+                  <a
+                    href={`/products/${selectedSlug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={secondaryLink}
+                  >
+                    View Live Page
+                  </a>
+                </div>
+
+                <div style={formGrid}>
+                  <Field label="Name">
+                    <input
+                      value={selectedProduct.name || ""}
+                      onChange={(event) =>
+                        updateProductField("name", event.target.value)
+                      }
+                      style={input}
+                    />
+                  </Field>
+
+                  <Field label="Slug">
+                    <input
+                      value={selectedProduct.slug || ""}
+                      onChange={(event) =>
+                        updateProductField("slug", event.target.value)
+                      }
+                      style={input}
+                    />
+                  </Field>
+
+                  <Field label="Image Path">
+                    <input
+                      value={selectedProduct.image || ""}
+                      onChange={(event) =>
+                        updateProductField("image", event.target.value)
+                      }
+                      style={input}
+                    />
+                  </Field>
+
+                  <Field label="Product Type">
+                    <select
+                      value={selectedProduct.category || "peptide"}
+                      onChange={(event) =>
+                        updateProductField(
+                          "category" as keyof Product,
+                          event.target.value
+                        )
+                      }
+                      style={input}
+                    >
+                      <option value="peptide">Compound</option>
+                      <option value="lab-material">Lab Material</option>
+                    </select>
+                  </Field>
+
+                  <Field label="Accent Color">
+                    <input
+                      type="color"
+                      value={selectedProduct.color || "#ff45d8"}
+                      onChange={(event) =>
+                        updateProductField("color", event.target.value)
+                      }
+                      style={colorInput}
+                    />
+                  </Field>
+
+                  <Field label="Short Description" wide>
+                    <textarea
+                      value={selectedProduct.short_description || ""}
+                      onChange={(event) =>
+                        updateProductField(
+                          "short_description",
+                          event.target.value
+                        )
+                      }
+                      style={textarea}
+                    />
+                  </Field>
+
+                  <Field label="Full Description" wide>
+                    <textarea
+                      value={selectedProduct.description || ""}
+                      onChange={(event) =>
+                        updateProductField(
+                          "description",
+                          event.target.value
+                        )
+                      }
+                      style={bigTextarea}
+                    />
+                  </Field>
+                </div>
+
+                <label style={activeToggle}>
+                  <input
+                    type="checkbox"
+                    checked={selectedProduct.is_active ?? true}
+                    onChange={(event) =>
+                      updateProductField("is_active", event.target.checked)
+                    }
+                  />
+
+                  Active / Show on Site
+                </label>
+
+                <div style={actionRow}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void saveProductChanges();
+                    }}
+                    style={primaryButton}
+                  >
+                    Save Product Changes
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void deleteProduct();
+                    }}
+                    style={dangerButton}
+                  >
+                    Archive Product
+                  </button>
+                </div>
+              </section>
+            )}
+          </section>
+        </div>
+
+        <style jsx>{`
+          @media (max-width: 1040px) {
+            .inventory-layout {
+              grid-template-columns: minmax(0, 1fr) !important;
             }
-            style={textarea}
-          />
+          }
 
-          <textarea
-            value={selectedProduct.description || ""}
-            onChange={(e) => updateProductField("description", e.target.value)}
-            style={bigTextarea}
-          />
+          @media (max-width: 720px) {
+            .inventory-layout {
+              gap: 16px !important;
+            }
 
-          <label style={checkboxRow}>
-            <input
-              type="checkbox"
-              checked={selectedProduct.is_active ?? true}
-              onChange={(e) =>
-                updateProductField("is_active", e.target.checked)
-              }
-            />
-            Active / show on site
-          </label>
-
-          <button type="button" onClick={saveProductChanges} style={button}>
-            Save Product Changes
-          </button>
-
-          <button type="button" onClick={deleteProduct} style={deleteButton}>
-            Delete Product
-          </button>
-        </section>
-      )}
+            button,
+            input,
+            select,
+            textarea {
+              font-size: 16px !important;
+            }
+          }
+        `}</style>
+      </div>
     </main>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+}) {
+  return (
+    <div
+      style={{
+        ...statCard,
+        borderColor: `${accent}55`,
+        boxShadow: `0 0 18px ${accent}18`,
+      }}
+    >
+      <span style={{ ...statLabel, color: accent }}>{label}</span>
+      <strong style={statValue}>{value}</strong>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+  wide = false,
+}: {
+  label: string;
+  children: React.ReactNode;
+  wide?: boolean;
+}) {
+  return (
+    <label
+      style={{
+        ...field,
+        gridColumn: wide ? "1 / -1" : undefined,
+      }}
+    >
+      <span style={fieldLabel}>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function OptionMetric({
+  label,
+  value,
+  accent = "#ffffff",
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+}) {
+  return (
+    <div style={optionMetric}>
+      <span style={metricLabel}>{label}</span>
+      <strong style={{ color: accent }}>{value}</strong>
+    </div>
+  );
+}
+
+function StatusBadge({
+  status,
+}: {
+  status: string;
+}) {
+  const theme =
+    status === "in stock"
+      ? {
+          color: "#00ff99",
+          border: "rgba(0,255,153,.48)",
+          background: "rgba(0,255,153,.08)",
+        }
+      : status === "pre-sale"
+        ? {
+            color: "#ffcc00",
+            border: "rgba(255,204,0,.48)",
+            background: "rgba(255,204,0,.08)",
+          }
+        : {
+            color: "#ff6f6f",
+            border: "rgba(255,111,111,.48)",
+            background: "rgba(255,111,111,.08)",
+          };
+
+  return (
+    <span
+      style={{
+        ...statusBadge,
+        color: theme.color,
+        borderColor: theme.border,
+        background: theme.background,
+      }}
+    >
+      {status.toUpperCase()}
+    </span>
   );
 }
 
 const page = {
   minHeight: "100vh",
-  color: "#fff",
-  padding: 35,
-  backgroundImage:
-    "linear-gradient(rgba(0,0,0,.62), rgba(0,0,0,.78)), url('/admin-bg.png')",
+  fontSize: 16,
+  lineHeight: 1.5,
+  padding: "clamp(18px, 4vw, 34px)",
+  background:
+    "linear-gradient(rgba(0,0,0,.72), rgba(0,0,0,.84)), url('/admin-bg.png')",
   backgroundSize: "cover",
   backgroundPosition: "center",
   backgroundAttachment: "fixed",
+  color: "#ffffff",
 };
 
-const box = {
-  marginTop: 25,
-  padding: 22,
-  border: "1px solid rgba(255,255,255,.18)",
-  borderRadius: 16,
-  background: "rgba(0,0,0,.58)",
-  backdropFilter: "blur(8px)",
-  boxShadow: "0 0 28px rgba(0,217,255,.14)",
+const container = {
+  width: "100%",
+  maxWidth: 1480,
+  margin: "0 auto",
 };
 
-const topControls = {
+const pageHeader = {
   display: "flex",
   justifyContent: "space-between",
-  gap: 15,
-  alignItems: "flex-end",
+  alignItems: "flex-start",
+  gap: 20,
   flexWrap: "wrap" as const,
 };
 
-const tableHeader = {
+const eyebrow = {
+  margin: 0,
+  color: "#00d9ff",
+  fontSize: 13,
+  fontWeight: 900,
+  letterSpacing: ".15em",
+};
+
+const pageTitle = {
+  margin: "7px 0 0",
+  color: "#ff45d8",
+  fontSize: "clamp(44px, 7vw, 64px)",
+  letterSpacing: "-.035em",
+  textShadow: "0 0 18px rgba(255,69,216,.22)",
+};
+
+const subtitle = {
+  maxWidth: 820,
+  margin: "12px 0 0",
+  color: "#c2c2ca",
+  fontSize: 18,
+  lineHeight: 1.7,
+};
+
+const headerActions = {
+  display: "flex",
+  gap: 12,
+  flexWrap: "wrap" as const,
+};
+
+const noticeBanner = {
+  marginTop: 18,
+  padding: "12px 14px",
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
   gap: 15,
-  marginBottom: 15,
+  border: "1px solid rgba(0,255,153,.45)",
+  borderRadius: 11,
+  background: "rgba(0,255,153,.08)",
+  color: "#00ff99",
+  fontWeight: 800,
 };
 
-const addOptionBox = {
+const noticeClose = {
+  border: 0,
+  background: "transparent",
+  color: "#00ff99",
+  fontSize: 25,
+  cursor: "pointer",
+};
+
+const statsGrid = {
+  marginTop: 22,
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+  gap: 16,
+};
+
+const statCard = {
+  padding: 21,
+  display: "grid",
+  gap: 7,
+  border: "1px solid",
+  borderRadius: 18,
+  background:
+    "linear-gradient(145deg, rgba(12,12,17,.95), rgba(6,6,9,.96))",
+};
+
+const statLabel = {
+  fontSize: 14,
+  fontWeight: 900,
+  letterSpacing: ".1em",
+  textTransform: "uppercase" as const,
+};
+
+const statValue = {
+  fontSize: 34,
+};
+
+const workspace = {
+  marginTop: 22,
+  display: "grid",
+  gridTemplateColumns: "320px minmax(0, 1fr)",
+  gap: 20,
+  alignItems: "start",
+};
+
+const sidebar = {
+  padding: 21,
+  border: "1px solid rgba(0,217,255,.32)",
+  borderRadius: 18,
+  background:
+    "linear-gradient(145deg, rgba(8,8,12,.96), rgba(15,8,18,.94))",
+  boxShadow: "0 0 20px rgba(0,217,255,.07)",
+};
+
+const sidebarHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 15,
+};
+
+const sectionEyebrow = {
+  margin: 0,
+  color: "#00d9ff",
+  fontSize: 14,
+  fontWeight: 900,
+  letterSpacing: ".13em",
+};
+
+const sectionTitle = {
+  margin: "5px 0 0",
+  color: "#7df9ff",
+  fontSize: 31,
+};
+
+const countBadge = {
+  padding: "8px 11px",
+  border: "1px solid rgba(255,69,216,.44)",
+  borderRadius: 999,
+  background: "rgba(255,69,216,.07)",
+  color: "#ff75df",
+  fontSize: 13,
+  fontWeight: 900,
+};
+
+const searchInput = {
+  width: "100%",
+  minHeight: 54,
+  fontSize: 16,
+  marginTop: 14,
+  boxSizing: "border-box" as const,
+  padding: "13px 15px",
+  border: "1px solid rgba(255,255,255,.15)",
+  borderRadius: 9,
+  background: "#050507",
+  color: "#ffffff",
+};
+
+const productList = {
+  maxHeight: "68vh",
+  marginTop: 12,
+  display: "grid",
+  gap: 8,
+  overflowY: "auto" as const,
+};
+
+const productListItem = {
+  width: "100%",
+  padding: 15,
+  display: "grid",
+  gridTemplateColumns: "12px minmax(0, 1fr) auto",
+  alignItems: "center",
+  gap: 12,
+  border: "1px solid",
+  borderRadius: 10,
+  color: "#ffffff",
+  textAlign: "left" as const,
+  cursor: "pointer",
+};
+
+const productColorDot = {
+  width: 9,
+  height: 9,
+  borderRadius: 999,
+};
+
+const productListCopy = {
+  minWidth: 0,
+  display: "grid",
+  gap: 3,
+};
+
+const productCategory = {
+  color: "#8f8f98",
+  fontSize: 14,
+  fontWeight: 800,
+};
+
+const contentStack = {
+  display: "grid",
+  gap: 18,
+};
+
+const panel = {
+  padding: "clamp(18px, 3vw, 24px)",
+  border: "1px solid rgba(0,217,255,.32)",
+  borderRadius: 18,
+  background:
+    "linear-gradient(145deg, rgba(8,8,12,.96), rgba(15,8,18,.94))",
+  boxShadow: "0 0 20px rgba(0,217,255,.07)",
+};
+
+const panelHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
   gap: 14,
-  marginBottom: 20,
-  padding: 16,
+  flexWrap: "wrap" as const,
+  marginBottom: 16,
+};
+
+const closeButton = {
+  minHeight: 40,
+  padding: "9px 12px",
   border: "1px solid rgba(255,255,255,.18)",
-  borderRadius: 12,
+  borderRadius: 9,
   background: "rgba(255,255,255,.04)",
+  color: "#ccccd2",
+  cursor: "pointer",
+  fontWeight: 800,
+};
+
+const restoreGrid = {
+  display: "grid",
+  gap: 12,
+};
+
+const restoreCard = {
+  padding: 15,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 15,
+  border: "1px solid rgba(255,255,255,.10)",
+  borderRadius: 10,
+  background: "rgba(0,0,0,.24)",
+};
+
+const restoreName = {
+  display: "block",
+  color: "#ffffff",
+};
+
+const restoreSlug = {
+  display: "block",
+  marginTop: 3,
+  color: "#8f8f98",
+  fontSize: 14,
+};
+
+const formGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 15,
+};
+
+const field = {
+  minWidth: 0,
+  display: "grid",
+  gap: 6,
+};
+
+const fieldLabel = {
+  color: "#d0d0d7",
+  fontSize: 14,
+  fontWeight: 900,
 };
 
 const input = {
   width: "100%",
+  minWidth: 0,
+  minHeight: 54,
   boxSizing: "border-box" as const,
-  padding: 12,
-  marginBottom: 12,
-  background: "rgba(0,0,0,.62)",
-  color: "#fff",
-  border: "1px solid rgba(255,255,255,.22)",
-  borderRadius: 8,
+  padding: "14px 16px",
+  fontSize: 16,
+  border: "1px solid rgba(255,255,255,.16)",
+  borderRadius: 9,
+  background: "#050507",
+  color: "#ffffff",
 };
 
 const colorInput = {
   width: "100%",
-  height: 55,
-  marginBottom: 12,
-  background: "rgba(0,0,0,.62)",
-  border: "1px solid rgba(255,255,255,.22)",
-  borderRadius: 8,
+  height: 48,
+  border: "1px solid rgba(255,255,255,.16)",
+  borderRadius: 9,
+  background: "#050507",
 };
 
 const textarea = {
   width: "100%",
+  minHeight: 130,
   boxSizing: "border-box" as const,
-  minHeight: 100,
-  marginBottom: 12,
-  padding: 12,
-  background: "rgba(0,0,0,.62)",
-  color: "#fff",
-  border: "1px solid rgba(255,255,255,.22)",
-  borderRadius: 8,
+  padding: 15,
+  border: "1px solid rgba(255,255,255,.16)",
+  borderRadius: 9,
+  background: "#050507",
+  color: "#ffffff",
+  resize: "vertical" as const,
 };
 
 const bigTextarea = {
   ...textarea,
-  minHeight: 220,
+  minHeight: 280,
 };
 
-const label = {
-  display: "block",
-  color: "#ccc",
-  marginBottom: 6,
+const primaryButton = {
+  minHeight: 54,
+  fontSize: 16,
+  padding: "13px 18px",
+  border: "1px solid #45d97a",
+  borderRadius: 9,
+  background: "linear-gradient(180deg, #2eea6f, #19b857)",
+  color: "#ffffff",
+  fontWeight: 900,
+  cursor: "pointer",
 };
 
-const checkboxRow = {
+const secondaryButton = {
+  minHeight: 54,
+  fontSize: 16,
+  padding: "13px 18px",
+  border: "1px solid rgba(0,217,255,.46)",
+  borderRadius: 9,
+  background: "rgba(0,217,255,.06)",
+  color: "#7df9ff",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const secondaryLink = {
+  minHeight: 42,
+  padding: "9px 13px",
+  display: "grid",
+  placeItems: "center",
+  border: "1px solid rgba(0,217,255,.46)",
+  borderRadius: 9,
+  background: "rgba(0,217,255,.06)",
+  color: "#7df9ff",
+  textDecoration: "none",
+  fontWeight: 900,
+};
+
+const dangerButton = {
+  minHeight: 54,
+  fontSize: 16,
+  padding: "13px 18px",
+  border: "1px solid rgba(255,93,93,.56)",
+  borderRadius: 9,
+  background: "rgba(255,93,93,.07)",
+  color: "#ff8585",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const successButton = {
+  minHeight: 54,
+  fontSize: 16,
+  padding: "13px 18px",
+  border: "1px solid rgba(0,255,153,.50)",
+  borderRadius: 9,
+  background: "rgba(0,255,153,.07)",
+  color: "#00ff99",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const actionRow = {
+  marginTop: 16,
   display: "flex",
-  gap: 10,
-  alignItems: "center",
-  marginBottom: 18,
-  color: "#ccc",
+  gap: 12,
+  flexWrap: "wrap" as const,
 };
 
-const button = {
-  padding: "10px 14px",
-  marginRight: 8,
-  borderRadius: 8,
-  border: "1px solid #00d9ff",
-  background: "rgba(0,27,34,.85)",
-  color: "#00d9ff",
-  fontWeight: "bold",
-  cursor: "pointer",
+const addOptionPanel = {
+  marginBottom: 16,
+  padding: 21,
+  border: "1px solid rgba(255,69,216,.28)",
+  borderRadius: 12,
+  background: "rgba(255,69,216,.04)",
 };
 
-const plusButton = {
-  padding: "12px 18px",
-  borderRadius: 10,
-  border: "1px solid #00ff99",
-  background: "rgba(0,34,0,.85)",
-  color: "#00ff99",
-  fontWeight: "bold",
-  cursor: "pointer",
+const helperText = {
+  margin: "0 0 18px",
+  color: "#b1b1ba",
+  fontSize: 16,
+  lineHeight: 1.7,
 };
 
-const restoreButton = {
-  padding: "12px 18px",
-  borderRadius: 10,
-  border: "1px solid #cfd3d8",
-  background: "rgba(20,20,20,.85)",
-  color: "#cfd3d8",
-  fontWeight: "bold",
-  cursor: "pointer",
+const emptyState = {
+  padding: 28,
+  display: "grid",
+  justifyItems: "center",
+  gap: 12,
+  border: "1px dashed rgba(0,217,255,.30)",
+  borderRadius: 12,
+  textAlign: "center" as const,
 };
 
-const plusButtonSmall = {
-  ...button,
-  border: "1px solid #00ff99",
-  background: "rgba(0,34,0,.85)",
-  color: "#00ff99",
+const emptyIcon = {
+  fontSize: 36,
 };
 
-const minusButton = {
-  ...button,
-  border: "1px solid #ff4d4d",
-  background: "rgba(34,0,0,.85)",
-  color: "#ff4d4d",
+const muted = {
+  color: "#a9a9b2",
+  fontSize: 16,
+  lineHeight: 1.7,
 };
 
-const deleteButton = {
-  ...button,
-  border: "1px solid #ff4d4d",
-  background: "rgba(34,0,0,.85)",
-  color: "#ff4d4d",
+const optionCards = {
+  display: "grid",
+  gap: 14,
 };
 
-const tableWrapper = {
-  width: "100%",
-  overflowX: "auto" as const,
+const optionCard = {
+  padding: 21,
+  border: "1px solid rgba(255,255,255,.12)",
+  borderRadius: 18,
+  background: "rgba(0,0,0,.25)",
 };
 
-const table = {
-  width: "100%",
-  minWidth: 1180,
-  borderCollapse: "collapse" as const,
-};
-
-const th = {
-  textAlign: "left" as const,
-  color: "#00d9ff",
-  padding: 10,
-};
-
-const td = {
-  padding: 10,
-  verticalAlign: "middle" as const,
-};
-
-const smallInput = {
-  width: "100%",
-  minWidth: 110,
-  boxSizing: "border-box" as const,
-  padding: 8,
-  background: "rgba(0,0,0,.65)",
-  color: "#fff",
-  border: "1px solid rgba(255,255,255,.22)",
-  borderRadius: 6,
-};
-
-const restoreRow = {
+const optionHeader = {
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "center",
+  alignItems: "flex-start",
+  gap: 15,
+  flexWrap: "wrap" as const,
+};
+
+const optionTitleInput = {
+  display: "block",
+  minWidth: 220,
+  padding: "6px 8px",
+  border: "1px solid transparent",
+  borderRadius: 7,
+  background: "transparent",
+  color: "#ff75df",
+  fontSize: 25,
+  fontWeight: 900,
+};
+
+const compactSelect = {
+  marginTop: 5,
+  padding: "6px 8px",
+  border: "1px solid rgba(255,255,255,.14)",
+  borderRadius: 7,
+  background: "#050507",
+  color: "#ccccd2",
+};
+
+const statusBadge = {
+  padding: "6px 9px",
+  border: "1px solid",
+  borderRadius: 999,
+  fontSize: 14,
+  fontWeight: 900,
+};
+
+const optionMetricGrid = {
+  marginTop: 14,
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+  gap: 9,
+};
+
+const optionMetric = {
+  padding: 10,
+  display: "grid",
+  gap: 4,
+  border: "1px solid rgba(255,255,255,.08)",
+  borderRadius: 9,
+  background: "rgba(255,255,255,.025)",
+};
+
+const metricLabel = {
+  color: "#8f8f98",
+  fontSize: 11,
+  fontWeight: 900,
+  textTransform: "uppercase" as const,
+};
+
+const optionEditorGrid = {
+  marginTop: 14,
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
   gap: 12,
-  padding: "12px 0",
-  borderBottom: "1px solid rgba(255,255,255,.18)",
+  alignItems: "end",
+};
+
+const saleToggle = {
+  minHeight: 52,
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  color: "#d0d0d6",
+  fontWeight: 800,
+};
+
+const inventoryEditor = {
+  marginTop: 14,
+  paddingTop: 14,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "end",
+  gap: 14,
+  flexWrap: "wrap" as const,
+  borderTop: "1px solid rgba(255,255,255,.09)",
+};
+
+const inventoryInput = {
+  width: 190,
+  minHeight: 54,
+  fontSize: 17,
+  padding: "13px 15px",
+  border: "1px solid rgba(0,217,255,.35)",
+  borderRadius: 9,
+  background: "#050507",
+  color: "#ffffff",
+};
+
+const inventoryActions = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap" as const,
+};
+
+const activeToggle = {
+  marginTop: 15,
+  display: "flex",
+  alignItems: "center",
+  gap: 9,
+  color: "#d0d0d6",
+  fontWeight: 800,
 };

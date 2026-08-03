@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import {
+  useRouter,
+} from "next/navigation";
+
 import { createClient } from "../../lib/supabaseClient";
 import { useCart } from "../cartContext";
 
@@ -14,13 +17,12 @@ type CurrentProduct = {
 };
 
 type CurrentProductOption = {
+  id?: string;
   product_slug: string;
   dosage: string;
   purchase_type: string;
   price: number;
   status: string;
-  sale_active: boolean;
-  sale_percent: number;
   cost: number | null;
 };
 
@@ -37,351 +39,1043 @@ type RepresentativeDashboardResult = {
     commission_rate?: number;
     is_active?: boolean;
   };
-  totals?: Record<string, unknown>;
-  promo_codes?: unknown[];
-  customers?: unknown[];
-  orders?: unknown[];
 };
 
+type AccountProfile = {
+  full_name?: string | null;
+  organization?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+
+  vip_tier?: string | null;
+  lifetime_spend?: number | null;
+  reward_points?: number | null;
+  has_lifetime_free_shipping?: boolean | null;
+};
+
+type DeliveryForm = {
+  full_name: string;
+  organization: string;
+  phone: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+};
+
+type AccountOrder = {
+  id: string;
+  order_number: string;
+  total: number | null;
+  status: string | null;
+  shipping_status: string | null;
+  tracking_number: string | null;
+  created_at: string | null;
+  shipping_method_label?: string | null;
+};
+
+function money(value: number) {
+  return `$${Number(value || 0).toFixed(2)}`;
+}
+
+function formatDate(value?: string | null) {
+  if (!value) {
+    return "Date unavailable";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Date unavailable";
+  }
+
+  return date.toLocaleDateString(
+    "en-US",
+    {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }
+  );
+}
+
+function getTierTheme(tier: string) {
+  const normalized = tier.trim().toLowerCase();
+
+  const themes: Record<
+    string,
+    {
+      color: string;
+      border: string;
+      glow: string;
+      background: string;
+    }
+  > = {
+    stone: {
+      color: "#b8bcc4",
+      border: "#b8bcc4",
+      glow: "rgba(184,188,196,.4)",
+      background:
+        "linear-gradient(135deg, rgba(184,188,196,.14), rgba(0,217,255,.07))",
+    },
+    iron: {
+      color: "#8f9aa8",
+      border: "#8f9aa8",
+      glow: "rgba(143,154,168,.46)",
+      background:
+        "linear-gradient(135deg, rgba(143,154,168,.18), rgba(0,217,255,.07))",
+    },
+    bronze: {
+      color: "#cd7f32",
+      border: "#cd7f32",
+      glow: "rgba(205,127,50,.5)",
+      background:
+        "linear-gradient(135deg, rgba(205,127,50,.20), rgba(255,47,208,.08))",
+    },
+    silver: {
+      color: "#d8dde6",
+      border: "#d8dde6",
+      glow: "rgba(216,221,230,.52)",
+      background:
+        "linear-gradient(135deg, rgba(216,221,230,.18), rgba(0,217,255,.09))",
+    },
+    gold: {
+      color: "#ffd700",
+      border: "#ffd700",
+      glow: "rgba(255,215,0,.55)",
+      background:
+        "linear-gradient(135deg, rgba(255,215,0,.22), rgba(255,47,208,.09))",
+    },
+    platinum: {
+      color: "#e5e4e2",
+      border: "#e5e4e2",
+      glow: "rgba(229,228,226,.58)",
+      background:
+        "linear-gradient(135deg, rgba(229,228,226,.20), rgba(0,217,255,.10))",
+    },
+    emerald: {
+      color: "#00ff99",
+      border: "#00ff99",
+      glow: "rgba(0,255,153,.56)",
+      background:
+        "linear-gradient(135deg, rgba(0,255,153,.20), rgba(0,217,255,.10))",
+    },
+    sapphire: {
+      color: "#2f80ff",
+      border: "#2f80ff",
+      glow: "rgba(47,128,255,.58)",
+      background:
+        "linear-gradient(135deg, rgba(47,128,255,.22), rgba(255,47,208,.09))",
+    },
+    ruby: {
+      color: "#ff3b5c",
+      border: "#ff3b5c",
+      glow: "rgba(255,59,92,.58)",
+      background:
+        "linear-gradient(135deg, rgba(255,59,92,.22), rgba(255,47,208,.10))",
+    },
+    diamond: {
+      color: "#7df9ff",
+      border: "#7df9ff",
+      glow: "rgba(125,249,255,.65)",
+      background:
+        "linear-gradient(135deg, rgba(125,249,255,.22), rgba(255,47,208,.12))",
+    },
+  };
+
+  return (
+    themes[normalized] || {
+      color: "#ff45d8",
+      border: "#ff45d8",
+      glow: "rgba(255,69,216,.52)",
+      background:
+        "linear-gradient(135deg, rgba(255,69,216,.16), rgba(0,217,255,.10))",
+    }
+  );
+}
+
+function getTierThresholds() {
+  return [
+    { name: "Stone", amount: 0 },
+    { name: "Iron", amount: 250 },
+    { name: "Bronze", amount: 500 },
+    { name: "Silver", amount: 1000 },
+    { name: "Gold", amount: 2500 },
+    { name: "Platinum", amount: 5000 },
+    { name: "Emerald", amount: 10000 },
+    { name: "Sapphire", amount: 20000 },
+    { name: "Ruby", amount: 35000 },
+    { name: "Diamond", amount: 50000 },
+  ];
+}
+
+function getTierProgress(
+  currentTier: string,
+  lifetimeSpend: number
+) {
+  const tiers = getTierThresholds();
+
+  const index = Math.max(
+    0,
+    tiers.findIndex(
+      (tier) =>
+        tier.name.toLowerCase() ===
+        currentTier.toLowerCase()
+    )
+  );
+
+  const current =
+    tiers[index] || tiers[0];
+
+  const next =
+    tiers[index + 1] || null;
+
+  if (!next) {
+    return {
+      percent: 100,
+      remaining: 0,
+      nextTier: "Top Tier",
+    };
+  }
+
+  const span =
+    next.amount - current.amount;
+
+  const progress =
+    lifetimeSpend - current.amount;
+
+  const percent =
+    span > 0
+      ? Math.max(
+          0,
+          Math.min(
+            100,
+            (progress / span) * 100
+          )
+        )
+      : 100;
+
+  return {
+    percent,
+    remaining: Math.max(
+      0,
+      next.amount - lifetimeSpend
+    ),
+    nextTier: next.name,
+  };
+}
+
 export default function AccountPage() {
-  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
-  const { addToCart } = useCart();
+  const supabase = useMemo(
+    () => createClient(),
+    []
+  );
 
-  const [loading, setLoading] = useState(true);
-  const [email, setEmail] = useState("");
-  const [orders, setOrders] = useState<any[]>([]);
-  const [profile, setProfile] = useState<any>(null);
-  const [isSalesRep, setIsSalesRep] = useState(false);
+  const { addToCart } =
+    useCart();
 
-  const [passwordRecoveryRequired, setPasswordRecoveryRequired] =
+  const [loading, setLoading] =
+    useState(true);
+
+  const [email, setEmail] =
+    useState("");
+
+  const [orders, setOrders] =
+    useState<AccountOrder[]>([]);
+
+  const [profile, setProfile] =
+    useState<AccountProfile | null>(
+      null
+    );
+
+  const [isSalesRep, setIsSalesRep] =
     useState(false);
 
-  const [reorderingId, setReorderingId] = useState<string | null>(null);
+  const [
+    userId,
+    setUserId,
+  ] = useState("");
+
+  const [
+    editingDelivery,
+    setEditingDelivery,
+  ] = useState(false);
+
+  const [
+    savingDelivery,
+    setSavingDelivery,
+  ] = useState(false);
+
+  const [
+    deliveryMessage,
+    setDeliveryMessage,
+  ] = useState("");
+
+  const [
+    deliveryForm,
+    setDeliveryForm,
+  ] = useState<DeliveryForm>({
+    full_name: "",
+    organization: "",
+    phone: "",
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
+  });
+
+
+  const [
+    reorderingId,
+    setReorderingId,
+  ] = useState<string | null>(
+    null
+  );
+
+  const [loadError, setLoadError] =
+    useState("");
+
+  const [
+    confirmedOrderNumber,
+    setConfirmedOrderNumber,
+  ] = useState<string | null>(
+    null
+  );
+
+  const [
+    showConfirmedBanner,
+    setShowConfirmedBanner,
+  ] = useState(false);
 
   useEffect(() => {
-    setPasswordRecoveryRequired(
-      localStorage.getItem("pugpep_password_recovery") === "yes"
+    const params =
+      new URLSearchParams(
+        window.location.search
+      );
+
+    setConfirmedOrderNumber(
+      params.get("order")
+    );
+
+    setShowConfirmedBanner(
+      params.get("confirmed") ===
+        "1"
     );
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function loadAccount() {
       setLoading(true);
+      setLoadError("");
       setIsSalesRep(false);
 
-      const {
-        data: userData,
-        error: userError,
-      } = await supabase.auth.getUser();
+      try {
+        const {
+          data: sessionData,
+          error: sessionError,
+        } =
+          await supabase.auth.getSession();
 
-      if (userError) {
-        console.error("Account loading error:", {
-          message: userError.message,
-          status: userError.status,
-          name: userError.name,
+        if (sessionError) {
+          console.error(
+            "Session loading error:",
+            sessionError
+          );
+        }
+
+        let session =
+          sessionData.session;
+
+        if (!session) {
+          await new Promise(
+            (resolve) =>
+              setTimeout(
+                resolve,
+                250
+              )
+          );
+
+          const {
+            data:
+              retrySessionData,
+          } =
+            await supabase.auth.getSession();
+
+          session =
+            retrySessionData.session;
+        }
+
+        if (!session?.user) {
+          if (!cancelled) {
+            router.replace(
+              "/login?redirect=/account"
+            );
+          }
+
+          return;
+        }
+
+        const user =
+          session.user;
+
+        setUserId(
+          user.id
+        );
+
+        localStorage.removeItem(
+          "pugpep_password_recovery"
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setEmail(
+          user.email || ""
+        );
+
+        const [
+          profileResult,
+          representativeResult,
+          orderResult,
+        ] =
+          await Promise.all([
+            supabase
+              .from(
+                "customer_profiles"
+              )
+              .select("*")
+              .eq(
+                "id",
+                user.id
+              )
+              .maybeSingle(),
+
+            supabase.rpc(
+              "get_my_sales_rep_dashboard"
+            ),
+
+            supabase
+              .from("orders")
+              .select("*")
+              .eq(
+                "user_id",
+                user.id
+              )
+              .order(
+                "created_at",
+                {
+                  ascending:
+                    false,
+                }
+              ),
+          ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        if (
+          profileResult.error
+        ) {
+          console.error(
+            "Profile loading error:",
+            profileResult.error
+          );
+        }
+
+        const loadedProfile =
+          (
+            profileResult.data ||
+            null
+          ) as AccountProfile | null;
+
+        setProfile(
+          loadedProfile
+        );
+
+        setDeliveryForm({
+          full_name:
+            loadedProfile?.full_name ||
+            "",
+          organization:
+            loadedProfile?.organization ||
+            "",
+          phone:
+            loadedProfile?.phone ||
+            "",
+          address:
+            loadedProfile?.address ||
+            "",
+          city:
+            loadedProfile?.city ||
+            "",
+          state:
+            loadedProfile?.state ||
+            "",
+          zip:
+            loadedProfile?.zip ||
+            "",
         });
 
-        setLoading(false);
-        return;
+        if (
+          representativeResult.error
+        ) {
+          console.error(
+            "Representative dashboard check failed:",
+            representativeResult.error
+          );
+
+          setIsSalesRep(false);
+        } else {
+          const dashboard =
+            representativeResult.data as RepresentativeDashboardResult | null;
+
+          const hasDashboard =
+            dashboard !== null &&
+            typeof dashboard ===
+              "object" &&
+            !Array.isArray(
+              dashboard
+            ) &&
+            Object.keys(
+              dashboard
+            ).length > 0;
+
+          setIsSalesRep(
+            hasDashboard
+          );
+        }
+
+        if (
+          orderResult.error
+        ) {
+          console.error(
+            "Orders loading error:",
+            orderResult.error
+          );
+        }
+
+        setOrders(
+          (
+            orderResult.data ||
+            []
+          ) as AccountOrder[]
+        );
+      } catch (error) {
+        console.error(
+          "Account loading failed:",
+          error
+        );
+
+        if (!cancelled) {
+          setLoadError(
+            "We could not load your account right now. Please refresh and try again."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-
-      const user = userData.user;
-
-      if (!user) {
-        setEmail("");
-        setOrders([]);
-        setProfile(null);
-        setIsSalesRep(false);
-        setLoading(false);
-        return;
-      }
-
-      setEmail(user.email || "");
-
-      /*
-       * Load the customer's profile.
-       */
-      const {
-        data: profileData,
-        error: profileError,
-      } = await supabase
-        .from("customer_profiles")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profileError) {
-        console.error("Profile loading error:", {
-          message: profileError.message,
-          details: profileError.details,
-          hint: profileError.hint,
-          code: profileError.code,
-        });
-      }
-
-      setProfile(profileData || null);
-
-      /*
-       * Check whether the logged-in user has a
-       * representative dashboard.
-       *
-       * This uses the secure RPC instead of reading
-       * the sales_reps table directly.
-       */
-      const {
-        data: representativeData,
-        error: representativeError,
-      } = await supabase.rpc("get_my_sales_rep_dashboard");
-
-      if (representativeError) {
-        console.error("Representative dashboard check failed:", {
-          message: representativeError.message,
-          details: representativeError.details,
-          hint: representativeError.hint,
-          code: representativeError.code,
-        });
-
-        setIsSalesRep(false);
-      } else {
-        const dashboard =
-          representativeData as RepresentativeDashboardResult | null;
-
-        const hasRepresentativeDashboard =
-          dashboard !== null &&
-          dashboard !== undefined &&
-          typeof dashboard === "object" &&
-          !Array.isArray(dashboard) &&
-          Object.keys(dashboard).length > 0;
-
-        setIsSalesRep(hasRepresentativeDashboard);
-      }
-
-      /*
-       * Load the logged-in customer's previous orders.
-       */
-      const {
-        data: orderData,
-        error: orderError,
-      } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", {
-          ascending: false,
-        });
-
-      if (orderError) {
-        console.error("Orders loading error:", {
-          message: orderError.message,
-          details: orderError.details,
-          hint: orderError.hint,
-          code: orderError.code,
-        });
-      }
-
-      setOrders(orderData || []);
-      setLoading(false);
     }
 
     void loadAccount();
-  }, [supabase]);
 
-  async function reorder(orderId: string) {
-    setReorderingId(orderId);
+    const {
+      data:
+        authListener,
+    } =
+      supabase.auth.onAuthStateChange(
+        (
+          event,
+          session
+        ) => {
+          if (
+            event ===
+              "SIGNED_OUT" ||
+            !session
+          ) {
+            router.replace(
+              "/login?redirect=/account"
+            );
+          }
+        }
+      );
+
+    return () => {
+      cancelled = true;
+
+      authListener.subscription.unsubscribe();
+    };
+  }, [
+    router,
+    supabase,
+  ]);
+
+  function updateDeliveryField(
+    field: keyof DeliveryForm,
+    value: string
+  ) {
+    setDeliveryForm(
+      (
+        previous
+      ) => ({
+        ...previous,
+        [field]:
+          value,
+      })
+    );
+
+    setDeliveryMessage("");
+  }
+
+  function cancelDeliveryEdit() {
+    setDeliveryForm({
+      full_name:
+        profile?.full_name ||
+        "",
+      organization:
+        profile?.organization ||
+        "",
+      phone:
+        profile?.phone ||
+        "",
+      address:
+        profile?.address ||
+        "",
+      city:
+        profile?.city ||
+        "",
+      state:
+        profile?.state ||
+        "",
+      zip:
+        profile?.zip ||
+        "",
+    });
+
+    setDeliveryMessage("");
+    setEditingDelivery(false);
+  }
+
+  async function saveDeliveryInformation() {
+    if (!userId) {
+      setDeliveryMessage(
+        "Your account could not be identified. Please refresh and try again."
+      );
+      return;
+    }
+
+    if (
+      !deliveryForm.full_name.trim() ||
+      !deliveryForm.address.trim() ||
+      !deliveryForm.city.trim() ||
+      !deliveryForm.state.trim() ||
+      !deliveryForm.zip.trim()
+    ) {
+      setDeliveryMessage(
+        "Name, address, city, state, and ZIP code are required."
+      );
+      return;
+    }
+
+    setSavingDelivery(true);
+    setDeliveryMessage("");
+
+    const cleanedDelivery = {
+      full_name:
+        deliveryForm.full_name.trim(),
+      organization:
+        deliveryForm.organization.trim(),
+      phone:
+        deliveryForm.phone.trim(),
+      address:
+        deliveryForm.address.trim(),
+      city:
+        deliveryForm.city.trim(),
+      state:
+        deliveryForm.state
+          .trim()
+          .toUpperCase(),
+      zip:
+        deliveryForm.zip.trim(),
+    };
+
+    const {
+      data,
+      error,
+    } =
+      await supabase
+        .from(
+          "customer_profiles"
+        )
+        .update(
+          cleanedDelivery
+        )
+        .eq(
+          "id",
+          userId
+        )
+        .select("*")
+        .maybeSingle();
+
+    setSavingDelivery(false);
+
+    if (error) {
+      console.error(
+        "Delivery information update failed:",
+        error
+      );
+
+      setDeliveryMessage(
+        error.message
+      );
+      return;
+    }
+
+    const updatedProfile =
+      (
+        data || {
+          ...profile,
+          ...cleanedDelivery,
+        }
+      ) as AccountProfile;
+
+    setProfile(
+      updatedProfile
+    );
+
+    setDeliveryForm({
+      full_name:
+        updatedProfile.full_name ||
+        "",
+      organization:
+        updatedProfile.organization ||
+        "",
+      phone:
+        updatedProfile.phone ||
+        "",
+      address:
+        updatedProfile.address ||
+        "",
+      city:
+        updatedProfile.city ||
+        "",
+      state:
+        updatedProfile.state ||
+        "",
+      zip:
+        updatedProfile.zip ||
+        "",
+    });
+
+    setDeliveryMessage(
+      "Delivery information saved."
+    );
+
+    setEditingDelivery(false);
+  }
+
+  async function reorder(
+    orderId: string
+  ) {
+    setReorderingId(
+      orderId
+    );
 
     try {
       const {
         data: items,
         error: itemsError,
-      } = await supabase
-        .from("order_items")
-        .select("*")
-        .eq("order_id", orderId);
+      } =
+        await supabase
+          .from("order_items")
+          .select("*")
+          .eq(
+            "order_id",
+            orderId
+          );
 
       if (itemsError) {
-        alert(itemsError.message);
+        alert(
+          itemsError.message
+        );
         return;
       }
 
-      if (!items || items.length === 0) {
-        alert("No items found for this order.");
+      if (
+        !items ||
+        items.length === 0
+      ) {
+        alert(
+          "No items were found for this order."
+        );
         return;
       }
 
       let addedItems = 0;
-      const skippedItems: string[] = [];
 
-      for (const item of items) {
-        const productName = String(
-          item.product_name || "Previous Order Item"
-        );
+      const skippedItems: string[] =
+        [];
 
-        const productSlug = String(item.product_slug || "");
-        const dosage = String(item.dosage || "");
-
-        const purchaseType: "single" | "kit" =
-          item.purchase_type === "kit" ? "kit" : "single";
-
-        const requestedQuantity = Math.max(
-          1,
-          Number(item.quantity || 1)
-        );
-
-        if (!productSlug || !dosage) {
-          skippedItems.push(
-            `${productName}: missing product slug or dosage.`
+      for (
+        const item
+        of items
+      ) {
+        const productName =
+          String(
+            item.product_name ||
+              "Previous Order Item"
           );
 
+        const productSlug =
+          String(
+            item.product_slug ||
+              ""
+          );
+
+        const dosage =
+          String(
+            item.dosage ||
+              ""
+          );
+
+        const purchaseType:
+          | "single"
+          | "kit" =
+          item.purchase_type ===
+          "kit"
+            ? "kit"
+            : "single";
+
+        const requestedQuantity =
+          Math.max(
+            1,
+            Number(
+              item.quantity ||
+                1
+            )
+          );
+
+        if (
+          !productSlug ||
+          !dosage
+        ) {
+          skippedItems.push(
+            `${productName}: missing product details.`
+          );
           continue;
         }
 
         const {
-          data: productData,
-          error: productError,
-        } = await supabase
-          .from("products")
-          .select("name, slug, image, is_active")
-          .eq("slug", productSlug)
-          .eq("is_active", true)
-          .maybeSingle();
+          data:
+            productData,
+        } =
+          await supabase
+            .from(
+              "products"
+            )
+            .select(
+              "name,slug,image,is_active"
+            )
+            .eq(
+              "slug",
+              productSlug
+            )
+            .eq(
+              "is_active",
+              true
+            )
+            .maybeSingle();
 
-        if (productError || !productData) {
+        if (!productData) {
           skippedItems.push(
             `${productName} ${dosage}: product is no longer available.`
           );
-
           continue;
         }
 
-        const product = productData as CurrentProduct;
+        const product =
+          productData as CurrentProduct;
 
         const {
-          data: optionData,
-          error: optionError,
-        } = await supabase
-          .from("product_options")
-          .select(
-            "product_slug, dosage, purchase_type, price, status, sale_active, sale_percent, cost"
-          )
-          .eq("product_slug", productSlug)
-          .eq("dosage", dosage)
-          .eq("purchase_type", purchaseType)
-          .maybeSingle();
+          data:
+            optionData,
+        } =
+          await supabase
+            .from(
+              "product_options"
+            )
+            .select(
+              "id,product_slug,dosage,purchase_type,price,status,cost"
+            )
+            .eq(
+              "product_slug",
+              productSlug
+            )
+            .eq(
+              "dosage",
+              dosage
+            )
+            .eq(
+              "purchase_type",
+              purchaseType
+            )
+            .maybeSingle();
 
-        if (optionError || !optionData) {
+        if (!optionData) {
           skippedItems.push(
-            `${productName} ${dosage} ${purchaseType}: this option no longer exists.`
+            `${productName} ${dosage}: this option no longer exists.`
           );
-
           continue;
         }
 
-        const option = optionData as CurrentProductOption;
+        const option =
+          optionData as CurrentProductOption;
 
         const {
-          data: inventoryData,
-          error: inventoryError,
-        } = await supabase
-          .from("inventory")
-          .select("quantity")
-          .eq("product_slug", productSlug)
-          .eq("dosage", dosage)
-          .eq("purchase_type", "single")
-          .maybeSingle();
+          data:
+            inventoryData,
+        } =
+          await supabase
+            .from(
+              "inventory"
+            )
+            .select(
+              "quantity"
+            )
+            .eq(
+              "product_slug",
+              productSlug
+            )
+            .eq(
+              "dosage",
+              dosage
+            )
+            .eq(
+              "purchase_type",
+              "single"
+            )
+            .maybeSingle();
 
-        if (inventoryError) {
-          skippedItems.push(
-            `${productName} ${dosage}: inventory could not be checked.`
+        const inventory =
+          inventoryData as CurrentInventory | null;
+
+        const availableSingleUnits =
+          Number(
+            inventory?.quantity ||
+              0
           );
 
-          continue;
-        }
+        const optionStatus =
+          String(
+            option.status ||
+              "in stock"
+          );
 
-        const inventory = inventoryData as CurrentInventory | null;
+        const isPreSale =
+          optionStatus ===
+          "pre-sale";
 
-        const availableSingleUnits = Number(
-          inventory?.quantity || 0
-        );
+        const isOutOfStock =
+          optionStatus ===
+          "out of stock";
 
-        const optionStatus = String(option.status || "in stock");
-        const isPreSale = optionStatus === "pre-sale";
-        const isOutOfStock = optionStatus === "out of stock";
+        let maxAvailable:
+          | number
+          | undefined;
 
-        let maxAvailable: number | undefined;
-
-        if (purchaseType === "single") {
-          maxAvailable = availableSingleUnits;
+        if (
+          purchaseType ===
+          "single"
+        ) {
+          maxAvailable =
+            availableSingleUnits;
 
           if (
             isOutOfStock ||
-            availableSingleUnits < requestedQuantity
+            availableSingleUnits <
+              requestedQuantity
           ) {
             skippedItems.push(
               `${productName} ${dosage}: only ${availableSingleUnits} currently available.`
             );
-
             continue;
           }
-        } else if (!isPreSale) {
-          maxAvailable = Math.floor(availableSingleUnits / 10);
+        } else if (
+          !isPreSale
+        ) {
+          maxAvailable =
+            Math.floor(
+              availableSingleUnits /
+                10
+            );
 
           if (
             isOutOfStock ||
-            maxAvailable < requestedQuantity
+            maxAvailable <
+              requestedQuantity
           ) {
             skippedItems.push(
               `${productName} ${dosage} kit: only ${maxAvailable} kit(s) currently available.`
             );
-
             continue;
           }
         }
 
-        const regularPrice = Number(option.price || 0);
-        const salePercent = Number(option.sale_percent || 0);
-
-        const wasOnSale =
-          Boolean(option.sale_active) &&
-          salePercent > 0;
-
-        const salePrice = wasOnSale
-          ? Number(
-              (
-                regularPrice *
-                (1 - salePercent / 100)
-              ).toFixed(2)
-            )
-          : regularPrice;
-
-        const currentPrice = wasOnSale
-          ? salePrice
-          : regularPrice;
+        const currentPrice =
+          Number(
+            option.price ||
+              0
+          );
 
         addToCart(
           {
-            name: String(product.name || productName),
-            slug: productSlug,
+            productOptionId:
+              option.id,
 
-            image: String(
-              product.image ||
-                item.image ||
-                "/pugpep-logo.png"
-            ),
+            name:
+              String(
+                product.name ||
+                  productName
+              ),
+
+            slug:
+              productSlug,
+
+            image:
+              String(
+                product.image ||
+                  item.image ||
+                  "/pugpep-logo.png"
+              ),
 
             dosage,
             purchaseType,
-            price: currentPrice,
-            regularPrice,
-            salePrice,
-            wasOnSale,
-
-            salePercent: wasOnSale
-              ? salePercent
-              : 0,
-
-            status: optionStatus,
-            cost: Number(option.cost || 0),
+            price:
+              currentPrice,
+            regularPrice:
+              currentPrice,
+            salePrice:
+              currentPrice,
+            wasOnSale:
+              false,
+            salePercent:
+              0,
+            status:
+              optionStatus,
+            cost:
+              Number(
+                option.cost ||
+                  0
+              ),
             maxAvailable,
           },
           requestedQuantity
@@ -390,554 +1084,1419 @@ export default function AccountPage() {
         addedItems += 1;
       }
 
-      if (addedItems === 0) {
+      if (
+        addedItems === 0
+      ) {
         alert(
           `Nothing was added to the cart.\n\n${skippedItems.join(
             "\n"
           )}`
         );
-
         return;
       }
 
-      if (skippedItems.length > 0) {
+      if (
+        skippedItems.length >
+        0
+      ) {
         alert(
-          `${addedItems} item type(s) added using current pricing and inventory.\n\nThe following could not be added:\n${skippedItems.join(
+          `${addedItems} item type(s) were added using current pricing and inventory.\n\nThe following could not be added:\n${skippedItems.join(
             "\n"
           )}`
         );
-      } else {
-        alert(
-          "Order added back to cart using current pricing and inventory."
-        );
       }
 
-      router.push("/checkout");
+      router.push(
+        "/checkout"
+      );
     } finally {
-      setReorderingId(null);
+      setReorderingId(
+        null
+      );
     }
-  }
-
-  if (passwordRecoveryRequired) {
-    return (
-      <main style={page}>
-        <h1 style={{ color: "#ff45d8" }}>
-          Password Reset Required
-        </h1>
-
-        <p>
-          Please finish updating your password before viewing your
-          account.
-        </p>
-      </main>
-    );
   }
 
   if (loading) {
     return (
       <main style={page}>
-        Loading account...
+        <div style={centerCard}>
+          <div style={loadingRing} />
+
+          <h1 style={title}>
+            Loading My Lab
+          </h1>
+
+          <p style={muted}>
+            Preparing your account...
+          </p>
+        </div>
       </main>
     );
   }
 
-  if (!email) {
+  if (loadError) {
     return (
       <main style={page}>
-        <h1 style={{ color: "#ff45d8" }}>
-          My Account
-        </h1>
+        <div style={centerCard}>
+          <h1 style={title}>
+            My Lab
+          </h1>
 
-        <p>
-          Please log in to view your account.
-        </p>
+          <p style={errorText}>
+            {loadError}
+          </p>
 
-        <Link
-          href="/login"
-          style={{ color: "#00d9ff" }}
-        >
-          Go to Login
-        </Link>
+          <button
+            type="button"
+            onClick={() =>
+              window.location.reload()
+            }
+            style={primaryButton}
+          >
+            Try Again
+          </button>
+        </div>
       </main>
     );
   }
+
+  const confirmedOrder =
+    confirmedOrderNumber;
+
+  const confirmed =
+    showConfirmedBanner;
+
+  const tier =
+    profile?.vip_tier ||
+    "Stone";
+
+  const lifetimeSpend =
+    Number(
+      profile?.lifetime_spend ||
+        0
+    );
+
+  const rewardPoints =
+    Number(
+      profile?.reward_points ||
+        0
+    );
+
+  const tierTheme =
+    getTierTheme(
+      tier
+    );
+
+  const progress =
+    getTierProgress(
+      tier,
+      lifetimeSpend
+    );
+
+  const activeOrders =
+    orders.filter(
+      (order) =>
+        order.shipping_status !==
+          "delivered" &&
+        order.status !==
+          "cancelled"
+    );
 
   return (
     <main style={page}>
-      <h1 style={{ color: "#ff45d8" }}>
-        My Account
-      </h1>
-
-      <p style={{ color: "#cccccc" }}>
-        Logged in as {email}
-      </p>
-
-      {isSalesRep && (
-        <section style={representativeBox}>
-          <p style={representativeLabel}>
-            Sales Representative
-          </p>
-
-          <h2 style={representativeHeading}>
-            Representative Dashboard
-          </h2>
-
-          <p style={representativeText}>
-            View your assigned customers, promotional codes,
-            sales history, and commission information.
-          </p>
-
-          <Link
-            href="/rep"
-            style={representativeButton}
-          >
-            Open Representative Dashboard
-          </Link>
-        </section>
-      )}
-
-      {profile && (
-        <section style={box}>
-          <h2 style={{ color: "#00d9ff" }}>
-            VIP Rewards
-          </h2>
-
-          <div style={tierOverview}>
-            <p style={currentTier}>
-              Current Tier: {profile.vip_tier || "Stone"}
+      <div style={container}>
+        <header style={header}>
+          <div>
+            <p style={eyebrow}>
+              CUSTOMER DASHBOARD
             </p>
 
-            <p style={tierList}>
-              Stone → $0+ <br />
-              Iron → $250+ <br />
-              Bronze → $500+ <br />
-              Silver → $1,000+ <br />
-              Gold → $2,500+ <br />
-              Platinum → $5,000+ <br />
-              Emerald → $10,000+ <br />
-              Sapphire → $20,000+ <br />
-              Ruby → $35,000+ <br />
-              Diamond → $50,000+
+            <h1 style={title}>
+              My Lab
+            </h1>
+
+            <p style={subtitle}>
+              Welcome back{profile?.full_name ? `, ${profile.full_name}` : ""}.
             </p>
           </div>
 
-          <p>
-            <strong>Tier:</strong>{" "}
-
-            <span style={tierName}>
-              {profile.vip_tier || "Stone"}
-            </span>
-          </p>
-
-          <p>
-            <strong>Lifetime Spend:</strong>{" "}
-            $
-            {Number(
-              profile.lifetime_spend || 0
-            ).toFixed(2)}
-          </p>
-
-          <p style={rewardDescription}>
-            Reward points are earned with every purchase and can
-            be redeemed for discounts on future orders. The more
-            you spend, the higher your VIP tier and the more
-            rewards you unlock.
-          </p>
-
-          <p style={rewardNote}>
-            Note: VIP tier and rewards are updated after each
-            order is completed.
-          </p>
-
-          <p>
-            <strong>Reward Points:</strong>{" "}
-            {Number(profile.reward_points || 0)}
-          </p>
-
-          <div style={{ marginTop: 18 }}>
-            <strong style={{ color: "#00d9ff" }}>
-              Tier Benefits
-            </strong>
-
-            <ul style={benefitList}>
-              {getTierBenefits(
-                profile.vip_tier || "Stone"
-              ).map((benefit: string) => (
-                <li key={benefit}>
-                  {benefit}
-                </li>
-              ))}
-            </ul>
+          <div style={emailBadge}>
+            {email}
           </div>
-        </section>
-      )}
+        </header>
 
-      <section style={box}>
-        <h2 style={{ color: "#00d9ff" }}>
-          Saved Shipping Info
-        </h2>
+        {confirmed &&
+          confirmedOrder && (
+          <section style={successBanner}>
+            <div style={successIcon}>
+              ✓
+            </div>
 
-        {profile?.full_name ? (
-          <>
-            <p>{profile.full_name}</p>
-            <p>{profile.phone}</p>
-            <p>{profile.address}</p>
-
-            <p>
-              {profile.city}, {profile.state} {profile.zip}
-            </p>
-          </>
-        ) : (
-          <p style={{ color: "#cccccc" }}>
-            No saved shipping info yet. It will save after checkout.
-          </p>
-        )}
-      </section>
-
-      {profile?.has_lifetime_free_shipping && (
-        <section style={box}>
-          <h2 style={{ color: "#00d9ff" }}>
-            Lifetime Free Shipping
-          </h2>
-
-          <p style={freeShippingText}>
-            You have Lifetime FREE Shipping on every order.
-          </p>
-        </section>
-      )}
-
-      <section style={box}>
-        <h2 style={{ color: "#00d9ff" }}>
-          Previous Orders
-        </h2>
-
-        {orders.length === 0 ? (
-          <p>
-            No previous orders found.
-          </p>
-        ) : (
-          orders.map((order) => (
-            <div
-              key={order.id}
-              style={orderCard}
-            >
-              <strong>
-                {order.order_number}
-              </strong>
-
-              <p>
-                Total: $
-                {Number(order.total || 0).toFixed(2)}
+            <div>
+              <p style={successEyebrow}>
+                ORDER CONFIRMED
               </p>
 
-              <div style={badgeRow}>
-                <span style={getPaymentBadge(order.status)}>
-                  {order.status === "paid"
-                    ? "PAID"
-                    : "PENDING PAYMENT"}
-                </span>
+              <h2 style={successTitle}>
+                Your Order Was Submitted
+              </h2>
 
-                <span
-                  style={getShippingBadge(
-                    order.shipping_status
-                  )}
+              <p style={successText}>
+                Order {confirmedOrder} is now in your history below.
+              </p>
+            </div>
+          </section>
+        )}
+
+        <section
+          style={{
+            ...tierHero,
+
+            borderColor:
+              tierTheme.border,
+
+            background:
+              tierTheme.background,
+
+            boxShadow:
+              `0 0 24px ${tierTheme.glow}`,
+          }}
+        >
+          <div>
+            <p
+              style={{
+                ...eyebrow,
+                color:
+                  tierTheme.color,
+              }}
+            >
+              LAB STATUS
+            </p>
+
+            <h2
+              style={{
+                ...tierTitle,
+                color:
+                  tierTheme.color,
+
+                textShadow:
+                  `0 0 14px ${tierTheme.glow}`,
+              }}
+            >
+              {tier}
+            </h2>
+
+            <p style={tierText}>
+              {progress.nextTier ===
+              "Top Tier"
+                ? "You’ve reached the highest Lab Status."
+                : `${money(
+                    progress.remaining
+                  )} until ${progress.nextTier}`}
+            </p>
+
+            <div style={progressTrack}>
+              <div
+                style={{
+                  ...progressFill,
+
+                  width:
+                    `${progress.percent}%`,
+
+                  background:
+                    tierTheme.color,
+
+                  boxShadow:
+                    `0 0 12px ${tierTheme.glow}`,
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={statGrid}>
+            <StatCard
+              label="Lifetime Spend"
+              value={money(
+                lifetimeSpend
+              )}
+            />
+
+            <StatCard
+              label="PugPoints"
+              value={String(
+                rewardPoints
+              )}
+            />
+
+            <StatCard
+              label="Delivery"
+              value={
+                profile?.has_lifetime_free_shipping
+                  ? "Lifetime Free"
+                  : "Standard Benefits"
+              }
+            />
+          </div>
+        </section>
+
+        <div
+          className="account-grid"
+          style={mainGrid}
+        >
+          <section style={stack}>
+            <div style={card}>
+              <div style={sectionHeader}>
+                <div>
+                  <p style={sectionEyebrow}>
+                    ACTIVE ORDERS
+                  </p>
+
+                  <h2 style={sectionTitle}>
+                    Current Activity
+                  </h2>
+                </div>
+
+                <Link
+                  href="/"
+                  style={smallButton}
                 >
-                  {order.shipping_status === "shipped"
-                    ? "SHIPPED"
-                    : order.shipping_status === "delivered"
-                    ? "DELIVERED"
-                    : "NOT SHIPPED"}
-                </span>
+                  Continue Shopping
+                </Link>
               </div>
 
-              {order.tracking_number && (
-                <p>
-                  Tracking: {order.tracking_number}
-                </p>
-              )}
+              {activeOrders.length ===
+              0 ? (
+                <div style={emptyState}>
+                  <div style={emptyIcon}>
+                    📦
+                  </div>
 
-              <button
-                type="button"
-                onClick={() => reorder(order.id)}
-                style={{
-                  ...reorderButton,
-                  opacity:
-                    reorderingId === order.id
-                      ? 0.65
-                      : 1,
-                }}
-                disabled={reorderingId !== null}
-              >
-                {reorderingId === order.id
-                  ? "Checking Current Stock..."
-                  : "Reorder"}
-              </button>
+                  <p style={muted}>
+                    You don’t have any active orders right now.
+                  </p>
+                </div>
+              ) : (
+                <div style={orderGrid}>
+                  {activeOrders.map(
+                    (order) => (
+                      <OrderCard
+                        key={
+                          order.id
+                        }
+                        order={
+                          order
+                        }
+                        reordering={
+                          reorderingId ===
+                          order.id
+                        }
+                        disabled={
+                          reorderingId !==
+                          null
+                        }
+                        reorder={() => {
+                          void reorder(
+                            order.id
+                          );
+                        }}
+                      />
+                    )
+                  )}
+                </div>
+              )}
             </div>
-          ))
-        )}
-      </section>
+
+            <div style={card}>
+              <p style={sectionEyebrow}>
+                ORDER HISTORY
+              </p>
+
+              <h2 style={sectionTitle}>
+                Previous Orders
+              </h2>
+
+              {orders.length ===
+              0 ? (
+                <p style={muted}>
+                  No previous orders found.
+                </p>
+              ) : (
+                <div style={orderGrid}>
+                  {orders.map(
+                    (order) => (
+                      <OrderCard
+                        key={
+                          order.id
+                        }
+                        order={
+                          order
+                        }
+                        reordering={
+                          reorderingId ===
+                          order.id
+                        }
+                        disabled={
+                          reorderingId !==
+                          null
+                        }
+                        reorder={() => {
+                          void reorder(
+                            order.id
+                          );
+                        }}
+                      />
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <aside style={stack}>
+            <div style={card}>
+              <div style={sectionHeader}>
+                <div>
+                  <p style={sectionEyebrow}>
+                    DELIVERY
+                  </p>
+
+                  <h2 style={sectionTitle}>
+                    Saved Delivery Information
+                  </h2>
+                </div>
+
+                {!editingDelivery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeliveryMessage("");
+                      setEditingDelivery(true);
+                    }}
+                    style={editDeliveryButton}
+                  >
+                    Edit
+                  </button>
+                )}
+              </div>
+
+              {editingDelivery ? (
+                <div className="delivery-form-grid" style={deliveryFormGrid}>
+                  <label style={deliveryField}>
+                    <span style={deliveryLabel}>
+                      Full Name
+                    </span>
+
+                    <input
+                      value={
+                        deliveryForm.full_name
+                      }
+                      onChange={(event) =>
+                        updateDeliveryField(
+                          "full_name",
+                          event.target.value
+                        )
+                      }
+                      style={deliveryInput}
+                      autoComplete="name"
+                    />
+                  </label>
+
+                  <label style={deliveryField}>
+                    <span style={deliveryLabel}>
+                      Organization
+                    </span>
+
+                    <input
+                      value={
+                        deliveryForm.organization
+                      }
+                      onChange={(event) =>
+                        updateDeliveryField(
+                          "organization",
+                          event.target.value
+                        )
+                      }
+                      style={deliveryInput}
+                      autoComplete="organization"
+                    />
+                  </label>
+
+                  <label style={deliveryField}>
+                    <span style={deliveryLabel}>
+                      Phone
+                    </span>
+
+                    <input
+                      value={
+                        deliveryForm.phone
+                      }
+                      onChange={(event) =>
+                        updateDeliveryField(
+                          "phone",
+                          event.target.value
+                        )
+                      }
+                      style={deliveryInput}
+                      autoComplete="tel"
+                    />
+                  </label>
+
+                  <label
+                    style={{
+                      ...deliveryField,
+                      gridColumn:
+                        "1 / -1",
+                    }}
+                  >
+                    <span style={deliveryLabel}>
+                      Street Address
+                    </span>
+
+                    <input
+                      value={
+                        deliveryForm.address
+                      }
+                      onChange={(event) =>
+                        updateDeliveryField(
+                          "address",
+                          event.target.value
+                        )
+                      }
+                      style={deliveryInput}
+                      autoComplete="street-address"
+                    />
+                  </label>
+
+                  <label style={deliveryField}>
+                    <span style={deliveryLabel}>
+                      City
+                    </span>
+
+                    <input
+                      value={
+                        deliveryForm.city
+                      }
+                      onChange={(event) =>
+                        updateDeliveryField(
+                          "city",
+                          event.target.value
+                        )
+                      }
+                      style={deliveryInput}
+                      autoComplete="address-level2"
+                    />
+                  </label>
+
+                  <label style={deliveryField}>
+                    <span style={deliveryLabel}>
+                      State
+                    </span>
+
+                    <input
+                      value={
+                        deliveryForm.state
+                      }
+                      onChange={(event) =>
+                        updateDeliveryField(
+                          "state",
+                          event.target.value
+                        )
+                      }
+                      style={deliveryInput}
+                      maxLength={2}
+                      autoComplete="address-level1"
+                    />
+                  </label>
+
+                  <label style={deliveryField}>
+                    <span style={deliveryLabel}>
+                      ZIP Code
+                    </span>
+
+                    <input
+                      value={
+                        deliveryForm.zip
+                      }
+                      onChange={(event) =>
+                        updateDeliveryField(
+                          "zip",
+                          event.target.value
+                        )
+                      }
+                      style={deliveryInput}
+                      autoComplete="postal-code"
+                    />
+                  </label>
+
+                  {deliveryMessage && (
+                    <p
+                      style={{
+                        ...deliveryMessageStyle,
+                        color:
+                          deliveryMessage ===
+                          "Delivery information saved."
+                            ? "#00ff99"
+                            : "#ff8a8a",
+                      }}
+                    >
+                      {deliveryMessage}
+                    </p>
+                  )}
+
+                  <div style={deliveryActionRow}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void saveDeliveryInformation();
+                      }}
+                      disabled={savingDelivery}
+                      style={{
+                        ...saveDeliveryButton,
+                        opacity:
+                          savingDelivery
+                            ? 0.65
+                            : 1,
+                      }}
+                    >
+                      {savingDelivery
+                        ? "Saving..."
+                        : "Save Delivery Information"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={cancelDeliveryEdit}
+                      disabled={savingDelivery}
+                      style={cancelDeliveryButton}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : profile?.full_name ? (
+                <>
+                  <div style={deliveryDetails}>
+                    <strong>
+                      {profile.full_name}
+                    </strong>
+
+                    {profile.organization && (
+                      <span>
+                        {profile.organization}
+                      </span>
+                    )}
+
+                    {profile.phone && (
+                      <span>
+                        {profile.phone}
+                      </span>
+                    )}
+
+                    <span>
+                      {profile.address}
+                    </span>
+
+                    <span>
+                      {profile.city},{" "}
+                      {profile.state}{" "}
+                      {profile.zip}
+                    </span>
+                  </div>
+
+                  {deliveryMessage && (
+                    <p style={deliverySavedMessage}>
+                      {deliveryMessage}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div style={deliveryEmptyState}>
+                  <p style={muted}>
+                    Add your delivery information so it is ready for future checkout.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeliveryMessage("");
+                      setEditingDelivery(true);
+                    }}
+                    style={editDeliveryButton}
+                  >
+                    Add Delivery Information
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div style={card}>
+              <p style={sectionEyebrow}>
+                QUICK ACTIONS
+              </p>
+
+              <h2 style={sectionTitle}>
+                Useful Links
+              </h2>
+
+              <div style={quickGrid}>
+                <Link
+                  href="/"
+                  style={quickButton}
+                >
+                  Browse Products
+                </Link>
+
+                <Link
+                  href="/quality"
+                  style={quickButton}
+                >
+                  View COAs
+                </Link>
+
+                <Link
+                  href="/contact"
+                  style={quickButton}
+                >
+                  Contact Support
+                </Link>
+
+                <a
+                  href="https://discord.gg/yas8DetFz"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={quickButton}
+                >
+                  Join Discord
+                </a>
+              </div>
+            </div>
+
+            {isSalesRep && (
+              <div style={repCard}>
+                <p style={sectionEyebrow}>
+                  REPRESENTATIVE
+                </p>
+
+                <h2 style={sectionTitle}>
+                  Sales Dashboard
+                </h2>
+
+                <p style={muted}>
+                  View customers, promotional codes, sales history, and commissions.
+                </p>
+
+                <Link
+                  href="/rep"
+                  style={primaryButton}
+                >
+                  Open Dashboard
+                </Link>
+              </div>
+            )}
+          </aside>
+        </div>
+
+        <style jsx>{`
+          @media (max-width: 900px) {
+            .account-grid {
+              grid-template-columns:
+                minmax(0, 1fr) !important;
+            }
+          }
+
+          @media (max-width: 620px) {
+            .delivery-form-grid {
+              grid-template-columns:
+                minmax(0, 1fr) !important;
+            }
+          }
+        `}</style>
+      </div>
     </main>
   );
 }
 
-function getPaymentBadge(status: string) {
-  return {
-    padding: "6px 12px",
-    borderRadius: 999,
-    fontWeight: "bold",
-    fontSize: 12,
+function StatCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div style={statCard}>
+      <span style={statLabel}>
+        {label}
+      </span>
 
+      <strong style={statValue}>
+        {value}
+      </strong>
+    </div>
+  );
+}
+
+function OrderCard({
+  order,
+  reorder,
+  reordering,
+  disabled,
+}: {
+  order: AccountOrder;
+  reorder: () => void;
+  reordering: boolean;
+  disabled: boolean;
+}) {
+  return (
+    <article style={orderCard}>
+      <div style={orderHeader}>
+        <div>
+          <p style={orderNumber}>
+            {order.order_number}
+          </p>
+
+          <span style={orderDate}>
+            {formatDate(
+              order.created_at
+            )}
+          </span>
+        </div>
+
+        <strong style={orderTotal}>
+          {money(
+            Number(
+              order.total ||
+                0
+            )
+          )}
+        </strong>
+      </div>
+
+      <div style={badgeRow}>
+        <span
+          style={getPaymentBadge(
+            order.status ||
+              "pending"
+          )}
+        >
+          {order.status ===
+          "paid"
+            ? "PAID"
+            : "PENDING PAYMENT"}
+        </span>
+
+        <span
+          style={getDeliveryBadge(
+            order.shipping_status ||
+              "not_shipped"
+          )}
+        >
+          {order.shipping_status ===
+          "delivered"
+            ? "DELIVERED"
+            : order.shipping_status ===
+              "shipped"
+            ? "IN DELIVERY"
+            : "PREPARING"}
+        </span>
+      </div>
+
+      {order.tracking_number && (
+        <p style={trackingText}>
+          Tracking:{" "}
+          {order.tracking_number}
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={reorder}
+        disabled={disabled}
+        style={{
+          ...reorderButton,
+          opacity:
+            disabled
+              ? 0.65
+              : 1,
+        }}
+      >
+        {reordering
+          ? "Checking Stock..."
+          : "Reorder"}
+      </button>
+    </article>
+  );
+}
+
+function getPaymentBadge(
+  status: string
+) {
+  return {
+    padding: "6px 10px",
+    borderRadius: 999,
+    fontWeight: 900,
+    fontSize: 11,
     background:
       status === "paid"
         ? "rgba(255,191,0,.12)"
         : "rgba(255,77,77,.12)",
-
     color:
       status === "paid"
         ? "#ffcc00"
-        : "#ff4d4d",
-
+        : "#ff6f6f",
     border:
       status === "paid"
         ? "1px solid #ffcc00"
-        : "1px solid #ff4d4d",
+        : "1px solid #ff6f6f",
   };
 }
 
-function getShippingBadge(status: string) {
+function getDeliveryBadge(
+  status: string
+) {
   return {
-    padding: "6px 12px",
+    padding: "6px 10px",
     borderRadius: 999,
-    fontWeight: "bold",
-    fontSize: 12,
-
+    fontWeight: 900,
+    fontSize: 11,
     background:
       status === "delivered"
         ? "rgba(0,255,153,.12)"
         : status === "shipped"
         ? "rgba(0,217,255,.12)"
-        : "rgba(255,255,255,.08)",
-
+        : "rgba(255,255,255,.07)",
     color:
       status === "delivered"
         ? "#00ff99"
         : status === "shipped"
         ? "#00d9ff"
         : "#aaaaaa",
-
     border:
       status === "delivered"
         ? "1px solid #00ff99"
         : status === "shipped"
         ? "1px solid #00d9ff"
-        : "1px solid #444444",
+        : "1px solid #444",
   };
-}
-
-function getTierBenefits(tier: string) {
-  switch (tier) {
-    case "Diamond":
-      return [
-        "Highest fulfillment priority",
-        "Maximum rewards multiplier",
-        "Personal VIP support",
-      ];
-
-    case "Ruby":
-      return [
-        "Custom discount events",
-        "First-access product drops",
-      ];
-
-    case "Sapphire":
-      return [
-        "Exclusive limited products",
-        "Private VIP announcements",
-      ];
-
-    case "Emerald":
-      return [
-        "VIP-only promo events",
-        "Highest inventory priority",
-      ];
-
-    case "Platinum":
-      return [
-        "Free shipping on all orders",
-        "Priority processing",
-      ];
-
-    case "Gold":
-      return [
-        "Discounted shipping",
-        "Early access to new products",
-      ];
-
-    case "Silver":
-      return [
-        "VIP Discord access",
-        "Free shipping weekends",
-      ];
-
-    case "Bronze":
-      return [
-        "Priority support",
-        "Exclusive promo access",
-      ];
-
-    case "Iron":
-      return [
-        "Birthday promo code",
-        "Early promotion access",
-      ];
-
-    default:
-      return [
-        "Earn reward points",
-        "Access to promotions",
-      ];
-  }
 }
 
 const page = {
   minHeight: "100vh",
-  background: "#000000",
-  color: "#ffffff",
-  padding: 35,
-};
-
-const box = {
-  marginTop: 25,
-  padding: 22,
-  border: "1px solid #333333",
-  borderRadius: 14,
-  background: "#080808",
-};
-
-const representativeBox = {
-  marginTop: 25,
-  padding: 22,
-  border: "1px solid #ff45d8",
-  borderRadius: 14,
-
+  overflowX: "hidden" as const,
+  padding:
+    "clamp(16px, 3vw, 32px)",
   background:
-    "linear-gradient(135deg, rgba(0,217,255,.10), rgba(255,69,216,.12))",
-
-  boxShadow:
-    "0 0 24px rgba(255,69,216,.12)",
+    "radial-gradient(circle at 12% 0%, rgba(255,47,208,.15), transparent 27%), radial-gradient(circle at 88% 4%, rgba(0,217,255,.15), transparent 30%), radial-gradient(circle at 50% 100%, rgba(0,255,153,.06), transparent 36%), #000",
+  color: "#ffffff",
 };
 
-const representativeLabel = {
+const container = {
+  width: "100%",
+  maxWidth: 1240,
+  margin: "0 auto",
+};
+
+const header = {
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems: "center",
+  gap: 18,
+  flexWrap: "wrap" as const,
+  marginBottom: 22,
+};
+
+const eyebrow = {
   margin: 0,
   color: "#00d9ff",
   fontSize: 12,
-  fontWeight: "bold",
-  textTransform: "uppercase" as const,
-  letterSpacing: 1,
+  fontWeight: 900,
+  letterSpacing: ".14em",
 };
 
-const representativeHeading = {
+const title = {
+  margin: "6px 0 0",
   color: "#ff45d8",
-  marginTop: 8,
-  marginBottom: 10,
+  fontSize:
+    "clamp(34px, 7vw, 52px)",
+  textShadow:
+    "0 0 16px rgba(255,47,208,.28)",
 };
 
-const representativeText = {
-  color: "#cccccc",
-  lineHeight: 1.6,
-  maxWidth: 700,
+const subtitle = {
+  margin: "8px 0 0",
+  color: "#b7b7b7",
 };
 
-const representativeButton = {
-  display: "inline-block",
-  marginTop: 12,
-  padding: "13px 18px",
-  borderRadius: 10,
-
-  background:
-    "linear-gradient(90deg, #00b7ff, #ff2fd0)",
-
-  color: "#ffffff",
-  textDecoration: "none",
-  fontWeight: "bold",
-};
-
-const tierOverview = {
-  marginTop: 12,
-  marginBottom: 18,
-  padding: 14,
-
+const emailBadge = {
+  padding: "10px 14px",
   border:
-    "1px solid rgba(255,255,255,.12)",
-
-  borderRadius: 10,
-
+    "1px solid rgba(0,217,255,.45)",
+  borderRadius: 999,
   background:
-    "rgba(255,255,255,.04)",
+    "rgba(0,217,255,.07)",
+  color: "#7df9ff",
+  fontWeight: 800,
+  overflowWrap:
+    "anywhere" as const,
 };
 
-const currentTier = {
+const successBanner = {
+  marginBottom: 22,
+  padding: "17px 19px",
+  display: "grid",
+  gridTemplateColumns:
+    "46px minmax(0, 1fr)",
+  gap: 14,
+  alignItems: "center",
+  border:
+    "1px solid rgba(0,255,153,.5)",
+  borderRadius: 15,
+  background:
+    "linear-gradient(90deg, rgba(0,255,153,.11), rgba(0,217,255,.08))",
+  boxShadow:
+    "0 0 20px rgba(0,255,153,.10)",
+};
+
+const successIcon = {
+  width: 42,
+  height: 42,
+  display: "grid",
+  placeItems: "center",
+  border:
+    "1px solid #00ff99",
+  borderRadius: 999,
+  background:
+    "rgba(0,255,153,.12)",
+  color: "#00ff99",
+  fontSize: 22,
+  fontWeight: 900,
+};
+
+const successEyebrow = {
   margin: 0,
   color: "#00ff99",
-  fontWeight: "bold",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: ".14em",
 };
 
-const tierList = {
-  marginTop: 10,
-  color: "#cccccc",
-  lineHeight: 1.8,
+const successTitle = {
+  margin: "4px 0 0",
+  color: "#ffffff",
 };
 
-const tierName = {
-  color: "#00ff99",
-  fontWeight: "bold",
+const successText = {
+  margin: "4px 0 0",
+  color: "#b8b8b8",
 };
 
-const rewardDescription = {
-  color: "#cccccc",
-  lineHeight: 1.6,
+const tierHero = {
+  padding:
+    "clamp(18px, 3vw, 24px)",
+  display: "grid",
+  gridTemplateColumns:
+    "minmax(240px, .9fr) minmax(0, 1.4fr)",
+  gap: 22,
+  alignItems: "center",
+  border: "1px solid",
+  borderRadius: 18,
 };
 
-const rewardNote = {
-  color: "#cccccc",
-  fontSize: 14,
-  marginTop: 10,
+const tierTitle = {
+  margin: "6px 0 0",
+  fontSize:
+    "clamp(30px, 6vw, 46px)",
 };
 
-const benefitList = {
-  marginTop: 10,
-  color: "#cccccc",
-  lineHeight: 1.8,
-  paddingLeft: 20,
+const tierText = {
+  margin: "7px 0 0",
+  color: "#c3c3c3",
 };
 
-const freeShippingText = {
-  color: "#00ff99",
-  fontWeight: "bold",
+const progressTrack = {
+  marginTop: 15,
+  height: 10,
+  borderRadius: 999,
+  background:
+    "rgba(255,255,255,.10)",
+  overflow: "hidden",
 };
 
-const badgeRow = {
-  display: "flex",
+const progressFill = {
+  height: "100%",
+  borderRadius: 999,
+};
+
+const statGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(3, minmax(0, 1fr))",
   gap: 10,
+};
+
+const statCard = {
+  minWidth: 0,
+  padding: 14,
+  display: "grid",
+  gap: 5,
+  border:
+    "1px solid rgba(255,255,255,.15)",
+  borderRadius: 12,
+  background:
+    "rgba(0,0,0,.28)",
+};
+
+const statLabel = {
+  color: "#9e9e9e",
+  fontSize: 11,
+  fontWeight: 900,
+  textTransform:
+    "uppercase" as const,
+};
+
+const statValue = {
+  color: "#ffffff",
+  fontSize:
+    "clamp(17px, 3vw, 22px)",
+  overflowWrap:
+    "anywhere" as const,
+};
+
+const mainGrid = {
+  marginTop: 24,
+  display: "grid",
+  gridTemplateColumns:
+    "minmax(0, 1.15fr) minmax(340px, .85fr)",
+  gap: 24,
+  alignItems: "start",
+};
+
+const stack = {
+  display: "grid",
+  gap: 18,
+};
+
+const card = {
+  padding:
+    "clamp(18px, 3vw, 24px)",
+  border:
+    "1px solid rgba(0,217,255,.40)",
+  borderRadius: 16,
+  background:
+    "linear-gradient(145deg, rgba(8,8,12,.96), rgba(15,8,18,.94))",
+  boxShadow:
+    "0 0 18px rgba(0,217,255,.08)",
+};
+
+const repCard = {
+  ...card,
+  border:
+    "1px solid rgba(255,47,208,.48)",
+};
+
+const sectionHeader = {
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems: "center",
+  gap: 14,
   flexWrap: "wrap" as const,
-  marginTop: 10,
+};
+
+const sectionEyebrow = {
+  margin: 0,
+  color: "#00d9ff",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: ".13em",
+};
+
+const sectionTitle = {
+  margin: "5px 0 0",
+  color: "#7df9ff",
+  fontSize:
+    "clamp(22px, 4vw, 29px)",
+};
+
+const orderGrid = {
+  marginTop: 16,
+  display: "grid",
+  gap: 12,
 };
 
 const orderCard = {
-  marginTop: 14,
-  padding: 16,
-  border: "1px solid #333333",
-  borderRadius: 12,
-  background: "#111111",
+  padding: 15,
+  border:
+    "1px solid rgba(255,255,255,.12)",
+  borderRadius: 13,
+  background:
+    "rgba(0,0,0,.28)",
+};
+
+const orderHeader = {
+  display: "flex",
+  justifyContent:
+    "space-between",
+  alignItems: "start",
+  gap: 12,
+};
+
+const orderNumber = {
+  margin: 0,
+  color: "#ff45d8",
+  fontWeight: 900,
+  overflowWrap:
+    "anywhere" as const,
+};
+
+const orderDate = {
+  display: "block",
+  marginTop: 4,
+  color: "#8f8f8f",
+  fontSize: 12,
+};
+
+const orderTotal = {
+  color: "#00ff99",
+  fontSize: 19,
+};
+
+const badgeRow = {
+  marginTop: 12,
+  display: "flex",
+  gap: 9,
+  flexWrap: "wrap" as const,
+};
+
+const trackingText = {
+  margin: "11px 0 0",
+  color: "#cfcfcf",
+  fontSize: 13,
 };
 
 const reorderButton = {
-  marginTop: 12,
+  marginTop: 13,
+  minHeight: 42,
   padding: "10px 14px",
-  borderRadius: 8,
-  border: "1px solid #00ff99",
-  background: "rgba(0,34,0,.85)",
+  border:
+    "1px solid #00ff99",
+  borderRadius: 9,
+  background:
+    "rgba(0,255,153,.07)",
   color: "#00ff99",
-  fontWeight: "bold",
+  fontWeight: 900,
   cursor: "pointer",
+};
+
+const deliveryDetails = {
+  marginTop: 15,
+  display: "grid",
+  gap: 7,
+  color: "#d0d0d0",
+  lineHeight: 1.5,
+};
+
+const editDeliveryButton = {
+  minHeight: 40,
+  padding: "9px 13px",
+  border:
+    "1px solid rgba(255,69,216,.55)",
+  borderRadius: 9,
+  background:
+    "rgba(255,69,216,.07)",
+  color: "#ff75df",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const deliveryFormGrid = {
+  marginTop: 16,
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(2, minmax(0, 1fr))",
+  gap: 12,
+};
+
+const deliveryField = {
+  minWidth: 0,
+  display: "grid",
+  gap: 6,
+};
+
+const deliveryLabel = {
+  color: "#bcbcc4",
+  fontSize: 12,
+  fontWeight: 900,
+};
+
+const deliveryInput = {
+  width: "100%",
+  minWidth: 0,
+  minHeight: 44,
+  boxSizing:
+    "border-box" as const,
+  padding: "10px 12px",
+  border:
+    "1px solid rgba(0,217,255,.34)",
+  borderRadius: 9,
+  background: "#050507",
+  color: "#ffffff",
+  outline: 0,
+};
+
+const deliveryActionRow = {
+  gridColumn: "1 / -1",
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap" as const,
+};
+
+const saveDeliveryButton = {
+  minHeight: 46,
+  padding: "10px 15px",
+  border:
+    "1px solid #45d97a",
+  borderRadius: 9,
+  background:
+    "linear-gradient(180deg, #2eea6f, #19b857)",
+  color: "#ffffff",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const cancelDeliveryButton = {
+  minHeight: 46,
+  padding: "10px 15px",
+  border:
+    "1px solid rgba(255,255,255,.20)",
+  borderRadius: 9,
+  background:
+    "rgba(255,255,255,.05)",
+  color: "#d0d0d6",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const deliveryMessageStyle = {
+  gridColumn: "1 / -1",
+  margin: 0,
+  lineHeight: 1.5,
+  fontWeight: 800,
+};
+
+const deliverySavedMessage = {
+  margin: "13px 0 0",
+  color: "#00ff99",
+  fontWeight: 800,
+};
+
+const deliveryEmptyState = {
+  marginTop: 15,
+  display: "grid",
+  gap: 12,
+};
+
+const quickGrid = {
+  marginTop: 16,
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(2, minmax(0, 1fr))",
+  gap: 10,
+};
+
+const quickButton = {
+  minHeight: 48,
+  display: "grid",
+  placeItems: "center",
+  padding: "11px 13px",
+  border:
+    "1px solid rgba(0,217,255,.46)",
+  borderRadius: 10,
+  background:
+    "rgba(0,217,255,.06)",
+  color: "#7df9ff",
+  textDecoration: "none",
+  textAlign: "center" as const,
+  fontWeight: 800,
+};
+
+const primaryButton = {
+  minHeight: 52,
+  display: "grid",
+  placeItems: "center",
+  marginTop: 14,
+  padding: "12px 17px",
+  border:
+    "2px solid #45d97a",
+  borderRadius: 11,
+  background:
+    "linear-gradient(180deg, #2eea6f, #19b857)",
+  color: "#ffffff",
+  textDecoration: "none",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const smallButton = {
+  padding: "9px 12px",
+  border:
+    "1px solid #00d9ff",
+  borderRadius: 9,
+  background:
+    "rgba(0,217,255,.07)",
+  color: "#7df9ff",
+  textDecoration: "none",
+  fontWeight: 800,
+};
+
+const emptyState = {
+  marginTop: 16,
+  padding: 23,
+  display: "grid",
+  justifyItems: "center",
+  gap: 8,
+  textAlign: "center" as const,
+  border:
+    "1px dashed rgba(0,217,255,.35)",
+  borderRadius: 12,
+};
+
+const emptyIcon = {
+  fontSize: 34,
+};
+
+const muted = {
+  color: "#999999",
+  lineHeight: 1.6,
+};
+
+const errorText = {
+  color: "#ff8a8a",
+  lineHeight: 1.6,
+};
+
+const centerCard = {
+  maxWidth: 560,
+  margin: "10vh auto 0",
+  padding: 32,
+  display: "grid",
+  justifyItems: "center",
+  gap: 12,
+  textAlign: "center" as const,
+  border:
+    "1px solid rgba(0,217,255,.38)",
+  borderRadius: 17,
+  background:
+    "rgba(8,8,12,.92)",
+};
+
+const loadingRing = {
+  width: 46,
+  height: 46,
+  border:
+    "4px solid rgba(0,217,255,.18)",
+  borderTopColor:
+    "#ff45d8",
+  borderRadius: 999,
 };

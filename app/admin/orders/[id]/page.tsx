@@ -179,7 +179,17 @@ export default function OrderDetailsPage() {
     }, 100);
   }
 
-  if (!order) return <main style={page}>Loading order...</main>;
+  if (!order) {
+    return (
+      <main style={page}>
+        <div style={loadingCard}>
+          <div style={loadingRing} />
+          <h1 style={pageTitle}>Loading Order</h1>
+          <p style={muted}>Preparing the order workspace...</p>
+        </div>
+      </main>
+    );
+  }
 
   const netRevenue = Number(order.net_revenue ?? order.total ?? 0);
   const productCostTotal = Number(order.product_cost_total || 0);
@@ -188,139 +198,822 @@ export default function OrderDetailsPage() {
 
   return (
     <main style={page}>
-      <button onClick={() => router.push("/admin")} style={backButton}>← Back to Orders</button>
-      <h1 style={{ color: "#ff45d8" }}>Order {order.order_number}</h1>
-      <p style={{ color: "#ccc" }}><strong>Order Date:</strong> {new Date(order.created_at).toLocaleString()}</p>
-      <p style={{ color: "#888" }}>Order Row ID: {order.id}</p>
+      <div style={container}>
+        <header style={header}>
+          <div>
+            <button
+              onClick={() => router.push("/admin")}
+              style={backButton}
+            >
+              ← Back to Orders
+            </button>
 
-      <div style={summaryGrid}>
-        <Metric label="Net Revenue" value={`$${netRevenue.toFixed(2)}`} />
-        <Metric label="Product Cost" value={`$${productCostTotal.toFixed(2)}`} />
-        <Metric label="Profit" value={`$${estimatedProfit.toFixed(2)}`} accent={estimatedProfit >= 0 ? "#00ff99" : "#ff4d4d"} />
-        <Metric label="Margin" value={`${profitMargin.toFixed(1)}%`} />
-      </div>
+            <p style={eyebrow}>RESEARCH ORDER</p>
 
-      <section style={box}>
-        <h2 style={heading}>Customer</h2>
-        <p><strong>Organization:</strong> {order.customer_organization || "-"}</p>
-        <p><strong>Name:</strong> {order.customer_name}</p>
-        <p><strong>Email:</strong> {order.customer_email}</p>
-        <p><strong>Phone:</strong> {order.customer_phone || "Not provided"}</p>
-        <p><strong>VIP at Purchase:</strong> {order.vip_tier_at_purchase || "-"}</p>
-        <p><strong>Lifetime Spend Before:</strong> ${Number(order.lifetime_spend_before || 0).toFixed(2)}</p>
-        <p><strong>Lifetime Spend After:</strong> ${Number(order.lifetime_spend_after || 0).toFixed(2)}</p>
-        {order.has_lifetime_free_shipping && <p style={{ color: "#00ff99", fontWeight: "bold" }}>🚚 Lifetime Free Shipping Member</p>}
-      </section>
+            <h1 style={pageTitle}>
+              {order.order_number}
+            </h1>
 
-      <section style={box}>
-        <h2 style={heading}>Shipping Address</h2>
-        <p>{order.shipping_address}</p>
-        <p>{order.city}, {order.state} {order.zip}</p>
-      </section>
+            <p style={subtitle}>
+              {new Date(order.created_at).toLocaleString()}
+            </p>
+          </div>
 
-      <section style={box}>
-        <h2 style={heading}>Order Contents</h2>
-        {items.length === 0 ? <p style={{ color: "#ffcc00" }}>No order items found.</p> : items.map((item) => {
-          const quantity = Number(item.quantity || 1);
-          const regular = Number(item.regular_unit_price ?? item.sale_unit_price ?? 0);
-          const sale = Number(item.sale_unit_price ?? regular);
-          const revenue = Number(item.line_revenue ?? item.price ?? 0);
-          const cost = Number(item.line_cost ?? Number(item.cost || 0) * quantity);
-          const profit = Number(item.line_profit ?? revenue - cost);
+          <div style={statusStack}>
+            <span style={paymentBadge}>
+              {(order.status || "pending").toUpperCase()}
+            </span>
 
-          return (
-            <div key={item.id} style={itemCard}>
-              <div style={itemHeader}>
-                <strong style={{ color: "#ff45d8", fontSize: 18 }}>{item.product_name || "Product"}</strong>
-                {item.was_on_sale && <span style={saleBadge}>SALE {Number(item.sale_percent || 0)}% OFF</span>}
-                {item.was_pre_sale && <span style={presaleBadge}>PRE-SALE</span>}
-              </div>
-              <div style={itemGrid}>
-                <span><strong>Dosage:</strong> {item.dosage || "-"}</span>
-                <span><strong>Type:</strong> {item.purchase_type || "-"}</span>
-                <span><strong>Quantity:</strong> {quantity}</span>
-                <span><strong>Regular Unit:</strong> ${regular.toFixed(2)}</span>
-                <span><strong>Sale Unit:</strong> ${sale.toFixed(2)}</span>
-                <span><strong>Unit Cost:</strong> ${Number(item.cost || 0).toFixed(2)}</span>
-                <span><strong>Line Revenue:</strong> ${revenue.toFixed(2)}</span>
-                <span><strong>Line Cost:</strong> ${cost.toFixed(2)}</span>
-                <span style={{ color: profit >= 0 ? "#00ff99" : "#ff4d4d" }}><strong>Line Profit:</strong> ${profit.toFixed(2)}</span>
-                <span><strong>Status at Purchase:</strong> {item.inventory_status || "-"}</span>
-              </div>
-            </div>
-          );
-        })}
-      </section>
+            <span style={deliveryBadge}>
+              {(shippingStatus || "not shipped").toUpperCase()}
+            </span>
+          </div>
+        </header>
 
-      <section style={box}>
-        <h2 style={heading}>Totals and Discounts</h2>
-        <p>Subtotal: ${Number(order.subtotal || 0).toFixed(2)}</p>
-        <p>Gross Revenue: ${Number(order.gross_revenue || 0).toFixed(2)}</p>
-        <p>Promo Code: <strong style={{ color: "#00ff99" }}>{order.promo_code || "None"}</strong></p>
-        <p>Promo Type: {order.promo_discount_type || "-"}</p>
-        <p>Promo Value: {order.promo_discount_type === "percent" ? `${Number(order.promo_discount_value || 0)}%` : `$${Number(order.promo_discount_value || 0).toFixed(2)}`}</p>
-        <p>Promo Discount: -${Number(order.promo_discount || 0).toFixed(2)}</p>
-        <p>Rewards Points Used: {Number(order.reward_points_used || 0)}</p>
-        <p>Rewards Discount: -${Number(order.reward_discount || 0).toFixed(2)}</p>
-        <p>Rewards Points Earned: {Number(order.rewards_points_earned || 0)}</p>
-        <p>Total Discount: -${Number(order.total_discount || 0).toFixed(2)}</p>
-        <p>Shipping Charged: ${Number(order.shipping || 0).toFixed(2)}</p>
-        <h2>Total Paid: ${Number(order.total || 0).toFixed(2)}</h2>
-        <p><strong>Payment Method:</strong> {order.payment_method || "Not recorded"}</p>
-        <p><strong>Payment Status:</strong> {order.status}</p>
-      </section>
+        <div style={summaryGrid}>
+          <Metric
+            label="Net Revenue"
+            value={`$${netRevenue.toFixed(2)}`}
+            accent="#00d9ff"
+          />
 
-      <section style={box}>
-        <h2 style={heading}>Operating Costs and Profit</h2>
-        <label style={label}>Actual / Estimated Shipping Cost</label>
-        <input type="number" min="0" step="0.01" value={shippingCost} onChange={(e) => setShippingCost(Math.max(0, Number(e.target.value)))} style={input} />
-        <label style={label}>Packaging Cost</label>
-        <input type="number" min="0" step="0.01" value={packagingCost} onChange={(e) => setPackagingCost(Math.max(0, Number(e.target.value)))} style={input} />
-        <p style={{ color: "#ccc" }}>New projected profit: ${(netRevenue - productCostTotal - shippingCost - packagingCost).toFixed(2)}</p>
-        <button onClick={saveOperatingCosts} style={button}>{savingCosts ? "Saving..." : "Save Costs & Recalculate Profit"}</button>
-      </section>
+          <Metric
+            label="Product Cost"
+            value={`$${productCostTotal.toFixed(2)}`}
+            accent="#ffcc66"
+          />
 
-      <section style={box}>
-        <h2 style={heading}>Shipping Status</h2>
-        <label style={label}>Shipping Status</label>
-        <select value={shippingStatus} onChange={(e) => setShippingStatus(e.target.value)} style={input}>
-          <option value="not shipped">not shipped</option>
-          <option value="processing">processing</option>
-          <option value="shipped">shipped</option>
-          <option value="delivered">delivered</option>
-        </select>
-        <label style={label}>Tracking Number</label>
-        <input value={trackingNumber} onChange={(e) => setTrackingNumber(e.target.value)} placeholder="Enter tracking number" style={input} />
-        {!trackingNumber && <p style={{ color: "#ffcc00" }}>Scan or enter a tracking number before notifying the customer.</p>}
-        <div style={actionRow}>
-          <button onClick={saveShippingInfo} style={button}>{saving ? "Saving..." : "Save Shipping"}</button>
-          <button onClick={startScanner} style={button}>Scan Label</button>
-          <button onClick={notifyCustomer} disabled={!trackingNumber || sendingEmail} style={{ ...emailButton, opacity: !trackingNumber || sendingEmail ? 0.5 : 1, cursor: !trackingNumber || sendingEmail ? "not-allowed" : "pointer" }}>{sendingEmail ? "Notifying..." : "Notify & Mark Shipped"}</button>
+          <Metric
+            label="Estimated Profit"
+            value={`$${estimatedProfit.toFixed(2)}`}
+            accent={
+              estimatedProfit >= 0
+                ? "#00ff99"
+                : "#ff6f6f"
+            }
+          />
+
+          <Metric
+            label="Profit Margin"
+            value={`${profitMargin.toFixed(1)}%`}
+            accent={
+              profitMargin >= 15
+                ? "#00ff99"
+                : "#ffcc66"
+            }
+          />
         </div>
-        {scannerOpen && <div style={scannerBox}><h3 style={{ color: "#00d9ff" }}>Scan Shipping Label</h3><div id="tracking-scanner" /></div>}
-      </section>
+
+        <div className="order-layout" style={layout}>
+          <section style={stack}>
+            <section style={card}>
+              <SectionHeader
+                eyebrow="CUSTOMER"
+                title="Customer Details"
+              />
+
+              <InfoGrid>
+                <Info label="Organization" value={order.customer_organization || "-"} />
+                <Info label="Name" value={order.customer_name || "-"} />
+                <Info label="Email" value={order.customer_email || "-"} />
+                <Info label="Phone" value={order.customer_phone || "Not provided"} />
+                <Info label="VIP at Purchase" value={order.vip_tier_at_purchase || "-"} />
+                <Info label="Lifetime Spend Before" value={`$${Number(order.lifetime_spend_before || 0).toFixed(2)}`} />
+                <Info label="Lifetime Spend After" value={`$${Number(order.lifetime_spend_after || 0).toFixed(2)}`} />
+              </InfoGrid>
+
+              {order.has_lifetime_free_shipping && (
+                <div style={successNotice}>
+                  Lifetime Free Delivery Member
+                </div>
+              )}
+            </section>
+
+            <section style={card}>
+              <SectionHeader
+                eyebrow="DELIVERY"
+                title="Delivery Address"
+              />
+
+              <p style={addressText}>
+                {order.shipping_address}
+                <br />
+                {order.city}, {order.state} {order.zip}
+              </p>
+            </section>
+
+            <section style={card}>
+              <SectionHeader
+                eyebrow="CONTENTS"
+                title="Order Contents"
+              />
+
+              {items.length === 0 ? (
+                <p style={warningText}>
+                  No order items found.
+                </p>
+              ) : (
+                <div style={itemList}>
+                  {items.map((item) => {
+                    const quantity = Number(item.quantity || 1);
+                    const regular = Number(item.regular_unit_price ?? item.sale_unit_price ?? 0);
+                    const sale = Number(item.sale_unit_price ?? regular);
+                    const revenue = Number(item.line_revenue ?? item.price ?? 0);
+                    const cost = Number(item.line_cost ?? Number(item.cost || 0) * quantity);
+                    const profit = Number(item.line_profit ?? revenue - cost);
+
+                    return (
+                      <article key={item.id} style={itemCard}>
+                        <div style={itemHeader}>
+                          <div>
+                            <strong style={itemTitle}>
+                              {item.product_name || "Product"}
+                            </strong>
+
+                            <p style={itemSubline}>
+                              {item.dosage || "-"} · {item.purchase_type || "-"} · Qty {quantity}
+                            </p>
+                          </div>
+
+                          <div style={badgeRow}>
+                            {item.was_on_sale && (
+                              <span style={saleBadge}>
+                                SALE {Number(item.sale_percent || 0)}% OFF
+                              </span>
+                            )}
+
+                            {item.was_pre_sale && (
+                              <span style={presaleBadge}>
+                                PRE-SALE
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <InfoGrid>
+                          <Info label="Regular Unit" value={`$${regular.toFixed(2)}`} />
+                          <Info label="Sale Unit" value={`$${sale.toFixed(2)}`} />
+                          <Info label="Unit Cost" value={`$${Number(item.cost || 0).toFixed(2)}`} />
+                          <Info label="Line Revenue" value={`$${revenue.toFixed(2)}`} />
+                          <Info label="Line Cost" value={`$${cost.toFixed(2)}`} />
+                          <Info
+                            label="Line Profit"
+                            value={`$${profit.toFixed(2)}`}
+                            accent={profit >= 0 ? "#00ff99" : "#ff6f6f"}
+                          />
+                          <Info label="Inventory Status" value={item.inventory_status || "-"} />
+                        </InfoGrid>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            <section style={card}>
+              <SectionHeader
+                eyebrow="PRICING"
+                title="Totals and Discounts"
+              />
+
+              <InfoGrid>
+                <Info label="Subtotal" value={`$${Number(order.subtotal || 0).toFixed(2)}`} />
+                <Info label="Gross Revenue" value={`$${Number(order.gross_revenue || 0).toFixed(2)}`} />
+                <Info label="Promo Code" value={order.promo_code || "None"} accent="#00ff99" />
+                <Info label="Promo Type" value={order.promo_discount_type || "-"} />
+                <Info
+                  label="Promo Value"
+                  value={
+                    order.promo_discount_type === "percent"
+                      ? `${Number(order.promo_discount_value || 0)}%`
+                      : `$${Number(order.promo_discount_value || 0).toFixed(2)}`
+                  }
+                />
+                <Info label="Promo Discount" value={`-$${Number(order.promo_discount || 0).toFixed(2)}`} accent="#00ff99" />
+                <Info label="PugPoints Used" value={String(Number(order.reward_points_used || 0))} />
+                <Info label="PugPoints Discount" value={`-$${Number(order.reward_discount || 0).toFixed(2)}`} accent="#00ff99" />
+                <Info label="PugPoints Earned" value={String(Number(order.rewards_points_earned || 0))} accent="#00ff99" />
+                <Info label="Total Discount" value={`-$${Number(order.total_discount || 0).toFixed(2)}`} accent="#00ff99" />
+                <Info label="Delivery Charged" value={`$${Number(order.shipping || 0).toFixed(2)}`} />
+                <Info label="Payment Method" value={order.payment_method || "Not recorded"} />
+              </InfoGrid>
+
+              <div style={grandTotal}>
+                <span>Total Paid</span>
+                <strong>${Number(order.total || 0).toFixed(2)}</strong>
+              </div>
+            </section>
+          </section>
+
+          <aside className="order-actions" style={stack}>
+            <section style={card}>
+              <SectionHeader
+                eyebrow="PROFIT"
+                title="Operating Costs"
+              />
+
+              <label style={label}>Delivery Cost</label>
+
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={shippingCost}
+                onChange={(event) =>
+                  setShippingCost(
+                    Math.max(0, Number(event.target.value))
+                  )
+                }
+                style={input}
+              />
+
+              <label style={label}>Packaging Cost</label>
+
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={packagingCost}
+                onChange={(event) =>
+                  setPackagingCost(
+                    Math.max(0, Number(event.target.value))
+                  )
+                }
+                style={input}
+              />
+
+              <div style={projectedProfit}>
+                <span>Projected Profit</span>
+                <strong>
+                  ${(netRevenue - productCostTotal - shippingCost - packagingCost).toFixed(2)}
+                </strong>
+              </div>
+
+              <button
+                onClick={saveOperatingCosts}
+                disabled={savingCosts}
+                style={primaryButton}
+              >
+                {savingCosts
+                  ? "Saving..."
+                  : "Save Costs & Recalculate"}
+              </button>
+            </section>
+
+            <section style={card}>
+              <SectionHeader
+                eyebrow="DELIVERY"
+                title="Delivery Status"
+              />
+
+              <label style={label}>Status</label>
+
+              <select
+                value={shippingStatus}
+                onChange={(event) =>
+                  setShippingStatus(event.target.value)
+                }
+                style={input}
+              >
+                <option value="not shipped">not shipped</option>
+                <option value="processing">processing</option>
+                <option value="shipped">shipped</option>
+                <option value="delivered">delivered</option>
+              </select>
+
+              <label style={label}>Tracking Number</label>
+
+              <input
+                value={trackingNumber}
+                onChange={(event) =>
+                  setTrackingNumber(event.target.value)
+                }
+                placeholder="Enter tracking number"
+                style={input}
+              />
+
+              {!trackingNumber && (
+                <p style={warningText}>
+                  Scan or enter a tracking number before notifying the customer.
+                </p>
+              )}
+
+              <div style={actionGrid}>
+                <button
+                  onClick={saveShippingInfo}
+                  disabled={saving}
+                  style={secondaryButton}
+                >
+                  {saving ? "Saving..." : "Save Delivery"}
+                </button>
+
+                <button
+                  onClick={startScanner}
+                  style={secondaryButton}
+                >
+                  Scan Label
+                </button>
+
+                <button
+                  onClick={notifyCustomer}
+                  disabled={!trackingNumber || sendingEmail}
+                  style={{
+                    ...notifyButton,
+                    opacity:
+                      !trackingNumber || sendingEmail
+                        ? 0.5
+                        : 1,
+                    cursor:
+                      !trackingNumber || sendingEmail
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  {sendingEmail
+                    ? "Notifying..."
+                    : "Notify & Mark Shipped"}
+                </button>
+              </div>
+
+              {scannerOpen && (
+                <div style={scannerBox}>
+                  <h3 style={scannerTitle}>Scan Delivery Label</h3>
+                  <div id="tracking-scanner" />
+                </div>
+              )}
+            </section>
+
+            <section style={card}>
+              <SectionHeader
+                eyebrow="SYSTEM"
+                title="Order Record"
+              />
+
+              <InfoGrid>
+                <Info label="Order Row ID" value={order.id} />
+                <Info label="Payment Status" value={order.status || "-"} />
+                <Info label="Delivery Status" value={shippingStatus} />
+              </InfoGrid>
+            </section>
+          </aside>
+        </div>
+
+        <style jsx>{`
+          @media (min-width: 981px) {
+            .order-actions {
+              position: sticky;
+              top: 18px;
+              align-self: start;
+            }
+          }
+
+          @media (max-width: 980px) {
+            .order-layout {
+              grid-template-columns: minmax(0, 1fr) !important;
+            }
+          }
+        `}</style>
+      </div>
     </main>
   );
 }
 
-function Metric({ label: metricLabel, value, accent = "#00d9ff" }: { label: string; value: string; accent?: string }) {
-  return <div style={metricCard}><span style={{ color: "#aaa", fontSize: 13 }}>{metricLabel}</span><strong style={{ color: accent, fontSize: 23 }}>{value}</strong></div>;
+function Metric({
+  label,
+  value,
+  accent = "#00d9ff",
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+}) {
+  return (
+    <div style={metricCard}>
+      <span style={metricLabel}>{label}</span>
+      <strong style={{ ...metricValue, color: accent }}>
+        {value}
+      </strong>
+    </div>
+  );
 }
 
-const page = { padding: 30, color: "#fff", background: "#000", minHeight: "100vh" };
-const heading = { color: "#00d9ff" };
-const box = { marginTop: 20, padding: 20, border: "1px solid #333", borderRadius: 12, background: "#111" };
-const summaryGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 14, marginTop: 20 };
-const metricCard = { padding: 16, border: "1px solid #333", borderRadius: 12, background: "#111", display: "grid", gap: 7 };
-const itemCard = { padding: 16, marginBottom: 14, border: "1px solid #333", borderRadius: 10, background: "#080808" };
-const itemHeader = { display: "flex", gap: 10, flexWrap: "wrap" as const, alignItems: "center", marginBottom: 14 };
-const itemGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 };
-const saleBadge = { padding: "4px 8px", borderRadius: 999, background: "rgba(0,255,153,.12)", color: "#00ff99", fontSize: 12, fontWeight: "bold" };
-const presaleBadge = { padding: "4px 8px", borderRadius: 999, background: "rgba(255,191,0,.12)", color: "#ffcc00", fontSize: 12, fontWeight: "bold" };
-const label = { display: "block", marginTop: 12, marginBottom: 6, color: "#ccc" };
-const input = { width: "100%", boxSizing: "border-box" as const, padding: 12, background: "#050505", color: "#fff", border: "1px solid #333", borderRadius: 8 };
-const actionRow = { display: "flex", gap: 12, marginTop: 18, flexWrap: "wrap" as const };
-const button = { padding: "12px 18px", borderRadius: 10, border: "1px solid #00d9ff", background: "#001b22", color: "#00d9ff", fontWeight: "bold", cursor: "pointer" };
-const emailButton = { padding: "12px 18px", borderRadius: 10, border: "1px solid #ff45d8", background: "#22001a", color: "#ff45d8", fontWeight: "bold" };
-const backButton = { background: "none", border: "none", color: "#00d9ff", cursor: "pointer", fontSize: 16, padding: 0, marginBottom: 20 };
-const scannerBox = { marginTop: 20, padding: 20, border: "1px solid #333", borderRadius: 12, background: "#050505" };
+function SectionHeader({
+  eyebrow: sectionEyebrow,
+  title,
+}: {
+  eyebrow: string;
+  title: string;
+}) {
+  return (
+    <div style={sectionHeader}>
+      <p style={sectionEyebrowStyle}>{sectionEyebrow}</p>
+      <h2 style={sectionTitle}>{title}</h2>
+    </div>
+  );
+}
+
+function InfoGrid({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <div style={infoGrid}>{children}</div>;
+}
+
+function Info({
+  label: infoLabelText,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+}) {
+  return (
+    <div style={infoCard}>
+      <span style={infoLabel}>{infoLabelText}</span>
+      <strong
+        style={{
+          ...infoValue,
+          color: accent || "#ffffff",
+        }}
+      >
+        {value}
+      </strong>
+    </div>
+  );
+}
+
+const page = {
+  minHeight: "100vh",
+  padding: "clamp(18px, 4vw, 34px)",
+  background:
+    "radial-gradient(circle at 12% 0%, rgba(255,47,208,.14), transparent 27%), radial-gradient(circle at 88% 4%, rgba(0,217,255,.14), transparent 30%), #000",
+  color: "#ffffff",
+};
+
+const container = {
+  width: "100%",
+  maxWidth: 1320,
+  margin: "0 auto",
+};
+
+const header = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 18,
+  flexWrap: "wrap" as const,
+};
+
+const backButton = {
+  marginBottom: 16,
+  padding: 0,
+  border: 0,
+  background: "transparent",
+  color: "#7df9ff",
+  cursor: "pointer",
+  fontSize: 15,
+  fontWeight: 800,
+};
+
+const eyebrow = {
+  margin: 0,
+  color: "#00d9ff",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: ".14em",
+};
+
+const pageTitle = {
+  margin: "7px 0 0",
+  color: "#ff45d8",
+  fontSize: "clamp(34px, 6vw, 52px)",
+  overflowWrap: "anywhere" as const,
+};
+
+const subtitle = {
+  margin: "8px 0 0",
+  color: "#9d9da6",
+};
+
+const statusStack = {
+  display: "flex",
+  gap: 9,
+  flexWrap: "wrap" as const,
+};
+
+const paymentBadge = {
+  padding: "7px 10px",
+  border: "1px solid #ffcc00",
+  borderRadius: 999,
+  background: "rgba(255,204,0,.08)",
+  color: "#ffcc00",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const deliveryBadge = {
+  padding: "7px 10px",
+  border: "1px solid #00d9ff",
+  borderRadius: 999,
+  background: "rgba(0,217,255,.08)",
+  color: "#7df9ff",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const summaryGrid = {
+  marginTop: 22,
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 14,
+};
+
+const metricCard = {
+  padding: 17,
+  display: "grid",
+  gap: 7,
+  border: "1px solid rgba(255,255,255,.12)",
+  borderRadius: 13,
+  background: "linear-gradient(145deg, rgba(12,12,17,.97), rgba(6,6,9,.98))",
+};
+
+const metricLabel = {
+  color: "#9b9ba4",
+  fontSize: 12,
+  fontWeight: 800,
+  textTransform: "uppercase" as const,
+};
+
+const metricValue = {
+  fontSize: 24,
+};
+
+const layout = {
+  marginTop: 24,
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1.2fr) minmax(350px, .8fr)",
+  gap: 22,
+  alignItems: "start",
+};
+
+const stack = {
+  display: "grid",
+  gap: 18,
+};
+
+const card = {
+  padding: "clamp(18px, 3vw, 24px)",
+  border: "1px solid rgba(0,217,255,.34)",
+  borderRadius: 16,
+  background:
+    "linear-gradient(145deg, rgba(10,10,14,.97), rgba(16,8,17,.95))",
+  boxShadow: "0 0 18px rgba(0,217,255,.07)",
+};
+
+const sectionHeader = {
+  marginBottom: 16,
+};
+
+const sectionEyebrowStyle = {
+  margin: 0,
+  color: "#ff45d8",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: ".13em",
+};
+
+const sectionTitle = {
+  margin: "5px 0 0",
+  color: "#7df9ff",
+  fontSize: 24,
+};
+
+const infoGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
+  gap: 10,
+};
+
+const infoCard = {
+  minWidth: 0,
+  padding: 12,
+  display: "grid",
+  gap: 5,
+  border: "1px solid rgba(255,255,255,.10)",
+  borderRadius: 10,
+  background: "rgba(0,0,0,.24)",
+};
+
+const infoLabel = {
+  color: "#8f8f98",
+  fontSize: 10,
+  fontWeight: 900,
+  textTransform: "uppercase" as const,
+};
+
+const infoValue = {
+  fontSize: 14,
+  overflowWrap: "anywhere" as const,
+};
+
+const successNotice = {
+  marginTop: 14,
+  padding: "11px 13px",
+  border: "1px solid rgba(0,255,153,.46)",
+  borderRadius: 10,
+  background: "rgba(0,255,153,.08)",
+  color: "#00ff99",
+  fontWeight: 900,
+};
+
+const addressText = {
+  margin: 0,
+  color: "#d0d0d6",
+  lineHeight: 1.7,
+};
+
+const itemList = {
+  display: "grid",
+  gap: 12,
+};
+
+const itemCard = {
+  padding: 15,
+  border: "1px solid rgba(255,255,255,.11)",
+  borderRadius: 12,
+  background: "rgba(0,0,0,.25)",
+};
+
+const itemHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  flexWrap: "wrap" as const,
+  marginBottom: 14,
+};
+
+const itemTitle = {
+  color: "#ff75df",
+  fontSize: 18,
+};
+
+const itemSubline = {
+  margin: "5px 0 0",
+  color: "#9e9ea7",
+  fontSize: 13,
+};
+
+const badgeRow = {
+  display: "flex",
+  gap: 7,
+  flexWrap: "wrap" as const,
+};
+
+const saleBadge = {
+  padding: "5px 8px",
+  borderRadius: 999,
+  background: "rgba(0,255,153,.10)",
+  color: "#00ff99",
+  border: "1px solid rgba(0,255,153,.42)",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const presaleBadge = {
+  padding: "5px 8px",
+  borderRadius: 999,
+  background: "rgba(255,191,0,.10)",
+  color: "#ffcc00",
+  border: "1px solid rgba(255,191,0,.42)",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const grandTotal = {
+  minHeight: 68,
+  marginTop: 15,
+  padding: "0 15px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  border: "1px solid rgba(0,255,153,.45)",
+  borderRadius: 12,
+  background: "rgba(0,255,153,.07)",
+  fontSize: 22,
+};
+
+const label = {
+  display: "block",
+  marginTop: 12,
+  marginBottom: 6,
+  color: "#c8c8cf",
+  fontWeight: 800,
+};
+
+const input = {
+  width: "100%",
+  boxSizing: "border-box" as const,
+  padding: 12,
+  background: "#050505",
+  color: "#fff",
+  border: "1px solid rgba(0,217,255,.28)",
+  borderRadius: 9,
+};
+
+const projectedProfit = {
+  minHeight: 60,
+  marginTop: 15,
+  padding: "0 14px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  border: "1px solid rgba(0,255,153,.36)",
+  borderRadius: 10,
+  background: "rgba(0,255,153,.06)",
+  color: "#00ff99",
+};
+
+const primaryButton = {
+  width: "100%",
+  minHeight: 48,
+  marginTop: 14,
+  border: "1px solid #45d97a",
+  borderRadius: 10,
+  background: "linear-gradient(180deg, #2eea6f, #19b857)",
+  color: "#fff",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const secondaryButton = {
+  minHeight: 44,
+  border: "1px solid #00d9ff",
+  borderRadius: 9,
+  background: "rgba(0,217,255,.07)",
+  color: "#7df9ff",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const notifyButton = {
+  minHeight: 48,
+  border: "1px solid #ff45d8",
+  borderRadius: 9,
+  background: "rgba(255,69,216,.08)",
+  color: "#ff75df",
+  fontWeight: 900,
+};
+
+const actionGrid = {
+  marginTop: 16,
+  display: "grid",
+  gap: 9,
+};
+
+const scannerBox = {
+  marginTop: 16,
+  padding: 15,
+  border: "1px solid rgba(0,217,255,.28)",
+  borderRadius: 11,
+  background: "#050505",
+};
+
+const scannerTitle = {
+  marginTop: 0,
+  color: "#00d9ff",
+};
+
+const warningText = {
+  color: "#ffcc66",
+  lineHeight: 1.55,
+};
+
+const muted = {
+  color: "#999",
+};
+
+const loadingCard = {
+  maxWidth: 520,
+  margin: "12vh auto 0",
+  padding: 32,
+  display: "grid",
+  justifyItems: "center",
+  gap: 12,
+  textAlign: "center" as const,
+  border: "1px solid rgba(0,217,255,.35)",
+  borderRadius: 16,
+  background: "rgba(8,8,12,.92)",
+};
+
+const loadingRing = {
+  width: 44,
+  height: 44,
+  border: "4px solid rgba(0,217,255,.18)",
+  borderTopColor: "#ff45d8",
+  borderRadius: 999,
+};

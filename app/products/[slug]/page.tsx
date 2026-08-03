@@ -233,36 +233,42 @@ export default function ProductDetailPage() {
       quantity > maxKits;
 
     addToCart(
-      {
-        name: product.name,
-        slug: product.slug,
-        image: product.image,
-        dosage: selectedOption.dosage,
-        price: getSalePrice(selectedOption),
-        regularPrice: Number(selectedOption.price || 0),
-        salePrice: getSalePrice(selectedOption),
-        wasOnSale: Boolean(
-          selectedOption.sale_active &&
-          Number(selectedOption.sale_percent || 0) > 0
-        ),
-        salePercent: selectedOption.sale_active
-          ? Number(selectedOption.sale_percent || 0)
-          : 0,
-        cost: Number(selectedOption.cost || 0),
+  {
+    productOptionId: selectedOption.id,
 
-        purchaseType:
-          selectedOption.purchase_type as
-            | "single"
-            | "kit",
+    name: product.name,
+    slug: product.slug,
+    image: product.image,
+    dosage: selectedOption.dosage,
 
-        status: isKitPresale
-          ? "pre-sale"
-          : selectedOption.status,
+    price: getSalePrice(selectedOption),
+    regularPrice: Number(selectedOption.price || 0),
+    salePrice: getSalePrice(selectedOption),
 
-        maxAvailable: availableQuantity,
-      },
-      quantity
-    );
+    wasOnSale: Boolean(
+      selectedOption.sale_active &&
+      Number(selectedOption.sale_percent || 0) > 0
+    ),
+
+    salePercent: selectedOption.sale_active
+      ? Number(selectedOption.sale_percent || 0)
+      : 0,
+
+    cost: Number(selectedOption.cost || 0),
+
+    purchaseType:
+      selectedOption.purchase_type as
+        | "single"
+        | "kit",
+
+    status: isKitPresale
+      ? "pre-sale"
+      : selectedOption.status,
+
+    maxAvailable: availableQuantity,
+  },
+  quantity
+);
 
     if (isKitPresale) {
       alert(

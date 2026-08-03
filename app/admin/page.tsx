@@ -72,6 +72,9 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [notice, setNotice] = useState("");
+
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [markingPaidOrderId, setMarkingPaidOrderId] = useState<string | null>(null);
 
@@ -109,6 +112,7 @@ export default function AdminPage() {
       }
 
       setAuthorized(true);
+      setNotice("Order marked paid and inventory updated.");
       await loadOrders();
       setLoading(false);
     }
@@ -134,7 +138,7 @@ export default function AdminPage() {
       }
 
       if (orderData.status === "paid") {
-        alert("This order is already marked paid.");
+        setNotice("This order is already marked paid.");
         return;
       }
 
@@ -277,7 +281,7 @@ export default function AdminPage() {
         currentOrders.filter((order) => order.id !== id)
       );
 
-      alert(`Order ${deletedRows[0].order_number || orderLabel} was deleted.`);
+      setNotice(`Order ${deletedRows[0].order_number || orderLabel} was deleted.`);
     } catch (error) {
       console.error("Unexpected order deletion error:", error);
       alert("An unexpected error occurred while deleting the order.");
@@ -324,6 +328,20 @@ export default function AdminPage() {
   ).length;
 
   const filteredOrders = orders.filter((order) => {
+    const query = search.trim().toLowerCase();
+
+    const matchesSearch =
+      !query ||
+      order.order_number?.toLowerCase().includes(query) ||
+      order.customer_name?.toLowerCase().includes(query) ||
+      order.customer_email?.toLowerCase().includes(query) ||
+      order.promo_code?.toLowerCase().includes(query) ||
+      order.payment_method?.toLowerCase().includes(query);
+
+    if (!matchesSearch) {
+      return false;
+    }
+
     if (filter === "all") return true;
 
     if (filter === "pending") {
@@ -364,236 +382,420 @@ export default function AdminPage() {
     0
   );
 
+  const visibleCosts = filteredOrders.reduce(
+    (sum, order) => sum + getOrderCost(order),
+    0
+  );
+
+  const visibleMargin =
+    visibleRevenue > 0
+      ? (visibleProfit / visibleRevenue) * 100
+      : 0;
+
+  const averageOrderValue =
+    filteredOrders.length > 0
+      ? visibleRevenue / filteredOrders.length
+      : 0;
+
+  const now = new Date();
+
+  const todayOrders = orders.filter((order) => {
+    const created = new Date(order.created_at);
+
+    return (
+      created.getDate() === now.getDate() &&
+      created.getMonth() === now.getMonth() &&
+      created.getFullYear() === now.getFullYear()
+    );
+  });
+
+  const todayRevenue = todayOrders.reduce(
+    (sum, order) => sum + getOrderRevenue(order),
+    0
+  );
+
+  const todayProfit = todayOrders.reduce(
+    (sum, order) => sum + getOrderProfit(order),
+    0
+  );
+
   return (
     <main style={pageStyle}>
-      <h1 style={{ color: "#ff45d8" }}>Orders</h1>
+      <div style={container}>
+        <header style={pageHeader}>
+          <div>
+            <p style={eyebrow}>CONTROL CENTER</p>
 
-      <div style={navigationRow}>
-        <Link href="/admin/promos" style={promoLink}>
-          Promo Codes
-        </Link>
+            <h1 style={pageTitle}>
+              Operations Center
+            </h1>
 
-        <Link href="/admin/analytics" style={analyticsLink}>
-          Analytics
-        </Link>
-      </div>
+            <p style={subtitle}>
+              Manage payments, fulfillment, revenue, profit, and order activity from one place.
+            </p>
+          </div>
 
-      <div style={filterRow}>
-        {[
-          { key: "all", label: `ALL (${orders.length})` },
-          { key: "pending", label: `PENDING (${pendingCount})` },
-          { key: "paid", label: `PAID (${paidCount})` },
-          { key: "shipped", label: `SHIPPED (${shippedCount})` },
-          { key: "delivered", label: `DELIVERED (${deliveredCount})` },
-        ].map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => setFilter(item.key)}
-            style={{
-              ...filterButton,
-              border:
-                filter === item.key
-                  ? "1px solid #00ff99"
-                  : "1px solid #333",
-              background:
-                filter === item.key ? "rgba(0,255,153,.12)" : "#111",
-              color: filter === item.key ? "#00ff99" : "#ccc",
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+          <div style={headerLinks}>
+            <Link href="/admin/promos" style={secondaryLink}>
+              Promo Codes
+            </Link>
 
-      <div style={summaryGrid}>
-        <div style={summaryCard}>
-          <span style={summaryLabel}>Visible Order Revenue</span>
-          <strong style={summaryValue}>${visibleRevenue.toFixed(2)}</strong>
-        </div>
+            <Link href="/admin/analytics" style={primaryLink}>
+              Analytics
+            </Link>
+          </div>
+        </header>
 
-        <div style={summaryCard}>
-          <span style={summaryLabel}>Visible Profit</span>
-          <strong
-            style={{
-              ...summaryValue,
-              color: visibleProfit >= 0 ? "#00ff99" : "#ff4d4d",
-            }}
-          >
-            ${visibleProfit.toFixed(2)}
-          </strong>
-        </div>
+        {notice && (
+          <div style={noticeBanner}>
+            <span>{notice}</span>
 
-        <div style={summaryCard}>
-          <span style={summaryLabel}>Visible Discounts</span>
-          <strong style={summaryValue}>${visibleDiscounts.toFixed(2)}</strong>
-        </div>
-      </div>
+            <button
+              type="button"
+              onClick={() => setNotice("")}
+              style={noticeClose}
+            >
+              ×
+            </button>
+          </div>
+        )}
 
-      {orders.length === 0 ? (
-        <p>No orders found.</p>
-      ) : filteredOrders.length === 0 ? (
-        <p>No orders match this filter.</p>
-      ) : (
-        <div style={{ overflowX: "auto" }}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={th}>Order #</th>
-                <th style={th}>Name</th>
-                <th style={th}>Email</th>
-                <th style={th}>Date</th>
-                <th style={th}>Revenue</th>
-                <th style={th}>Cost</th>
-                <th style={th}>Profit</th>
-                <th style={th}>Margin</th>
-                <th style={th}>Payment</th>
-                <th style={th}>Promo Code</th>
-                <th style={th}>Status</th>
-                <th style={th}>Actions</th>
-              </tr>
-            </thead>
+        <section style={statsGrid}>
+          <StatCard
+            label="Revenue Today"
+            value={`$${todayRevenue.toFixed(2)}`}
+            accent="#00d9ff"
+          />
 
-            <tbody>
+          <StatCard
+            label="Profit Today"
+            value={`$${todayProfit.toFixed(2)}`}
+            accent={todayProfit >= 0 ? "#00ff99" : "#ff6f6f"}
+          />
+
+          <StatCard
+            label="Pending Payment"
+            value={String(pendingCount)}
+            accent="#ff6f6f"
+          />
+
+          <StatCard
+            label="Ready to Ship"
+            value={String(paidCount)}
+            accent="#ffcc00"
+          />
+
+          <StatCard
+            label="Shipped"
+            value={String(shippedCount)}
+            accent="#00d9ff"
+          />
+
+          <StatCard
+            label="Delivered"
+            value={String(deliveredCount)}
+            accent="#00ff99"
+          />
+        </section>
+
+        <section style={toolbarPanel}>
+          <div style={searchGroup}>
+            <label htmlFor="order-search" style={searchLabel}>
+              Search Orders
+            </label>
+
+            <input
+              id="order-search"
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Order number, customer, email, promo code, or payment method..."
+              style={searchInput}
+            />
+          </div>
+
+          <div style={filterRow}>
+            {[
+              { key: "all", label: `All (${orders.length})` },
+              { key: "pending", label: `Pending (${pendingCount})` },
+              { key: "paid", label: `Ready (${paidCount})` },
+              { key: "shipped", label: `Shipped (${shippedCount})` },
+              { key: "delivered", label: `Delivered (${deliveredCount})` },
+            ].map((item) => {
+              const active = filter === item.key;
+
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setFilter(item.key)}
+                  style={{
+                    ...filterButton,
+                    borderColor: active
+                      ? "#00ff99"
+                      : "rgba(255,255,255,.14)",
+                    background: active
+                      ? "rgba(0,255,153,.10)"
+                      : "rgba(255,255,255,.035)",
+                    color: active
+                      ? "#00ff99"
+                      : "#d0d0d6",
+                  }}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section style={financialGrid}>
+          <FinancialCard
+            label="Visible Revenue"
+            value={`$${visibleRevenue.toFixed(2)}`}
+            accent="#00d9ff"
+          />
+
+          <FinancialCard
+            label="Visible Costs"
+            value={`$${visibleCosts.toFixed(2)}`}
+            accent="#ffcc66"
+          />
+
+          <FinancialCard
+            label="Visible Profit"
+            value={`$${visibleProfit.toFixed(2)}`}
+            accent={visibleProfit >= 0 ? "#00ff99" : "#ff6f6f"}
+          />
+
+          <FinancialCard
+            label="Margin"
+            value={`${visibleMargin.toFixed(1)}%`}
+            accent={visibleMargin >= 15 ? "#00ff99" : "#ffcc00"}
+          />
+
+          <FinancialCard
+            label="Discounts"
+            value={`$${visibleDiscounts.toFixed(2)}`}
+            accent="#ff75df"
+          />
+
+          <FinancialCard
+            label="Average Order"
+            value={`$${averageOrderValue.toFixed(2)}`}
+            accent="#7df9ff"
+          />
+        </section>
+
+        <section style={ordersPanel}>
+          <div style={ordersHeader}>
+            <div>
+              <p style={sectionEyebrow}>ORDER QUEUE</p>
+
+              <h2 style={sectionTitle}>
+                {filteredOrders.length} Visible Order
+                {filteredOrders.length === 1 ? "" : "s"}
+              </h2>
+            </div>
+
+            {(search || filter !== "all") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setFilter("all");
+                }}
+                style={clearButton}
+              >
+                Reset View
+              </button>
+            )}
+          </div>
+
+          {orders.length === 0 ? (
+            <div style={emptyState}>
+              <p style={muted}>No orders found.</p>
+            </div>
+          ) : filteredOrders.length === 0 ? (
+            <div style={emptyState}>
+              <p style={muted}>No orders match this search or filter.</p>
+            </div>
+          ) : (
+            <div style={orderGrid}>
               {filteredOrders.map((order) => {
                 const isDeleting = deletingOrderId === order.id;
                 const isMarkingPaid = markingPaidOrderId === order.id;
                 const isPaid = order.status === "paid";
+                const revenue = getOrderRevenue(order);
+                const cost = getOrderCost(order);
+                const profit = getOrderProfit(order);
+                const margin = getOrderMargin(order);
 
                 return (
-                  <tr
+                  <article
                     key={order.id}
-                    onClick={() => {
-                      if (!isDeleting && !isMarkingPaid) {
-                        window.location.href = `/admin/orders/${order.id}`;
-                      }
-                    }}
                     style={{
-                      borderBottom: "1px solid #333",
-                      cursor:
-                        isDeleting || isMarkingPaid ? "default" : "pointer",
+                      ...orderCard,
                       opacity: isDeleting ? 0.55 : 1,
                     }}
                   >
-                    <td style={td}>{order.order_number}</td>
-                    <td style={td}>{order.customer_name}</td>
-                    <td style={td}>{order.customer_email}</td>
-                    <td style={td}>
-                      {new Date(order.created_at).toLocaleString()}
-                    </td>
-                    <td style={td}>${getOrderRevenue(order).toFixed(2)}</td>
-                    <td style={td}>${getOrderCost(order).toFixed(2)}</td>
-                    <td
-                      style={{
-                        ...td,
-                        color:
-                          getOrderProfit(order) >= 0 ? "#00ff99" : "#ff4d4d",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      ${getOrderProfit(order).toFixed(2)}
-                    </td>
-                    <td style={td}>{getOrderMargin(order).toFixed(1)}%</td>
-                    <td style={td}>{order.payment_method || "-"}</td>
-                    <td style={td}>
-                      {order.promo_code ? (
-                        <span style={promoBadge}>{order.promo_code}</span>
-                      ) : (
-                        <span style={{ color: "#777" }}>None</span>
-                      )}
-                    </td>
+                    <div style={orderCardHeader}>
+                      <div>
+                        <Link
+                          href={`/admin/orders/${order.id}`}
+                          style={orderNumber}
+                        >
+                          {order.order_number}
+                        </Link>
 
-                    <td style={td}>
+                        <p style={orderDate}>
+                          {new Date(order.created_at).toLocaleString()}
+                        </p>
+                      </div>
+
                       <span style={getStatusBadgeStyle(order)}>
                         {getStatusLabel(order)}
                       </span>
-                    </td>
+                    </div>
 
-                    <td style={td}>
-                      <div style={actionsWrapper}>
-                        <Link
-                          href={`/admin/orders/${order.id}`}
-                          onClick={(event) => event.stopPropagation()}
-                          style={{ color: "#00d9ff" }}
-                        >
-                          View
-                        </Link>
+                    <div style={customerBlock}>
+                      <strong style={customerName}>
+                        {order.customer_name}
+                      </strong>
 
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            markPaid(order.id);
-                          }}
-                          disabled={
+                      <span style={customerEmail}>
+                        {order.customer_email}
+                      </span>
+                    </div>
+
+                    <div style={orderMetrics}>
+                      <OrderMetric
+                        label="Revenue"
+                        value={`$${revenue.toFixed(2)}`}
+                        accent="#00d9ff"
+                      />
+
+                      <OrderMetric
+                        label="Cost"
+                        value={`$${cost.toFixed(2)}`}
+                        accent="#ffcc66"
+                      />
+
+                      <OrderMetric
+                        label="Profit"
+                        value={`$${profit.toFixed(2)}`}
+                        accent={profit >= 0 ? "#00ff99" : "#ff6f6f"}
+                      />
+
+                      <OrderMetric
+                        label="Margin"
+                        value={`${margin.toFixed(1)}%`}
+                      />
+                    </div>
+
+                    <div style={orderMetaGrid}>
+                      <MetaItem
+                        label="Payment"
+                        value={order.payment_method || "-"}
+                      />
+
+                      <MetaItem
+                        label="Promo"
+                        value={order.promo_code || "None"}
+                        accent={order.promo_code ? "#00ff99" : undefined}
+                      />
+
+                      <MetaItem
+                        label="Discount"
+                        value={`$${Number(order.total_discount || 0).toFixed(2)}`}
+                      />
+
+                      <MetaItem
+                        label="PugPoints"
+                        value={String(Number(order.rewards_points_earned || 0))}
+                      />
+                    </div>
+
+                    <div style={actionRow}>
+                      <Link
+                        href={`/admin/orders/${order.id}`}
+                        style={viewButton}
+                      >
+                        Open Order
+                      </Link>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void markPaid(order.id);
+                        }}
+                        disabled={
+                          isPaid ||
+                          isMarkingPaid ||
+                          Boolean(markingPaidOrderId) ||
+                          Boolean(deletingOrderId)
+                        }
+                        style={{
+                          ...paidButton,
+                          opacity:
                             isPaid ||
                             isMarkingPaid ||
                             Boolean(markingPaidOrderId) ||
                             Boolean(deletingOrderId)
-                          }
-                          style={{
-                            ...paidButton,
-                            opacity:
-                              isPaid ||
-                              isMarkingPaid ||
-                              Boolean(markingPaidOrderId) ||
-                              Boolean(deletingOrderId)
-                                ? 0.45
-                                : 1,
-                            cursor:
-                              isPaid ||
-                              isMarkingPaid ||
-                              Boolean(markingPaidOrderId) ||
-                              Boolean(deletingOrderId)
-                                ? "not-allowed"
-                                : "pointer",
-                          }}
-                        >
-                          {isMarkingPaid
-                            ? "Marking..."
-                            : isPaid
+                              ? 0.45
+                              : 1,
+                          cursor:
+                            isPaid ||
+                            isMarkingPaid ||
+                            Boolean(markingPaidOrderId) ||
+                            Boolean(deletingOrderId)
+                              ? "not-allowed"
+                              : "pointer",
+                        }}
+                      >
+                        {isMarkingPaid
+                          ? "Marking..."
+                          : isPaid
                             ? "Paid"
                             : "Mark Paid"}
-                        </button>
+                      </button>
 
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            deleteOrder(order.id);
-                          }}
-                          disabled={
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void deleteOrder(order.id);
+                        }}
+                        disabled={
+                          isDeleting ||
+                          Boolean(deletingOrderId) ||
+                          Boolean(markingPaidOrderId)
+                        }
+                        style={{
+                          ...deleteButton,
+                          opacity:
                             isDeleting ||
                             Boolean(deletingOrderId) ||
                             Boolean(markingPaidOrderId)
-                          }
-                          style={{
-                            ...deleteButton,
-                            opacity:
-                              isDeleting ||
-                              Boolean(deletingOrderId) ||
-                              Boolean(markingPaidOrderId)
-                                ? 0.45
-                                : 1,
-                            cursor:
-                              isDeleting ||
-                              Boolean(deletingOrderId) ||
-                              Boolean(markingPaidOrderId)
-                                ? "not-allowed"
-                                : "pointer",
-                          }}
-                        >
-                          {isDeleting ? "Deleting..." : "Delete"}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                              ? 0.45
+                              : 1,
+                          cursor:
+                            isDeleting ||
+                            Boolean(deletingOrderId) ||
+                            Boolean(markingPaidOrderId)
+                              ? "not-allowed"
+                              : "pointer",
+                        }}
+                      >
+                        {isDeleting ? "Deleting..." : "Delete"}
+                      </button>
+                    </div>
+                  </article>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </div>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
@@ -630,128 +832,477 @@ function getStatusBadgeStyle(order: Order) {
   };
 }
 
+function StatCard({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+}) {
+  return (
+    <div
+      style={{
+        ...statCard,
+        borderColor: `${accent}55`,
+        boxShadow: `0 0 18px ${accent}18`,
+      }}
+    >
+      <span style={{ ...statLabel, color: accent }}>{label}</span>
+      <strong style={statValue}>{value}</strong>
+    </div>
+  );
+}
+
+function FinancialCard({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent: string;
+}) {
+  return (
+    <div style={financialCard}>
+      <span style={financialLabel}>{label}</span>
+      <strong style={{ ...financialValue, color: accent }}>{value}</strong>
+    </div>
+  );
+}
+
+function OrderMetric({
+  label,
+  value,
+  accent = "#ffffff",
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+}) {
+  return (
+    <div style={orderMetric}>
+      <span style={metricLabel}>{label}</span>
+      <strong style={{ color: accent }}>{value}</strong>
+    </div>
+  );
+}
+
+function MetaItem({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+}) {
+  return (
+    <div style={metaItem}>
+      <span style={metaLabel}>{label}</span>
+      <strong style={{ color: accent || "#ffffff" }}>{value}</strong>
+    </div>
+  );
+}
+
 const pageStyle = {
-  padding: 30,
-  color: "#fff",
-  background: "#000",
   minHeight: "100vh",
+  padding: "clamp(18px, 4vw, 34px)",
+  background:
+    "radial-gradient(circle at 12% 0%, rgba(255,47,208,.14), transparent 27%), radial-gradient(circle at 88% 4%, rgba(0,217,255,.14), transparent 30%), #000",
+  color: "#ffffff",
+  fontSize: 16,
 };
 
-const navigationRow = {
+const container = {
+  width: "100%",
+  maxWidth: 1480,
+  margin: "0 auto",
+};
+
+const pageHeader = {
   display: "flex",
-  gap: 12,
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 20,
   flexWrap: "wrap" as const,
-  marginBottom: 20,
 };
 
-const promoLink = {
-  padding: "10px 16px",
-  borderRadius: 10,
-  border: "1px solid #00d9ff",
-  background: "#111",
+const eyebrow = {
+  margin: 0,
   color: "#00d9ff",
-  textDecoration: "none",
-  fontWeight: "bold",
+  fontSize: 13,
+  fontWeight: 900,
+  letterSpacing: ".15em",
 };
 
-const analyticsLink = {
-  padding: "10px 16px",
+const pageTitle = {
+  margin: "7px 0 0",
+  color: "#ff45d8",
+  fontSize: "clamp(44px, 7vw, 64px)",
+  letterSpacing: "-.035em",
+  textShadow: "0 0 18px rgba(255,69,216,.22)",
+};
+
+const subtitle = {
+  maxWidth: 800,
+  margin: "12px 0 0",
+  color: "#c1c1c9",
+  fontSize: 18,
+  lineHeight: 1.7,
+};
+
+const headerLinks = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap" as const,
+};
+
+const primaryLink = {
+  minHeight: 52,
+  padding: "13px 18px",
+  display: "grid",
+  placeItems: "center",
+  border: "1px solid #45d97a",
   borderRadius: 10,
-  border: "1px solid #00ff99",
-  background: "#111",
-  color: "#00ff99",
+  background: "linear-gradient(180deg, #2eea6f, #19b857)",
+  color: "#ffffff",
   textDecoration: "none",
-  fontWeight: "bold",
+  fontSize: 16,
+  fontWeight: 900,
+};
+
+const secondaryLink = {
+  minHeight: 52,
+  padding: "13px 18px",
+  display: "grid",
+  placeItems: "center",
+  border: "1px solid rgba(0,217,255,.46)",
+  borderRadius: 10,
+  background: "rgba(0,217,255,.06)",
+  color: "#7df9ff",
+  textDecoration: "none",
+  fontSize: 16,
+  fontWeight: 900,
+};
+
+const noticeBanner = {
+  marginTop: 18,
+  padding: "14px 16px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  border: "1px solid rgba(0,255,153,.45)",
+  borderRadius: 12,
+  background: "rgba(0,255,153,.08)",
+  color: "#00ff99",
+  fontSize: 16,
+  fontWeight: 800,
+};
+
+const noticeClose = {
+  border: 0,
+  background: "transparent",
+  color: "#00ff99",
+  fontSize: 22,
+  cursor: "pointer",
+};
+
+const statsGrid = {
+  marginTop: 22,
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+  gap: 15,
+};
+
+const statCard = {
+  padding: 20,
+  display: "grid",
+  gap: 8,
+  border: "1px solid",
+  borderRadius: 16,
+  background:
+    "linear-gradient(145deg, rgba(12,12,17,.97), rgba(6,6,9,.98))",
+};
+
+const statLabel = {
+  fontSize: 13,
+  fontWeight: 900,
+  letterSpacing: ".08em",
+  textTransform: "uppercase" as const,
+};
+
+const statValue = {
+  fontSize: 34,
+};
+
+const toolbarPanel = {
+  marginTop: 22,
+  padding: 20,
+  display: "grid",
+  gap: 16,
+  border: "1px solid rgba(0,217,255,.32)",
+  borderRadius: 16,
+  background:
+    "linear-gradient(145deg, rgba(8,8,12,.96), rgba(15,8,18,.94))",
+};
+
+const searchGroup = {
+  display: "grid",
+  gap: 7,
+};
+
+const searchLabel = {
+  color: "#d1d1d7",
+  fontSize: 14,
+  fontWeight: 900,
+};
+
+const searchInput = {
+  width: "100%",
+  minHeight: 54,
+  boxSizing: "border-box" as const,
+  padding: "14px 16px",
+  border: "1px solid rgba(255,255,255,.16)",
+  borderRadius: 10,
+  background: "#050507",
+  color: "#ffffff",
+  fontSize: 16,
 };
 
 const filterRow = {
   display: "flex",
-  gap: 12,
+  gap: 10,
   flexWrap: "wrap" as const,
-  marginBottom: 25,
 };
 
 const filterButton = {
-  padding: "10px 16px",
-  borderRadius: 10,
+  minHeight: 46,
+  padding: "11px 15px",
+  border: "1px solid",
+  borderRadius: 999,
+  fontSize: 15,
+  fontWeight: 900,
   cursor: "pointer",
-  fontWeight: "bold",
 };
 
-const tableStyle = {
-  width: "100%",
-  minWidth: 1280,
-  borderCollapse: "collapse" as const,
+const financialGrid = {
+  marginTop: 18,
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(185px, 1fr))",
+  gap: 14,
 };
 
-const th = {
-  textAlign: "left" as const,
-  padding: 10,
-  color: "#00d9ff",
+const financialCard = {
+  padding: 18,
+  display: "grid",
+  gap: 7,
+  border: "1px solid rgba(255,255,255,.11)",
+  borderRadius: 14,
+  background: "rgba(255,255,255,.03)",
 };
 
-const td = {
-  padding: 10,
+const financialLabel = {
+  color: "#a7a7af",
+  fontSize: 13,
+  fontWeight: 900,
+  textTransform: "uppercase" as const,
 };
 
-const actionsWrapper = {
+const financialValue = {
+  fontSize: 28,
+};
+
+const ordersPanel = {
+  marginTop: 22,
+  padding: "clamp(18px, 3vw, 24px)",
+  border: "1px solid rgba(0,217,255,.32)",
+  borderRadius: 18,
+  background:
+    "linear-gradient(145deg, rgba(8,8,12,.96), rgba(15,8,18,.94))",
+};
+
+const ordersHeader = {
   display: "flex",
+  justifyContent: "space-between",
   alignItems: "center",
-  gap: 8,
+  gap: 14,
+  flexWrap: "wrap" as const,
+  marginBottom: 18,
+};
+
+const sectionEyebrow = {
+  margin: 0,
+  color: "#00d9ff",
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: ".13em",
+};
+
+const sectionTitle = {
+  margin: "5px 0 0",
+  color: "#7df9ff",
+  fontSize: 31,
+};
+
+const clearButton = {
+  minHeight: 44,
+  padding: "10px 14px",
+  border: "1px solid rgba(255,69,216,.44)",
+  borderRadius: 9,
+  background: "rgba(255,69,216,.07)",
+  color: "#ff75df",
+  fontSize: 15,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const emptyState = {
+  padding: 28,
+  display: "grid",
+  justifyItems: "center",
+  border: "1px dashed rgba(0,217,255,.28)",
+  borderRadius: 12,
+};
+
+const muted = {
+  color: "#a7a7af",
+  fontSize: 16,
+  lineHeight: 1.6,
+};
+
+const orderGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
+  gap: 16,
+};
+
+const orderCard = {
+  padding: 18,
+  display: "grid",
+  gap: 16,
+  border: "1px solid rgba(255,255,255,.12)",
+  borderRadius: 15,
+  background: "rgba(0,0,0,.26)",
+  boxShadow: "0 0 18px rgba(0,217,255,.05)",
+};
+
+const orderCardHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+};
+
+const orderNumber = {
+  color: "#ff75df",
+  textDecoration: "none",
+  fontSize: 21,
+  fontWeight: 900,
+  overflowWrap: "anywhere" as const,
+};
+
+const orderDate = {
+  margin: "6px 0 0",
+  color: "#8f8f98",
+  fontSize: 13,
+};
+
+const customerBlock = {
+  display: "grid",
+  gap: 4,
+};
+
+const customerName = {
+  fontSize: 19,
+};
+
+const customerEmail = {
+  color: "#b1b1b8",
+  overflowWrap: "anywhere" as const,
+};
+
+const orderMetrics = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 10,
+};
+
+const orderMetric = {
+  padding: 13,
+  display: "grid",
+  gap: 5,
+  border: "1px solid rgba(255,255,255,.08)",
+  borderRadius: 10,
+  background: "rgba(255,255,255,.025)",
+};
+
+const metricLabel = {
+  color: "#8f8f98",
+  fontSize: 11,
+  fontWeight: 900,
+  textTransform: "uppercase" as const,
+};
+
+const orderMetaGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 10,
+};
+
+const metaItem = {
+  minWidth: 0,
+  display: "grid",
+  gap: 4,
+};
+
+const metaLabel = {
+  color: "#8f8f98",
+  fontSize: 11,
+  fontWeight: 900,
+  textTransform: "uppercase" as const,
+};
+
+const actionRow = {
+  display: "flex",
+  gap: 9,
   flexWrap: "wrap" as const,
 };
 
+const viewButton = {
+  minHeight: 44,
+  padding: "10px 14px",
+  display: "grid",
+  placeItems: "center",
+  border: "1px solid rgba(0,217,255,.46)",
+  borderRadius: 9,
+  background: "rgba(0,217,255,.06)",
+  color: "#7df9ff",
+  textDecoration: "none",
+  fontSize: 15,
+  fontWeight: 900,
+};
+
 const paidButton = {
-  padding: "6px 10px",
-  background: "#003300",
+  minHeight: 44,
+  padding: "10px 14px",
+  border: "1px solid rgba(0,255,153,.5)",
+  borderRadius: 9,
+  background: "rgba(0,255,153,.07)",
   color: "#00ff99",
-  border: "1px solid #00ff99",
-  borderRadius: 6,
+  fontSize: 15,
+  fontWeight: 900,
 };
 
 const deleteButton = {
-  padding: "6px 10px",
-  background: "#220000",
-  color: "#ff4d4d",
-  border: "1px solid #ff4d4d",
-  borderRadius: 6,
-};
-
-const promoBadge = {
-  display: "inline-block",
-  padding: "5px 9px",
-  borderRadius: 999,
-  border: "1px solid #00ff99",
-  background: "rgba(0,255,153,.10)",
-  color: "#00ff99",
-  fontWeight: "bold",
-  fontSize: 12,
-};
-
-const summaryGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-  gap: 14,
-  marginBottom: 24,
-};
-
-const summaryCard = {
-  padding: 16,
-  border: "1px solid #333",
-  borderRadius: 12,
-  background: "#111",
-  display: "grid",
-  gap: 8,
-};
-
-const summaryLabel = {
-  color: "#aaa",
-  fontSize: 13,
-  textTransform: "uppercase" as const,
-  letterSpacing: 0.6,
-};
-
-const summaryValue = {
-  color: "#00d9ff",
-  fontSize: 24,
+  minHeight: 44,
+  padding: "10px 14px",
+  border: "1px solid rgba(255,93,93,.56)",
+  borderRadius: 9,
+  background: "rgba(255,93,93,.07)",
+  color: "#ff8585",
+  fontSize: 15,
+  fontWeight: 900,
 };
