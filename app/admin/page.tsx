@@ -36,6 +36,9 @@ type Order = {
   deleted_by?: string | null;
   cancelled_at?: string | null;
   cancellation_reason?: string | null;
+  status_before_cancel?: string | null;
+  closed_at?: string | null;
+  closed_by?: string | null;
 };
 
 function getOrderRevenue(order: Order) {
@@ -85,6 +88,8 @@ export default function AdminPage() {
   const [markingPaidOrderId, setMarkingPaidOrderId] = useState<string | null>(null);
   const [restoringOrderId, setRestoringOrderId] = useState<string | null>(null);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const [closingOrderId, setClosingOrderId] =
+    useState<string | null>(null);
   const [deliveryOrderId, setDeliveryOrderId] =
     useState<string | null>(null);
 
@@ -134,7 +139,6 @@ export default function AdminPage() {
       }
 
       setAuthorized(true);
-      setNotice("Order marked paid and inventory updated.");
       await loadOrders();
       setLoading(false);
     }
@@ -142,8 +146,25 @@ export default function AdminPage() {
     loadAdmin();
   }, [supabase]);
 
-  async function markPaid(id: string) {
+  async function togglePaymentStatus(id: string) {
     if (markingPaidOrderId) return;
+
+    const selectedOrder =
+      orders.find(
+        (order) =>
+          order.id === id
+      );
+
+    if (
+      selectedOrder?.closed_at ||
+      selectedOrder?.deleted_at
+    ) {
+      setNotice(
+        "Reopen this order before changing payment status."
+      );
+
+      return;
+    }
 
     setMarkingPaidOrderId(id);
 
@@ -160,7 +181,44 @@ export default function AdminPage() {
       }
 
       if (orderData.status === "paid") {
-        setNotice("This order is already marked paid.");
+        const shipped =
+          orderData.shipping_status === "shipped" ||
+          orderData.shipping_status === "delivered";
+
+        const warning = shipped
+          ? `Order ${orderData.order_number || id} has already been shipped or delivered.\n\nMark it unpaid anyway? Tracking and shipping status will remain unchanged.`
+          : `Mark order ${orderData.order_number || id} as unpaid?\n\nThe order will return to Pending status.`;
+
+        const confirmed =
+          window.confirm(warning);
+
+        if (!confirmed) {
+          return;
+        }
+
+        const {
+          error: unpaidError,
+        } = await supabase
+          .from("orders")
+          .update({
+            status: "pending",
+            cancelled_at: null,
+            cancellation_reason: null,
+          })
+          .eq("id", id);
+
+        if (unpaidError) {
+          setNotice(
+            `Order could not be marked unpaid: ${unpaidError.message}`
+          );
+          return;
+        }
+
+        setNotice(
+          `Order ${orderData.order_number || id} marked unpaid and returned to Pending.`
+        );
+
+        await loadOrders();
         return;
       }
 
@@ -257,6 +315,10 @@ export default function AdminPage() {
         return;
       }
 
+      setNotice(
+        `Order ${orderData.order_number || id} marked paid.`
+      );
+
       await loadOrders();
     } finally {
       setMarkingPaidOrderId(null);
@@ -288,31 +350,277 @@ export default function AdminPage() {
     } finally { setRestoringOrderId(null); }
   }
 
-  async function cancelOrder(id: string) {
-    if (cancellingOrderId) return;
-    const order = orders.find((item) => item.id === id);
-    const label = order?.order_number || id;
-    if (!window.confirm(`Cancel unpaid order ${label}?`)) return;
-    setCancellingOrderId(id); setNotice("");
+  async function toggleCancellation(order: Order) {
+    if (
+      cancellingOrderId ||
+      order.deleted_at ||
+      order.closed_at
+    ) {
+      return;
+    }
+
+    const isCancelled =
+      order.status === "cancelled";
+
+    const confirmed =
+      window.confirm(
+        isCancelled
+          ? `Uncancel order ${order.order_number}?`
+          : `Cancel order ${order.order_number}?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setCancellingOrderId(
+      order.id
+    );
+
+    setNotice("");
+
     try {
-      const { error } = await supabase.rpc("admin_cancel_order", {
-        target_order_id: id,
-        reason: "Cancelled by administrator",
-      });
-      if (error) { setNotice(`Order could not be cancelled: ${error.message}`); return; }
-      setNotice(`Order ${label} cancelled.`); await loadOrders();
-    } finally { setCancellingOrderId(null); }
+      const {
+        error,
+      } = isCancelled
+        ? await supabase.rpc(
+            "admin_reopen_cancelled_order",
+            {
+              target_order_id:
+                order.id,
+            }
+          )
+        : await supabase.rpc(
+            "admin_cancel_order",
+            {
+              target_order_id:
+                order.id,
+              reason:
+                "Cancelled by administrator",
+            }
+          );
+
+      if (error) {
+        setNotice(
+          `Order could not be ${
+            isCancelled
+              ? "uncancelled"
+              : "cancelled"
+          }: ${error.message}`
+        );
+
+        return;
+      }
+
+      setNotice(
+        `Order ${
+          order.order_number
+        } ${
+          isCancelled
+            ? "uncancelled"
+            : "cancelled"
+        }.`
+      );
+
+      await loadOrders();
+    } finally {
+      setCancellingOrderId(
+        null
+      );
+    }
   }
 
-  async function reopenCancelledOrder(id: string) {
-    if (cancellingOrderId) return;
-    setCancellingOrderId(id); setNotice("");
+  async function toggleDeleted(
+    order: Order
+  ) {
+    if (
+      deletingOrderId ||
+      restoringOrderId
+    ) {
+      return;
+    }
+
+    if (order.deleted_at) {
+      const confirmed =
+        window.confirm(
+          `Restore order ${order.order_number} from Recently Deleted?`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      setRestoringOrderId(
+        order.id
+      );
+
+      setNotice("");
+
+      try {
+        const {
+          error,
+        } =
+          await supabase.rpc(
+            "admin_restore_order",
+            {
+              target_order_id:
+                order.id,
+            }
+          );
+
+        if (error) {
+          setNotice(
+            `Order could not be restored: ${error.message}`
+          );
+
+          return;
+        }
+
+        setNotice(
+          `Order ${order.order_number} restored.`
+        );
+
+        await loadOrders();
+      } finally {
+        setRestoringOrderId(
+          null
+        );
+      }
+
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `Move order ${order.order_number} to Recently Deleted?\n\nIt can be restored later.`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingOrderId(
+      order.id
+    );
+
+    setNotice("");
+
     try {
-      const { error } = await supabase.rpc("admin_reopen_cancelled_order", { target_order_id: id });
-      if (error) { setNotice(`Order could not be reopened: ${error.message}`); return; }
-      setNotice("Cancelled order reopened as pending."); await loadOrders();
-    } finally { setCancellingOrderId(null); }
+      const {
+        error,
+      } =
+        await supabase.rpc(
+          "admin_soft_delete_order",
+          {
+            target_order_id:
+              order.id,
+          }
+        );
+
+      if (error) {
+        setNotice(
+          `Order could not be deleted: ${error.message}`
+        );
+
+        return;
+      }
+
+      setNotice(
+        `Order ${order.order_number} moved to Recently Deleted.`
+      );
+
+      await loadOrders();
+    } finally {
+      setDeletingOrderId(
+        null
+      );
+    }
   }
+
+  async function toggleClosed(
+    order: Order
+  ) {
+    if (
+      closingOrderId ||
+      order.deleted_at
+    ) {
+      return;
+    }
+
+    const isClosed =
+      Boolean(
+        order.closed_at
+      );
+
+    const confirmed =
+      window.confirm(
+        isClosed
+          ? `Reopen order ${order.order_number} for editing?`
+          : `Close order ${order.order_number}?\n\nClosed orders cannot be edited until reopened.`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setClosingOrderId(
+      order.id
+    );
+
+    setNotice("");
+
+    try {
+      const {
+        error,
+      } =
+        await supabase.rpc(
+          "admin_set_order_closed",
+          {
+            target_order_id:
+              order.id,
+            should_close:
+              !isClosed,
+          }
+        );
+
+      if (error) {
+        setNotice(
+          `Order could not be ${
+            isClosed
+              ? "reopened"
+              : "closed"
+          }: ${error.message}`
+        );
+
+        return;
+      }
+
+      setNotice(
+        `Order ${
+          order.order_number
+        } ${
+          isClosed
+            ? "reopened"
+            : "closed"
+        }.`
+      );
+
+      setDeliveryOrderId(
+        null
+      );
+
+      setScannerOpen(
+        false
+      );
+
+      await loadOrders();
+    } finally {
+      setClosingOrderId(
+        null
+      );
+    }
+  }
+
 
   useEffect(() => {
     if (
@@ -391,6 +699,17 @@ export default function AdminPage() {
   function openDeliveryPanel(
     order: Order
   ) {
+    if (
+      order.closed_at ||
+      order.deleted_at
+    ) {
+      setNotice(
+        "Reopen this order before editing delivery information."
+      );
+
+      return;
+    }
+
     if (
       deliveryOrderId ===
       order.id
@@ -536,6 +855,9 @@ export default function AdminPage() {
   const shippedCount = activeOrders.filter((order) => order.shipping_status === "shipped").length;
   const deliveredCount = activeOrders.filter((order) => order.shipping_status === "delivered").length;
   const cancelledCount = activeOrders.filter((order) => order.status === "cancelled").length;
+  const closedCount = activeOrders.filter(
+    (order) => Boolean(order.closed_at)
+  ).length;
 
   const filteredOrders = orders.filter((order) => {
     const query = search.trim().toLowerCase();
@@ -550,6 +872,7 @@ export default function AdminPage() {
     if (filter === "shipped") return order.shipping_status === "shipped";
     if (filter === "delivered") return order.shipping_status === "delivered";
     if (filter === "cancelled") return order.status === "cancelled";
+    if (filter === "closed") return Boolean(order.closed_at);
     return true;
   });
 
@@ -585,7 +908,7 @@ export default function AdminPage() {
 
   const now = new Date();
 
-  const todayOrders = orders.filter((order) => {
+  const todayOrders = activeOrders.filter((order) => {
     const created = new Date(order.created_at);
 
     return (
@@ -684,6 +1007,7 @@ export default function AdminPage() {
           />
 
           <StatCard label="Cancelled" value={String(cancelledCount)} accent="#ff6f6f" />
+          <StatCard label="Closed" value={String(closedCount)} accent="#9ea7ff" />
           <StatCard label="Recently Deleted" value={String(deletedOrders.length)} accent="#b8bcc4" />
         </section>
 
@@ -711,6 +1035,7 @@ export default function AdminPage() {
               { key: "shipped", label: `Shipped (${shippedCount})` },
               { key: "delivered", label: `Delivered (${deliveredCount})` },
               { key: "cancelled", label: `Cancelled (${cancelledCount})` },
+              { key: "closed", label: `Closed (${closedCount})` },
               { key: "deleted", label: `Recently Deleted (${deletedOrders.length})` },
             ].map((item) => {
               const active = filter === item.key;
@@ -827,7 +1152,16 @@ export default function AdminPage() {
                     key={order.id}
                     style={{
                       ...orderCard,
-                      opacity: isDeleting ? 0.55 : 1,
+                      opacity:
+                        isDeleting
+                          ? 0.55
+                          : order.closed_at
+                          ? 0.82
+                          : 1,
+                      borderColor:
+                        order.closed_at
+                          ? "rgba(158,167,255,.38)"
+                          : "rgba(255,255,255,.12)",
                     }}
                   >
                     <div style={orderCardHeader}>
@@ -920,6 +1254,20 @@ export default function AdminPage() {
                       />
 
                       <MetaItem
+                        label="Order Access"
+                        value={
+                          order.closed_at
+                            ? "Closed"
+                            : "Open"
+                        }
+                        accent={
+                          order.closed_at
+                            ? "#9ea7ff"
+                            : "#00ff99"
+                        }
+                      />
+
+                      <MetaItem
                         label="Promo"
                         value={order.promo_code || "None"}
                         accent={order.promo_code ? "#00ff99" : undefined}
@@ -936,129 +1284,230 @@ export default function AdminPage() {
                       />
                     </div>
 
-                    <div className="order-action-row" style={actionRow}>
-                      {!order.deleted_at && <Link href={`/admin/orders/${order.id}`} style={viewButton}>Open</Link>}
+                    <div
+                      className="order-action-row"
+                      style={actionRow}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void toggleClosed(
+                            order
+                          )
+                        }
+                        disabled={
+                          Boolean(
+                            order.deleted_at
+                          ) ||
+                          Boolean(
+                            closingOrderId
+                          )
+                        }
+                        title={
+                          order.closed_at
+                            ? "Reopen this order for editing"
+                            : "Close and lock this order"
+                        }
+                        style={{
+                          ...viewButton,
+                          opacity:
+                            order.deleted_at ||
+                            closingOrderId
+                              ? 0.45
+                              : 1,
+                        }}
+                      >
+                        {closingOrderId ===
+                        order.id
+                          ? "Saving..."
+                          : order.closed_at
+                          ? "Open"
+                          : "Close"}
+                      </button>
 
-                      {order.deleted_at ? (
-                        <button type="button" onClick={() => void restoreOrder(order.id)} disabled={Boolean(restoringOrderId)} style={restoreButton}>
-                          {restoringOrderId === order.id ? "Restoring..." : "Restore Order"}
-                        </button>
-                      ) : order.status === "cancelled" ? (
-                        <button type="button" onClick={() => void reopenCancelledOrder(order.id)} disabled={Boolean(cancellingOrderId)} style={paidButton}>
-                          {cancellingOrderId === order.id ? "Reopening..." : "Reopen as Pending"}
-                        </button>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void markPaid(
-                                order.id
-                              )
-                            }
-                            disabled={
-                              isPaid ||
-                              isMarkingPaid ||
-                              Boolean(
-                                markingPaidOrderId
-                              ) ||
-                              Boolean(
-                                deletingOrderId
-                              ) ||
-                              Boolean(
-                                cancellingOrderId
-                              )
-                            }
-                            style={{
-                              ...paidButton,
-                              opacity:
-                                isPaid ||
-                                isMarkingPaid ||
-                                Boolean(
-                                  markingPaidOrderId
-                                ) ||
-                                Boolean(
-                                  deletingOrderId
-                                ) ||
-                                Boolean(
-                                  cancellingOrderId
-                                )
-                                  ? 0.45
-                                  : 1,
-                            }}
-                          >
-                            {isMarkingPaid
-                              ? "Saving..."
-                              : isPaid
-                              ? "Paid"
-                              : "Paid"}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openDeliveryPanel(
-                                order
-                              )
-                            }
-                            style={deliveryButton}
-                          >
-                            {deliveryOrderId ===
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void togglePaymentStatus(
                             order.id
-                              ? "Close"
-                              : "Delivery"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void cancelOrder(
-                                order.id
-                              )
-                            }
-                            disabled={Boolean(
-                              cancellingOrderId
-                            )}
-                            style={{
-                              ...cancelButton,
-                              opacity:
-                                cancellingOrderId
-                                  ? 0.55
-                                  : 1,
-                            }}
-                          >
-                            {cancellingOrderId ===
-                            order.id
-                              ? "Cancelling..."
-                              : "Cancel"}
-                          </button>
+                          )
+                        }
+                        disabled={
+                          Boolean(
+                            order.closed_at
+                          ) ||
+                          Boolean(
+                            order.deleted_at
+                          ) ||
+                          isMarkingPaid ||
+                          Boolean(
+                            markingPaidOrderId
+                          ) ||
+                          Boolean(
+                            deletingOrderId
+                          ) ||
+                          Boolean(
+                            cancellingOrderId
+                          )
+                        }
+                        title={
+                          order.closed_at
+                            ? "Reopen this order before editing payment"
+                            : isPaid
+                            ? "Click to mark this order unpaid"
+                            : "Click to mark this order paid"
+                        }
+                        style={{
+                          ...paidButton,
+                          opacity:
+                            order.closed_at ||
+                            order.deleted_at ||
+                            isMarkingPaid ||
+                            markingPaidOrderId ||
+                            deletingOrderId ||
+                            cancellingOrderId
+                              ? 0.45
+                              : 1,
+                        }}
+                      >
+                        {isMarkingPaid
+                          ? "Saving..."
+                          : isPaid
+                          ? "Paid ✓"
+                          : "Mark Paid"}
+                      </button>
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void deleteOrder(
-                                order.id
-                              )
-                            }
-                            disabled={
-                              isDeleting ||
-                              Boolean(
-                                deletingOrderId
-                              ) ||
-                              Boolean(
-                                markingPaidOrderId
-                              ) ||
-                              Boolean(
-                                cancellingOrderId
-                              )
-                            }
-                            style={deleteButton}
-                          >
-                            {isDeleting
-                              ? "Moving..."
-                              : "Delete"}
-                          </button>
-                        </>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openDeliveryPanel(
+                            order
+                          )
+                        }
+                        disabled={
+                          Boolean(
+                            order.closed_at
+                          ) ||
+                          Boolean(
+                            order.deleted_at
+                          )
+                        }
+                        title={
+                          order.closed_at
+                            ? "Reopen this order before editing delivery"
+                            : "Update delivery status and tracking"
+                        }
+                        style={{
+                          ...deliveryButton,
+                          opacity:
+                            order.closed_at ||
+                            order.deleted_at
+                              ? 0.45
+                              : 1,
+                        }}
+                      >
+                        {deliveryOrderId ===
+                        order.id
+                          ? "Hide"
+                          : "Delivery"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void toggleCancellation(
+                            order
+                          )
+                        }
+                        disabled={
+                          Boolean(
+                            order.closed_at
+                          ) ||
+                          Boolean(
+                            order.deleted_at
+                          ) ||
+                          Boolean(
+                            cancellingOrderId
+                          )
+                        }
+                        title={
+                          order.closed_at
+                            ? "Reopen this order before changing cancellation"
+                            : order.status ===
+                              "cancelled"
+                            ? "Restore the previous order status"
+                            : "Cancel this order"
+                        }
+                        style={{
+                          ...cancelButton,
+                          opacity:
+                            order.closed_at ||
+                            order.deleted_at ||
+                            cancellingOrderId
+                              ? 0.45
+                              : 1,
+                        }}
+                      >
+                        {cancellingOrderId ===
+                        order.id
+                          ? "Saving..."
+                          : order.status ===
+                            "cancelled"
+                          ? "Uncancel"
+                          : "Cancel"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void toggleDeleted(
+                            order
+                          )
+                        }
+                        disabled={
+                          Boolean(
+                            deletingOrderId
+                          ) ||
+                          Boolean(
+                            restoringOrderId
+                          ) ||
+                          Boolean(
+                            markingPaidOrderId
+                          ) ||
+                          Boolean(
+                            cancellingOrderId
+                          ) ||
+                          Boolean(
+                            closingOrderId
+                          )
+                        }
+                        title={
+                          order.deleted_at
+                            ? "Restore this order"
+                            : "Move this order to Recently Deleted"
+                        }
+                        style={{
+                          ...deleteButton,
+                          opacity:
+                            deletingOrderId ||
+                            restoringOrderId ||
+                            markingPaidOrderId ||
+                            cancellingOrderId ||
+                            closingOrderId
+                              ? 0.45
+                              : 1,
+                        }}
+                      >
+                        {deletingOrderId ===
+                        order.id
+                          ? "Moving..."
+                          : restoringOrderId ===
+                            order.id
+                          ? "Restoring..."
+                          : order.deleted_at
+                          ? "Undelete"
+                          : "Delete"}
+                      </button>
                     </div>
 
                     {deliveryOrderId ===
@@ -1224,6 +1673,7 @@ export default function AdminPage() {
 
 function getStatusLabel(order: Order) {
   if (order.deleted_at) return "DELETED";
+  if (order.closed_at) return "CLOSED";
   if (order.status === "cancelled") return "CANCELLED";
   if (order.shipping_status === "delivered") return "DELIVERED";
   if (order.shipping_status === "shipped") return "SHIPPED";
