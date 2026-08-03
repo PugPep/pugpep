@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 
-import { CartProvider } from "./cartContext";
+import { CartProvider, useCart } from "./cartContext";
 import CartIcon from "./CartIcon";
 import AuthNav from "./AuthNav";
 import AdminMenu from "./AdminMenu";
@@ -405,19 +405,40 @@ export default function RootLayout({
             )}
           </header>
 
-          {!desktopHeaderOpen && (
-            <div
-              className="floatingDesktopCart"
-              style={floatingCart}
-            >
-              <CartIcon />
-            </div>
-          )}
+          <FloatingCart
+            headerOpen={desktopHeaderOpen}
+          />
 
           {children}
         </CartProvider>
       </body>
     </html>
+  );
+}
+
+function FloatingCart({
+  headerOpen,
+}: {
+  headerOpen: boolean;
+}) {
+  const {
+    cart,
+  } = useCart();
+
+  if (
+    headerOpen ||
+    cart.length === 0
+  ) {
+    return null;
+  }
+
+  return (
+    <div
+      className="floatingDesktopCart"
+      style={floatingCart}
+    >
+      <CartIcon />
+    </div>
   );
 }
 
