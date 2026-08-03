@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../../lib/supabaseClient";
+import { Html5QrcodeScanner } from "html5-qrcode";
 
 const ADMIN_EMAIL = "pugpep99@gmail.com";
 
@@ -29,6 +30,7 @@ type Order = {
   payment_method?: string;
   status: string;
   shipping_status?: string;
+  tracking_number?: string | null;
   created_at: string;
   deleted_at?: string | null;
   deleted_by?: string | null;
@@ -83,6 +85,20 @@ export default function AdminPage() {
   const [markingPaidOrderId, setMarkingPaidOrderId] = useState<string | null>(null);
   const [restoringOrderId, setRestoringOrderId] = useState<string | null>(null);
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const [deliveryOrderId, setDeliveryOrderId] =
+    useState<string | null>(null);
+
+  const [deliveryStatus, setDeliveryStatus] =
+    useState("not shipped");
+
+  const [trackingNumber, setTrackingNumber] =
+    useState("");
+
+  const [savingDelivery, setSavingDelivery] =
+    useState(false);
+
+  const [scannerOpen, setScannerOpen] =
+    useState(false);
 
   async function loadOrders() {
     const { data, error } = await supabase
@@ -298,6 +314,201 @@ export default function AdminPage() {
     } finally { setCancellingOrderId(null); }
   }
 
+  useEffect(() => {
+    if (
+      !scannerOpen ||
+      !deliveryOrderId
+    ) {
+      return;
+    }
+
+    const scannerId =
+      `tracking-scanner-${deliveryOrderId}`;
+
+    const scanner =
+      new Html5QrcodeScanner(
+        scannerId,
+        {
+          fps: 10,
+          qrbox: {
+            width: 280,
+            height: 120,
+          },
+          rememberLastUsedCamera:
+            true,
+        },
+        false
+      );
+
+    scanner.render(
+      (
+        decodedText
+      ) => {
+        const captured =
+          decodedText.trim();
+
+        if (!captured) {
+          return;
+        }
+
+        setTrackingNumber(
+          captured
+        );
+
+        setDeliveryStatus(
+          "shipped"
+        );
+
+        void saveDeliveryUpdate(
+          deliveryOrderId,
+          "shipped",
+          captured
+        );
+
+        setScannerOpen(
+          false
+        );
+
+        void scanner
+          .clear()
+          .catch(() => {});
+      },
+      () => {
+        // Normal scan misses are ignored while the camera is active.
+      }
+    );
+
+    return () => {
+      void scanner
+        .clear()
+        .catch(() => {});
+    };
+  }, [
+    scannerOpen,
+    deliveryOrderId,
+  ]);
+
+  function openDeliveryPanel(
+    order: Order
+  ) {
+    if (
+      deliveryOrderId ===
+      order.id
+    ) {
+      setDeliveryOrderId(
+        null
+      );
+
+      setScannerOpen(
+        false
+      );
+
+      return;
+    }
+
+    setDeliveryOrderId(
+      order.id
+    );
+
+    setDeliveryStatus(
+      order.shipping_status ||
+        "not shipped"
+    );
+
+    setTrackingNumber(
+      order.tracking_number ||
+        ""
+    );
+
+    setScannerOpen(
+      false
+    );
+
+    setNotice("");
+  }
+
+  async function saveDeliveryUpdate(
+    orderId = deliveryOrderId,
+    status = deliveryStatus,
+    tracking = trackingNumber
+  ) {
+    if (
+      !orderId ||
+      savingDelivery
+    ) {
+      return;
+    }
+
+    const cleanedTracking =
+      tracking.trim();
+
+    if (
+      status ===
+        "shipped" &&
+      !cleanedTracking
+    ) {
+      setNotice(
+        "Enter or scan a tracking number before marking an order shipped."
+      );
+
+      return;
+    }
+
+    setSavingDelivery(
+      true
+    );
+
+    setNotice("");
+
+    try {
+      const {
+        error,
+      } =
+        await supabase
+          .from("orders")
+          .update({
+            shipping_status:
+              status,
+            tracking_number:
+              cleanedTracking ||
+              null,
+          })
+          .eq(
+            "id",
+            orderId
+          );
+
+      if (error) {
+        setNotice(
+          `Delivery information could not be saved: ${error.message}`
+        );
+
+        return;
+      }
+
+      setNotice(
+        status ===
+        "shipped"
+          ? `Tracking ${cleanedTracking} saved and order marked shipped.`
+          : `Delivery status updated to ${status}.`
+      );
+
+      setDeliveryStatus(
+        status
+      );
+
+      setTrackingNumber(
+        cleanedTracking
+      );
+
+      await loadOrders();
+    } finally {
+      setSavingDelivery(
+        false
+      );
+    }
+  }
+
   if (loading) {
     return (
       <main style={pageStyle}>
@@ -328,7 +539,8 @@ export default function AdminPage() {
 
   const filteredOrders = orders.filter((order) => {
     const query = search.trim().toLowerCase();
-    const matchesSearch = !query || order.order_number?.toLowerCase().includes(query) || order.customer_name?.toLowerCase().includes(query) || order.customer_email?.toLowerCase().includes(query) || order.promo_code?.toLowerCase().includes(query) || order.payment_method?.toLowerCase().includes(query);
+    const matchesSearch = !query || order.order_number?.toLowerCase().includes(query) || order.customer_name?.toLowerCase().includes(query) || order.customer_email?.toLowerCase().includes(query) || order.promo_code?.toLowerCase().includes(query) || order.payment_method?.toLowerCase().includes(query) ||
+      order.tracking_number?.toLowerCase().includes(query);
     if (!matchesSearch) return false;
     if (filter === "deleted") return Boolean(order.deleted_at);
     if (order.deleted_at) return false;
@@ -486,7 +698,7 @@ export default function AdminPage() {
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Order number, customer, email, promo code, or payment method..."
+              placeholder="Order number, customer, email, promo, payment, or tracking number..."
               style={searchInput}
             />
           </div>
@@ -677,6 +889,35 @@ export default function AdminPage() {
                         label="Payment"
                         value={order.payment_method || "-"}
                       />
+                      <MetaItem
+                        label="Shipping"
+                        value={
+                          order.shipping_status ||
+                          "not shipped"
+                        }
+                        accent={
+                          order.shipping_status ===
+                          "delivered"
+                            ? "#00ff99"
+                            : order.shipping_status ===
+                              "shipped"
+                            ? "#00d9ff"
+                            : undefined
+                        }
+                      />
+
+                      <MetaItem
+                        label="Tracking"
+                        value={
+                          order.tracking_number ||
+                          "Not added"
+                        }
+                        accent={
+                          order.tracking_number
+                            ? "#7df9ff"
+                            : undefined
+                        }
+                      />
 
                       <MetaItem
                         label="Promo"
@@ -695,8 +936,8 @@ export default function AdminPage() {
                       />
                     </div>
 
-                    <div style={actionRow}>
-                      {!order.deleted_at && <Link href={`/admin/orders/${order.id}`} style={viewButton}>Open Order</Link>}
+                    <div className="order-action-row" style={actionRow}>
+                      {!order.deleted_at && <Link href={`/admin/orders/${order.id}`} style={viewButton}>Open</Link>}
 
                       {order.deleted_at ? (
                         <button type="button" onClick={() => void restoreOrder(order.id)} disabled={Boolean(restoringOrderId)} style={restoreButton}>
@@ -708,20 +949,274 @@ export default function AdminPage() {
                         </button>
                       ) : (
                         <>
-                          <button type="button" onClick={() => void markPaid(order.id)} disabled={isPaid || isMarkingPaid || Boolean(markingPaidOrderId) || Boolean(deletingOrderId) || Boolean(cancellingOrderId)} style={{...paidButton, opacity: isPaid || isMarkingPaid || Boolean(markingPaidOrderId) || Boolean(deletingOrderId) || Boolean(cancellingOrderId) ? 0.45 : 1}}>
-                            {isMarkingPaid ? "Marking..." : isPaid ? "Paid" : "Mark Paid"}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void markPaid(
+                                order.id
+                              )
+                            }
+                            disabled={
+                              isPaid ||
+                              isMarkingPaid ||
+                              Boolean(
+                                markingPaidOrderId
+                              ) ||
+                              Boolean(
+                                deletingOrderId
+                              ) ||
+                              Boolean(
+                                cancellingOrderId
+                              )
+                            }
+                            style={{
+                              ...paidButton,
+                              opacity:
+                                isPaid ||
+                                isMarkingPaid ||
+                                Boolean(
+                                  markingPaidOrderId
+                                ) ||
+                                Boolean(
+                                  deletingOrderId
+                                ) ||
+                                Boolean(
+                                  cancellingOrderId
+                                )
+                                  ? 0.45
+                                  : 1,
+                            }}
+                          >
+                            {isMarkingPaid
+                              ? "Saving..."
+                              : isPaid
+                              ? "Paid"
+                              : "Paid"}
                           </button>
-                          {!isPaid && <button type="button" onClick={() => void cancelOrder(order.id)} disabled={Boolean(cancellingOrderId)} style={cancelButton}>{cancellingOrderId === order.id ? "Cancelling..." : "Cancel Order"}</button>}
-                          <button type="button" onClick={() => void deleteOrder(order.id)} disabled={isDeleting || Boolean(deletingOrderId) || Boolean(markingPaidOrderId) || Boolean(cancellingOrderId)} style={deleteButton}>{isDeleting ? "Moving..." : "Move to Deleted"}</button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openDeliveryPanel(
+                                order
+                              )
+                            }
+                            style={deliveryButton}
+                          >
+                            {deliveryOrderId ===
+                            order.id
+                              ? "Close"
+                              : "Delivery"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void cancelOrder(
+                                order.id
+                              )
+                            }
+                            disabled={Boolean(
+                              cancellingOrderId
+                            )}
+                            style={{
+                              ...cancelButton,
+                              opacity:
+                                cancellingOrderId
+                                  ? 0.55
+                                  : 1,
+                            }}
+                          >
+                            {cancellingOrderId ===
+                            order.id
+                              ? "Cancelling..."
+                              : "Cancel"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void deleteOrder(
+                                order.id
+                              )
+                            }
+                            disabled={
+                              isDeleting ||
+                              Boolean(
+                                deletingOrderId
+                              ) ||
+                              Boolean(
+                                markingPaidOrderId
+                              ) ||
+                              Boolean(
+                                cancellingOrderId
+                              )
+                            }
+                            style={deleteButton}
+                          >
+                            {isDeleting
+                              ? "Moving..."
+                              : "Delete"}
+                          </button>
                         </>
                       )}
                     </div>
+
+                    {deliveryOrderId ===
+                      order.id && (
+                      <div style={deliveryPanel}>
+                        <div style={deliveryPanelHeader}>
+                          <div>
+                            <span style={deliveryEyebrow}>
+                              QUICK DELIVERY UPDATE
+                            </span>
+
+                            <strong style={deliveryTitle}>
+                              {order.order_number}
+                            </strong>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeliveryOrderId(
+                                null
+                              );
+
+                              setScannerOpen(
+                                false
+                              );
+                            }}
+                            style={deliveryCloseButton}
+                          >
+                            ×
+                          </button>
+                        </div>
+
+                        <div className="quick-delivery-grid" style={deliveryGrid}>
+                          <label style={deliveryField}>
+                            <span style={deliveryLabel}>
+                              Shipping Status
+                            </span>
+
+                            <select
+                              value={deliveryStatus}
+                              onChange={(event) =>
+                                setDeliveryStatus(
+                                  event.target.value
+                                )
+                              }
+                              style={deliveryInput}
+                            >
+                              <option value="not shipped">
+                                Not Shipped
+                              </option>
+
+                              <option value="processing">
+                                Processing
+                              </option>
+
+                              <option value="shipped">
+                                Shipped
+                              </option>
+
+                              <option value="delivered">
+                                Delivered
+                              </option>
+                            </select>
+                          </label>
+
+                          <label style={deliveryField}>
+                            <span style={deliveryLabel}>
+                              Tracking Number
+                            </span>
+
+                            <input
+                              value={trackingNumber}
+                              onChange={(event) =>
+                                setTrackingNumber(
+                                  event.target.value
+                                )
+                              }
+                              placeholder="Scan or enter tracking"
+                              style={deliveryInput}
+                            />
+                          </label>
+                        </div>
+
+                        <div className="delivery-action-row" style={deliveryActions}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void saveDeliveryUpdate()
+                            }
+                            disabled={savingDelivery}
+                            style={{
+                              ...saveDeliveryButton,
+                              opacity:
+                                savingDelivery
+                                  ? 0.6
+                                  : 1,
+                            }}
+                          >
+                            {savingDelivery
+                              ? "Saving..."
+                              : "Save Delivery"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setScannerOpen(
+                                (
+                                  current
+                                ) =>
+                                  !current
+                              )
+                            }
+                            style={scanButton}
+                          >
+                            {scannerOpen
+                              ? "Close Scanner"
+                              : "Scan Tracking Code"}
+                          </button>
+                        </div>
+
+                        {scannerOpen && (
+                          <div style={scannerPanel}>
+                            <p style={scannerInstructions}>
+                              Point the camera at the tracking barcode. A successful scan saves the tracking number and marks the order shipped automatically.
+                            </p>
+
+                            <div
+                              id={`tracking-scanner-${order.id}`}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </article>
                 );
               })}
             </div>
           )}
         </section>
+        <style jsx>{`
+          @media (max-width: 680px) {
+            .quick-delivery-grid {
+              grid-template-columns: minmax(0, 1fr) !important;
+            }
+
+            .order-action-row {
+              grid-template-columns:
+                repeat(2, minmax(0, 1fr)) !important;
+            }
+
+            .delivery-action-row {
+              grid-template-columns:
+                minmax(0, 1fr) !important;
+            }
+          }
+        `}</style>
       </div>
     </main>
   );
@@ -1180,46 +1675,198 @@ const metaLabel = {
 };
 
 const actionRow = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(5, minmax(0, 1fr))",
+  gap: 7,
+  alignItems: "stretch",
+};
+
+
+
+
+
+const deliveryPanel = {
+  padding: 16,
+  display: "grid",
+  gap: 14,
+  border: "1px solid rgba(0,217,255,.32)",
+  borderRadius: 13,
+  background:
+    "linear-gradient(145deg, rgba(0,217,255,.055), rgba(255,69,216,.045))",
+};
+
+const deliveryPanelHeader = {
   display: "flex",
-  gap: 9,
-  flexWrap: "wrap" as const,
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+};
+
+const deliveryEyebrow = {
+  display: "block",
+  color: "#00d9ff",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: ".12em",
+};
+
+const deliveryTitle = {
+  display: "block",
+  marginTop: 4,
+  color: "#ffffff",
+  fontSize: 18,
+};
+
+const deliveryCloseButton = {
+  width: 42,
+  height: 42,
+  border: "1px solid rgba(255,255,255,.16)",
+  borderRadius: 9,
+  background: "rgba(255,255,255,.04)",
+  color: "#ffffff",
+  fontSize: 22,
+  cursor: "pointer",
+};
+
+const deliveryGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 12,
+};
+
+const deliveryField = {
+  minWidth: 0,
+  display: "grid",
+  gap: 6,
+};
+
+const deliveryLabel = {
+  color: "#cfcfd6",
+  fontSize: 13,
+  fontWeight: 900,
+};
+
+const deliveryInput = {
+  width: "100%",
+  minWidth: 0,
+  minHeight: 48,
+  boxSizing: "border-box" as const,
+  padding: "12px 13px",
+  border: "1px solid rgba(255,255,255,.16)",
+  borderRadius: 9,
+  background: "#050507",
+  color: "#ffffff",
+  fontSize: 15,
+};
+
+const deliveryActions = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(2, minmax(0, 1fr))",
+  gap: 10,
+  alignItems: "stretch",
+};
+
+
+
+const scannerPanel = {
+  padding: 14,
+  border: "1px solid rgba(255,69,216,.28)",
+  borderRadius: 12,
+  background: "rgba(0,0,0,.38)",
+};
+
+const scannerInstructions = {
+  margin: "0 0 12px",
+  color: "#b7b7bf",
+  fontSize: 13,
+  lineHeight: 1.6,
+};
+
+
+const actionButtonBase = {
+  minHeight: 40,
+  minWidth: 0,
+  width: "100%",
+  padding: "7px 8px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 4,
+  boxSizing: "border-box" as const,
+  borderRadius: 9,
+  fontSize: 12,
+  fontWeight: 900,
+  lineHeight: 1.15,
+  whiteSpace: "nowrap" as const,
+  textAlign: "center" as const,
+  textDecoration: "none",
+  cursor: "pointer",
+  transition:
+    "transform .16s ease, border-color .16s ease, background .16s ease, opacity .16s ease",
 };
 
 const viewButton = {
-  minHeight: 44,
-  padding: "10px 14px",
-  display: "grid",
-  placeItems: "center",
-  border: "1px solid rgba(0,217,255,.46)",
-  borderRadius: 9,
-  background: "rgba(0,217,255,.06)",
+  ...actionButtonBase,
+  border: "1px solid rgba(0,217,255,.52)",
+  background:
+    "linear-gradient(180deg, rgba(0,217,255,.13), rgba(0,217,255,.06))",
   color: "#7df9ff",
-  textDecoration: "none",
-  fontSize: 15,
-  fontWeight: 900,
 };
 
 const paidButton = {
-  minHeight: 44,
-  padding: "10px 14px",
-  border: "1px solid rgba(0,255,153,.5)",
-  borderRadius: 9,
-  background: "rgba(0,255,153,.07)",
+  ...actionButtonBase,
+  border: "1px solid rgba(0,255,153,.52)",
+  background:
+    "linear-gradient(180deg, rgba(0,255,153,.14), rgba(0,255,153,.06))",
   color: "#00ff99",
-  fontSize: 15,
-  fontWeight: 900,
+};
+
+const deliveryButton = {
+  ...actionButtonBase,
+  border: "1px solid rgba(0,217,255,.52)",
+  background:
+    "linear-gradient(180deg, rgba(0,217,255,.13), rgba(0,217,255,.06))",
+  color: "#7df9ff",
+};
+
+const restoreButton = {
+  ...actionButtonBase,
+  border: "1px solid rgba(0,255,153,.52)",
+  background:
+    "linear-gradient(180deg, rgba(0,255,153,.14), rgba(0,255,153,.06))",
+  color: "#00ff99",
+};
+
+const cancelButton = {
+  ...actionButtonBase,
+  border: "1px solid rgba(255,204,0,.54)",
+  background:
+    "linear-gradient(180deg, rgba(255,204,0,.14), rgba(255,204,0,.06))",
+  color: "#ffcc00",
 };
 
 const deleteButton = {
-  minHeight: 44,
-  padding: "10px 14px",
+  ...actionButtonBase,
   border: "1px solid rgba(255,93,93,.56)",
-  borderRadius: 9,
-  background: "rgba(255,93,93,.07)",
+  background:
+    "linear-gradient(180deg, rgba(255,93,93,.14), rgba(255,93,93,.06))",
   color: "#ff8585",
-  fontSize: 15,
-  fontWeight: 900,
 };
 
-const restoreButton = { minHeight: 44, padding: "10px 14px", border: "1px solid rgba(0,217,255,.5)", borderRadius: 9, background: "rgba(0,217,255,.07)", color: "#7df9ff", fontSize: 15, fontWeight: 900, cursor: "pointer" };
-const cancelButton = { minHeight: 44, padding: "10px 14px", border: "1px solid rgba(255,204,0,.52)", borderRadius: 9, background: "rgba(255,204,0,.07)", color: "#ffcc00", fontSize: 15, fontWeight: 900, cursor: "pointer" };
+const saveDeliveryButton = {
+  ...actionButtonBase,
+  border: "1px solid rgba(0,255,153,.52)",
+  background:
+    "linear-gradient(180deg, rgba(0,255,153,.14), rgba(0,255,153,.06))",
+  color: "#00ff99",
+};
+
+const scanButton = {
+  ...actionButtonBase,
+  border: "1px solid rgba(255,69,216,.52)",
+  background:
+    "linear-gradient(180deg, rgba(255,69,216,.14), rgba(255,69,216,.06))",
+  color: "#ff75df",
+};

@@ -952,7 +952,7 @@ export default function CheckoutPage() {
               updateQuantity={updateQuantity}
               removeFromCart={removeFromCart}
               routerToProducts={() =>
-                router.push("/products")
+                router.push("/")
               }
             />
 
