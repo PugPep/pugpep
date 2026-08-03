@@ -96,9 +96,7 @@ export function ShippingInformationSection({
         />
       </div>
 
-      <p style={{ color: "#ffcc66", fontSize: 13, lineHeight: 1.5 }}>
-        State and ZIP are used to calculate delivery and sales tax when tax is enabled.
-      </p>
+      
     </section>
   );
 }
