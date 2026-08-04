@@ -146,235 +146,63 @@ export default function AdminPage() {
     loadAdmin();
   }, [supabase]);
 
-  async function togglePaymentStatus(id: string) {
-    if (markingPaidOrderId) return;
+  async function togglePaymentStatus(
+    id: string
+  ) {
+    if (markingPaidOrderId) {
+      return;
+    }
 
-    const selectedOrder =
+    const order =
       orders.find(
-        (order) =>
-          order.id === id
+        (item) =>
+          item.id === id
       );
+
+    if (!order) {
+      setNotice(
+        "Order was not found."
+      );
+      return;
+    }
 
     if (
-      selectedOrder?.closed_at ||
-      selectedOrder?.deleted_at
+      order.closed_at ||
+      order.deleted_at
     ) {
       setNotice(
-        "Reopen this order before changing payment status."
+        "Reopen and restore this order before changing payment status."
       );
-
       return;
     }
 
-    setMarkingPaidOrderId(id);
+    const currentlyPaid =
+      order.status ===
+      "paid";
 
-    try {
-      const { data: orderData, error: orderError } = await supabase
-        .from("orders")
-        .select("*")
-        .eq("id", id)
-        .single();
+    const shipped =
+      order.shipping_status ===
+        "shipped" ||
+      order.shipping_status ===
+        "delivered";
 
-      if (orderError || !orderData) {
-        alert(orderError?.message || "Order not found.");
+    if (currentlyPaid) {
+      const warning =
+        shipped
+          ? `Order ${order.order_number} has already been shipped or delivered.\n\nMark it unpaid anyway? Shipping and tracking will remain unchanged. Revenue and sales-rep commission will stop counting.`
+          : `Mark order ${order.order_number} unpaid?\n\nRevenue and sales-rep commission will stop counting.`;
+
+      if (
+        !window.confirm(
+          warning
+        )
+      ) {
         return;
       }
-
-      if (orderData.status === "paid") {
-        const shipped =
-          orderData.shipping_status === "shipped" ||
-          orderData.shipping_status === "delivered";
-
-        const warning = shipped
-          ? `Order ${orderData.order_number || id} has already been shipped or delivered.\n\nMark it unpaid anyway? Tracking and shipping status will remain unchanged.`
-          : `Mark order ${orderData.order_number || id} as unpaid?\n\nThe order will return to Pending status.`;
-
-        const confirmed =
-          window.confirm(warning);
-
-        if (!confirmed) {
-          return;
-        }
-
-        const {
-          error: unpaidError,
-        } = await supabase
-          .from("orders")
-          .update({
-            status: "pending",
-            cancelled_at: null,
-            cancellation_reason: null,
-          })
-          .eq("id", id);
-
-        if (unpaidError) {
-          setNotice(
-            `Order could not be marked unpaid: ${unpaidError.message}`
-          );
-          return;
-        }
-
-        setNotice(
-          `Order ${orderData.order_number || id} marked unpaid and returned to Pending.`
-        );
-
-        await loadOrders();
-        return;
-      }
-
-      const { data: items, error: itemsError } = await supabase
-        .from("order_items")
-        .select("*")
-        .eq("order_id", id);
-
-      if (itemsError) {
-        alert(itemsError.message);
-        return;
-      }
-
-      if (!orderData.inventory_deducted) {
-        for (const item of items || []) {
-          const deductAmount =
-            item.purchase_type === "kit"
-              ? Number(item.quantity || 1) * 10
-              : Number(item.quantity || 1);
-
-          const productSlug =
-            item.product_slug ||
-            item.product_name?.toLowerCase().replaceAll(" ", "-");
-
-          const { data: inventoryRow, error: inventoryError } = await supabase
-            .from("inventory")
-            .select("*")
-            .eq("product_slug", productSlug)
-            .eq("dosage", item.dosage)
-            .eq("purchase_type", "single")
-            .maybeSingle();
-
-          if (inventoryError || !inventoryRow) {
-            alert(
-              `Inventory item not found for ${item.product_name} ${item.dosage}. Check product slug and dosage match inventory.`
-            );
-            return;
-          }
-
-          const newQuantity = Math.max(
-            0,
-            Number(inventoryRow.quantity || 0) - deductAmount
-          );
-
-          const singleStatus = newQuantity > 0 ? "in stock" : "out of stock";
-          const kitStatus = newQuantity >= 10 ? "in stock" : "pre-sale";
-
-          const { error: updateInventoryError } = await supabase
-            .from("inventory")
-            .update({
-              quantity: newQuantity,
-              status: singleStatus,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", inventoryRow.id);
-
-          if (updateInventoryError) {
-            alert(updateInventoryError.message);
-            return;
-          }
-
-          const { error: updateSingleOptionError } = await supabase
-            .from("product_options")
-            .update({ status: singleStatus })
-            .eq("product_slug", productSlug)
-            .eq("dosage", item.dosage)
-            .eq("purchase_type", "single");
-
-          if (updateSingleOptionError) {
-            alert(updateSingleOptionError.message);
-            return;
-          }
-
-          const { error: updateKitOptionError } = await supabase
-            .from("product_options")
-            .update({ status: kitStatus })
-            .eq("product_slug", productSlug)
-            .eq("dosage", item.dosage)
-            .eq("purchase_type", "kit");
-
-          if (updateKitOptionError) {
-            alert(updateKitOptionError.message);
-            return;
-          }
-        }
-      }
-
-      const { error: markPaidError } = await supabase.rpc("mark_order_paid", {
-        target_order_id: id,
-      });
-
-      if (markPaidError) {
-        alert(markPaidError.message);
-        return;
-      }
-
-      setNotice(
-        `Order ${orderData.order_number || id} marked paid.`
-      );
-
-      await loadOrders();
-    } finally {
-      setMarkingPaidOrderId(null);
-    }
-  }
-
-  async function deleteOrder(id: string) {
-    if (deletingOrderId) return;
-    const order = orders.find((item) => item.id === id);
-    const label = order?.order_number || id;
-    if (!window.confirm(`Move order ${label} to Recently Deleted?\n\nIt can be restored later.`)) return;
-    setDeletingOrderId(id);
-    setNotice("");
-    try {
-      const { error } = await supabase.rpc("admin_soft_delete_order", { target_order_id: id });
-      if (error) { setNotice(`Order could not be deleted: ${error.message}`); return; }
-      setNotice(`Order ${label} moved to Recently Deleted.`);
-      await loadOrders();
-    } finally { setDeletingOrderId(null); }
-  }
-
-  async function restoreOrder(id: string) {
-    if (restoringOrderId) return;
-    setRestoringOrderId(id); setNotice("");
-    try {
-      const { error } = await supabase.rpc("admin_restore_order", { target_order_id: id });
-      if (error) { setNotice(`Order could not be restored: ${error.message}`); return; }
-      setNotice("Order restored."); await loadOrders();
-    } finally { setRestoringOrderId(null); }
-  }
-
-  async function toggleCancellation(order: Order) {
-    if (
-      cancellingOrderId ||
-      order.deleted_at ||
-      order.closed_at
-    ) {
-      return;
     }
 
-    const isCancelled =
-      order.status === "cancelled";
-
-    const confirmed =
-      window.confirm(
-        isCancelled
-          ? `Uncancel order ${order.order_number}?`
-          : `Cancel order ${order.order_number}?`
-      );
-
-    if (!confirmed) {
-      return;
-    }
-
-    setCancellingOrderId(
-      order.id
+    setMarkingPaidOrderId(
+      id
     );
 
     setNotice("");
@@ -382,53 +210,38 @@ export default function AdminPage() {
     try {
       const {
         error,
-      } = isCancelled
-        ? await supabase.rpc(
-            "admin_reopen_cancelled_order",
-            {
-              target_order_id:
-                order.id,
-            }
-          )
-        : await supabase.rpc(
-            "admin_cancel_order",
-            {
-              target_order_id:
-                order.id,
-              reason:
-                "Cancelled by administrator",
-            }
-          );
+      } =
+        await supabase.rpc(
+          "admin_set_order_payment_status",
+          {
+            target_order_id:
+              id,
+            should_be_paid:
+              !currentlyPaid,
+          }
+        );
 
       if (error) {
         setNotice(
-          `Order could not be ${
-            isCancelled
-              ? "uncancelled"
-              : "cancelled"
-          }: ${error.message}`
+          `Payment status could not be updated: ${error.message}`
         );
-
         return;
       }
 
       setNotice(
-        `Order ${
-          order.order_number
-        } ${
-          isCancelled
-            ? "uncancelled"
-            : "cancelled"
-        }.`
+        currentlyPaid
+          ? `Order ${order.order_number} marked unpaid. Revenue and commission were removed from active totals.`
+          : `Order ${order.order_number} marked paid. Revenue and eligible commission are now active.`
       );
 
       await loadOrders();
     } finally {
-      setCancellingOrderId(
+      setMarkingPaidOrderId(
         null
       );
     }
   }
+
 
   async function toggleDeleted(
     order: Order
@@ -805,11 +618,60 @@ export default function AdminPage() {
         return;
       }
 
+      let registrationWarning =
+        "";
+
+      if (cleanedTracking) {
+        const {
+          data: {
+            session,
+          },
+        } =
+          await supabase.auth.getSession();
+
+        const response =
+          await fetch(
+            "/api/tracking/register",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type":
+                  "application/json",
+                Authorization:
+                  session?.access_token
+                    ? `Bearer ${session.access_token}`
+                    : "",
+              },
+              body:
+                JSON.stringify({
+                  orderId,
+                  trackingNumber:
+                    cleanedTracking,
+                }),
+            }
+          );
+
+        const registration =
+          await response
+            .json()
+            .catch(
+              () => null
+            );
+
+        if (!response.ok) {
+          registrationWarning =
+            ` Tracking was saved locally, but carrier monitoring could not start: ${
+              registration?.error ||
+              "unknown registration error"
+            }`;
+        }
+      }
+
       setNotice(
         status ===
         "shipped"
-          ? `Tracking ${cleanedTracking} saved and order marked shipped.`
-          : `Delivery status updated to ${status}.`
+          ? `Tracking ${cleanedTracking} saved and order marked shipped.${registrationWarning}`
+          : `Delivery status updated to ${status}.${registrationWarning}`
       );
 
       setDeliveryStatus(
@@ -876,25 +738,47 @@ export default function AdminPage() {
     return true;
   });
 
-  const visibleRevenue = filteredOrders.reduce(
-    (sum, order) => sum + getOrderRevenue(order),
-    0
-  );
+  const visibleFinancialOrders =
+    filteredOrders.filter(
+      (order) =>
+        order.status === "paid" &&
+        !order.deleted_at
+    );
 
-  const visibleProfit = filteredOrders.reduce(
-    (sum, order) => sum + getOrderProfit(order),
-    0
-  );
+  const visibleRevenue =
+    visibleFinancialOrders.reduce(
+      (sum, order) =>
+        sum +
+        getOrderRevenue(order),
+      0
+    );
 
-  const visibleDiscounts = filteredOrders.reduce(
-    (sum, order) => sum + Number(order.total_discount || 0),
-    0
-  );
+  const visibleProfit =
+    visibleFinancialOrders.reduce(
+      (sum, order) =>
+        sum +
+        getOrderProfit(order),
+      0
+    );
 
-  const visibleCosts = filteredOrders.reduce(
-    (sum, order) => sum + getOrderCost(order),
-    0
-  );
+  const visibleDiscounts =
+    visibleFinancialOrders.reduce(
+      (sum, order) =>
+        sum +
+        Number(
+          order.total_discount ||
+            0
+        ),
+      0
+    );
+
+  const visibleCosts =
+    visibleFinancialOrders.reduce(
+      (sum, order) =>
+        sum +
+        getOrderCost(order),
+      0
+    );
 
   const visibleMargin =
     visibleRevenue > 0
@@ -902,21 +786,28 @@ export default function AdminPage() {
       : 0;
 
   const averageOrderValue =
-    filteredOrders.length > 0
-      ? visibleRevenue / filteredOrders.length
+    visibleFinancialOrders.length > 0
+      ? visibleRevenue /
+        visibleFinancialOrders.length
       : 0;
 
   const now = new Date();
 
-  const todayOrders = activeOrders.filter((order) => {
-    const created = new Date(order.created_at);
+  const todayOrders =
+    activeOrders.filter((order) => {
+      const created =
+        new Date(
+          order.created_at
+        );
 
-    return (
-      created.getDate() === now.getDate() &&
+      return (
+        order.status === "paid" &&
+        created.getDate() === now.getDate() &&
       created.getMonth() === now.getMonth() &&
-      created.getFullYear() === now.getFullYear()
-    );
-  });
+        created.getFullYear() ===
+          now.getFullYear()
+      );
+    });
 
   const todayRevenue = todayOrders.reduce(
     (sum, order) => sum + getOrderRevenue(order),
