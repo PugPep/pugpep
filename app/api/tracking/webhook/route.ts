@@ -14,6 +14,15 @@ export const dynamic = "force-dynamic";
 type AnyRecord =
   Record<string, any>;
 
+type OrderRow = {
+  id: string;
+  order_number: string | null;
+  customer_phone: string | null;
+  shipping_status: string | null;
+  closed_at: string | null;
+};
+
+
 function formatPhoneNumber(
   phone: string
 ) {
@@ -337,7 +346,7 @@ export async function POST(
     }
 
     const {
-      data: order,
+      data: orderData,
       error: orderError,
     } =
       await orderQuery
@@ -346,6 +355,10 @@ export async function POST(
     if (orderError) {
       throw orderError;
     }
+
+    const order =
+      orderData as unknown as
+        OrderRow | null;
 
     if (!order) {
       return NextResponse.json(

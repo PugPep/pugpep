@@ -18,6 +18,19 @@ type RegisterBody = {
   carrier?: string | null;
 };
 
+type OrderRow = {
+  id: string;
+  order_number: string | null;
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  created_at: string | null;
+};
+
+
 function cleanCarrier(
   value: unknown
 ) {
@@ -147,7 +160,7 @@ export async function POST(
     }
 
     const {
-      data: order,
+      data: orderData,
       error: orderError,
     } =
       await supabaseAdmin
@@ -171,6 +184,10 @@ export async function POST(
     if (orderError) {
       throw orderError;
     }
+
+    const order =
+      orderData as unknown as
+        OrderRow | null;
 
     if (!order) {
       return NextResponse.json(

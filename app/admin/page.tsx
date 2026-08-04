@@ -243,6 +243,106 @@ export default function AdminPage() {
   }
 
 
+  async function toggleCancellation(
+    order: Order
+  ) {
+    if (
+      cancellingOrderId ||
+      order.deleted_at ||
+      order.closed_at
+    ) {
+      if (order.closed_at) {
+        setNotice(
+          "Reopen this order before changing its cancellation status."
+        );
+      }
+
+      return;
+    }
+
+    const isCancelled =
+      order.status ===
+      "cancelled";
+
+    const confirmed =
+      window.confirm(
+        isCancelled
+          ? `Uncancel order ${order.order_number}?`
+          : `Cancel order ${order.order_number}?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setCancellingOrderId(
+      order.id
+    );
+
+    setNotice("");
+
+    try {
+      const {
+        error,
+      } = isCancelled
+        ? await supabase.rpc(
+            "admin_reopen_cancelled_order",
+            {
+              target_order_id:
+                order.id,
+            }
+          )
+        : await supabase.rpc(
+            "admin_cancel_order",
+            {
+              target_order_id:
+                order.id,
+              reason:
+                "Cancelled by administrator",
+            }
+          );
+
+      if (error) {
+        setNotice(
+          `Order could not be ${
+            isCancelled
+              ? "uncancelled"
+              : "cancelled"
+          }: ${error.message}`
+        );
+
+        return;
+      }
+
+      setNotice(
+        `Order ${
+          order.order_number
+        } ${
+          isCancelled
+            ? "uncancelled"
+            : "cancelled"
+        }.`
+      );
+
+      await loadOrders();
+    } catch (error) {
+      console.error(
+        "Cancellation toggle failed:",
+        error
+      );
+
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to update cancellation status."
+      );
+    } finally {
+      setCancellingOrderId(
+        null
+      );
+    }
+  }
+
   async function toggleDeleted(
     order: Order
   ) {
