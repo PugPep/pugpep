@@ -138,6 +138,10 @@ export default function CheckoutPage() {
   const [pointsToUse, setPointsToUse] =
     useState(0);
 
+  /*
+   * "standard" remains the internal enum value.
+   * It now represents the only available method: Priority Shipping.
+   */
   const [shippingMethod, setShippingMethod] =
     useState<ShippingMethod>("standard");
 
@@ -868,7 +872,7 @@ export default function CheckoutPage() {
           </div>
 
           <div style={styles.freeShipping}>
-            🚚 Free Standard Shipping When Eligible
+            🚚 Priority Shipping — Free When Eligible
           </div>
         </header>
 

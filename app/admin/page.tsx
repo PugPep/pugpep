@@ -12,6 +12,7 @@ type Order = {
   order_number: string;
   customer_name: string;
   customer_email: string;
+  customer_phone?: string | null;
   total: number;
   net_revenue?: number;
   product_cost_total?: number;
@@ -184,7 +185,9 @@ export default function AdminPage() {
       order.shipping_status ===
         "shipped" ||
       order.shipping_status ===
-        "delivered";
+        "delivered" ||
+      order.shipping_status ===
+        "out for delivery";
 
     if (currentlyPaid) {
       const warning =
@@ -664,129 +667,172 @@ export default function AdminPage() {
     status = deliveryStatus,
     tracking = trackingNumber
   ) {
-    if (
-      !orderId ||
-      savingDelivery
-    ) {
+    if (!orderId || savingDelivery) {
       return;
     }
 
-    const cleanedTracking =
-      tracking.trim();
+    const currentOrder = orders.find(
+      (order) => order.id === orderId
+    );
+
+    if (!currentOrder) {
+      setNotice("Order was not found.");
+      return;
+    }
+
+    const cleanedTracking = tracking.trim();
+    const currentStatus =
+      currentOrder.shipping_status || "not shipped";
+
+    const finalStatus = cleanedTracking
+      ? "shipped"
+      : status;
+
+    const validManualTransitions: Record<string, string[]> = {
+      "not shipped": ["ready to ship"],
+      "ready to ship": [],
+      "shipped": ["returned"],
+      "out for delivery": ["returned"],
+      "delivered": ["returned"],
+      "returned": [],
+    };
 
     if (
-      status ===
-        "shipped" &&
+      finalStatus === "shipped" &&
       !cleanedTracking
     ) {
       setNotice(
         "Enter or scan a tracking number before marking an order shipped."
       );
+      return;
+    }
+
+    if (
+      !cleanedTracking &&
+      finalStatus !== currentStatus &&
+      !validManualTransitions[currentStatus]?.includes(finalStatus)
+    ) {
+      if (
+        finalStatus === "out for delivery" ||
+        finalStatus === "delivered"
+      ) {
+        setNotice(
+          "Out for Delivery and Delivered are updated automatically by the tracking provider."
+        );
+      } else {
+        setNotice(
+          `Cannot change shipping from "${currentStatus}" to "${finalStatus}".`
+        );
+      }
 
       return;
     }
 
-    setSavingDelivery(
-      true
-    );
-
+    setSavingDelivery(true);
     setNotice("");
 
     try {
-      const {
-        error,
-      } =
-        await supabase
-          .from("orders")
-          .update({
-            shipping_status:
-              status,
-            tracking_number:
-              cleanedTracking ||
-              null,
-          })
-          .eq(
-            "id",
-            orderId
-          );
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          shipping_status: finalStatus,
+          tracking_number: cleanedTracking || null,
+        })
+        .eq("id", orderId);
 
       if (error) {
         setNotice(
           `Delivery information could not be saved: ${error.message}`
         );
-
         return;
       }
 
-      let registrationWarning =
-        "";
+      const warnings: string[] = [];
 
       if (cleanedTracking) {
         const {
-          data: {
-            session,
-          },
-        } =
-          await supabase.auth.getSession();
+          data: { session },
+        } = await supabase.auth.getSession();
 
-        const response =
-          await fetch(
-            "/api/tracking/register",
+        const registrationResponse = await fetch(
+          "/api/tracking/register",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: session?.access_token
+                ? `Bearer ${session.access_token}`
+                : "",
+            },
+            body: JSON.stringify({
+              orderId,
+              trackingNumber: cleanedTracking,
+            }),
+          }
+        );
+
+        const registration = await registrationResponse
+          .json()
+          .catch(() => null);
+
+        if (!registrationResponse.ok) {
+          warnings.push(
+            `Carrier monitoring could not start: ${
+              registration?.error ||
+              "unknown registration error"
+            }`
+          );
+        }
+
+        if (currentOrder.customer_phone) {
+          const smsResponse = await fetch(
+            "/api/send-shipping-sms",
             {
               method: "POST",
               headers: {
-                "Content-Type":
-                  "application/json",
-                Authorization:
-                  session?.access_token
-                    ? `Bearer ${session.access_token}`
-                    : "",
+                "Content-Type": "application/json",
               },
-              body:
-                JSON.stringify({
-                  orderId,
-                  trackingNumber:
-                    cleanedTracking,
-                }),
+              body: JSON.stringify({
+                customerPhone: currentOrder.customer_phone,
+                orderNumber: currentOrder.order_number,
+                shippingStatus: "shipped",
+                trackingNumber: cleanedTracking,
+              }),
             }
           );
 
-        const registration =
-          await response
-            .json()
-            .catch(
-              () => null
-            );
+          if (!smsResponse.ok) {
+            const smsResult = await smsResponse
+              .json()
+              .catch(() => null);
 
-        if (!response.ok) {
-          registrationWarning =
-            ` Tracking was saved locally, but carrier monitoring could not start: ${
-              registration?.error ||
-              "unknown registration error"
-            }`;
+            warnings.push(
+              `Shipping SMS could not be sent: ${
+                smsResult?.error ||
+                "unknown SMS error"
+              }`
+            );
+          }
         }
       }
 
+      const warningText =
+        warnings.length > 0
+          ? ` ${warnings.join(" ")}`
+          : "";
+
       setNotice(
-        status ===
-        "shipped"
-          ? `Tracking ${cleanedTracking} saved and order marked shipped.${registrationWarning}`
-          : `Delivery status updated to ${status}.${registrationWarning}`
+        finalStatus === "shipped"
+          ? `Tracking ${cleanedTracking} saved and order marked shipped.${warningText}`
+          : `Delivery status updated to ${finalStatus}.${warningText}`
       );
 
-      setDeliveryStatus(
-        status
-      );
-
-      setTrackingNumber(
-        cleanedTracking
-      );
+      setDeliveryStatus(finalStatus);
+      setTrackingNumber(cleanedTracking);
 
       await loadOrders();
     } finally {
-      setSavingDelivery(
-        false
-      );
+      setSavingDelivery(false);
     }
   }
 
@@ -813,7 +859,15 @@ export default function AdminPage() {
   const activeOrders = orders.filter((order) => !order.deleted_at);
   const deletedOrders = orders.filter((order) => Boolean(order.deleted_at));
   const pendingCount = activeOrders.filter((order) => order.status === "pending").length;
-  const paidCount = activeOrders.filter((order) => order.status === "paid" && order.shipping_status !== "shipped" && order.shipping_status !== "delivered").length;
+  const paidCount = activeOrders.filter(
+    (order) =>
+      order.status === "paid" &&
+      (
+        !order.shipping_status ||
+        order.shipping_status === "not shipped" ||
+        order.shipping_status === "ready to ship"
+      )
+  ).length;
   const shippedCount = activeOrders.filter((order) => order.shipping_status === "shipped").length;
   const deliveredCount = activeOrders.filter((order) => order.shipping_status === "delivered").length;
   const cancelledCount = activeOrders.filter((order) => order.status === "cancelled").length;
@@ -830,7 +884,16 @@ export default function AdminPage() {
     if (order.deleted_at) return false;
     if (filter === "all") return true;
     if (filter === "pending") return order.status === "pending";
-    if (filter === "paid") return order.status === "paid" && order.shipping_status !== "shipped" && order.shipping_status !== "delivered";
+    if (filter === "paid") {
+      return (
+        order.status === "paid" &&
+        (
+          !order.shipping_status ||
+          order.shipping_status === "not shipped" ||
+          order.shipping_status === "ready to ship"
+        )
+      );
+    }
     if (filter === "shipped") return order.shipping_status === "shipped";
     if (filter === "delivered") return order.shipping_status === "delivered";
     if (filter === "cancelled") return order.status === "cancelled";
@@ -1225,8 +1288,17 @@ export default function AdminPage() {
                           "delivered"
                             ? "#00ff99"
                             : order.shipping_status ===
-                              "shipped"
+                                "out for delivery"
+                            ? "#9ea7ff"
+                            : order.shipping_status ===
+                                "shipped"
                             ? "#00d9ff"
+                            : order.shipping_status ===
+                                "ready to ship"
+                            ? "#ffcc00"
+                            : order.shipping_status ===
+                                "returned"
+                            ? "#ff8585"
                             : undefined
                         }
                       />
@@ -1551,16 +1623,34 @@ export default function AdminPage() {
                                 Not Shipped
                               </option>
 
-                              <option value="processing">
-                                Processing
+                              <option value="ready to ship">
+                                Ready to Ship
                               </option>
 
                               <option value="shipped">
-                                Shipped
+                                Shipped — Tracking Required
                               </option>
 
-                              <option value="delivered">
-                                Delivered
+                              <option
+                                value="out for delivery"
+                                disabled={
+                                  deliveryStatus !== "out for delivery"
+                                }
+                              >
+                                Out for Delivery — Automatic
+                              </option>
+
+                              <option
+                                value="delivered"
+                                disabled={
+                                  deliveryStatus !== "delivered"
+                                }
+                              >
+                                Delivered — Automatic
+                              </option>
+
+                              <option value="returned">
+                                Returned
                               </option>
                             </select>
                           </label>
@@ -1624,7 +1714,7 @@ export default function AdminPage() {
                         {scannerOpen && (
                           <div style={scannerPanel}>
                             <p style={scannerInstructions}>
-                              Point the camera at the tracking barcode. A successful scan saves the tracking number and marks the order shipped automatically.
+                              Point the camera at the tracking barcode. A successful scan saves the tracking number, marks the order shipped, registers carrier monitoring, and sends the shipping text automatically.
                             </p>
 
                             <div
@@ -1666,8 +1756,11 @@ function getStatusLabel(order: Order) {
   if (order.deleted_at) return "DELETED";
   if (order.closed_at) return "CLOSED";
   if (order.status === "cancelled") return "CANCELLED";
+  if (order.shipping_status === "returned") return "RETURNED";
   if (order.shipping_status === "delivered") return "DELIVERED";
+  if (order.shipping_status === "out for delivery") return "OUT FOR DELIVERY";
   if (order.shipping_status === "shipped") return "SHIPPED";
+  if (order.shipping_status === "ready to ship") return "READY TO SHIP";
   if (order.status === "paid") return "PAID";
   return "PENDING";
 }
@@ -1675,10 +1768,48 @@ function getStatusLabel(order: Order) {
 function getStatusBadgeStyle(order: Order) {
   const deleted = Boolean(order.deleted_at);
   const cancelled = order.status === "cancelled";
+  const shippingStatus =
+    order.shipping_status || "not shipped";
+
+  let background = "rgba(255,77,77,.12)";
+  let color = "#ff4d4d";
+
+  if (deleted) {
+    background = "rgba(184,188,196,.10)";
+    color = "#b8bcc4";
+  } else if (order.closed_at) {
+    background = "rgba(158,167,255,.10)";
+    color = "#9ea7ff";
+  } else if (cancelled) {
+    background = "rgba(255,111,111,.10)";
+    color = "#ff7f7f";
+  } else if (shippingStatus === "returned") {
+    background = "rgba(255,93,93,.12)";
+    color = "#ff8585";
+  } else if (shippingStatus === "delivered") {
+    background = "rgba(0,255,153,.12)";
+    color = "#00ff99";
+  } else if (shippingStatus === "out for delivery") {
+    background = "rgba(158,167,255,.12)";
+    color = "#9ea7ff";
+  } else if (shippingStatus === "shipped") {
+    background = "rgba(0,217,255,.12)";
+    color = "#00d9ff";
+  } else if (shippingStatus === "ready to ship") {
+    background = "rgba(255,204,0,.12)";
+    color = "#ffcc00";
+  } else if (order.status === "paid") {
+    background = "rgba(255,191,0,.12)";
+    color = "#ffcc00";
+  }
+
   return {
-    padding: "7px 11px", borderRadius: 999, fontWeight: 900, fontSize: 12,
-    background: deleted ? "rgba(184,188,196,.10)" : cancelled ? "rgba(255,111,111,.10)" : order.shipping_status === "delivered" ? "rgba(0,255,153,.12)" : order.shipping_status === "shipped" ? "rgba(0,217,255,.12)" : order.status === "paid" ? "rgba(255,191,0,.12)" : "rgba(255,77,77,.12)",
-    color: deleted ? "#b8bcc4" : cancelled ? "#ff7f7f" : order.shipping_status === "delivered" ? "#00ff99" : order.shipping_status === "shipped" ? "#00d9ff" : order.status === "paid" ? "#ffcc00" : "#ff4d4d",
+    padding: "7px 11px",
+    borderRadius: 999,
+    fontWeight: 900,
+    fontSize: 12,
+    background,
+    color,
   };
 }
 

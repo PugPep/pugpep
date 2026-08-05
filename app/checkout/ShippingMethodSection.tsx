@@ -15,6 +15,9 @@ export function ShippingMethodSection({
   setShippingMethod: (value: ShippingMethod) => void;
   pricing: PricingResult | null;
 }) {
+  const prioritySelected =
+    shippingMethod === "standard";
+
   return (
     <section style={styles.card}>
       <div style={styles.headingRow}>
@@ -27,27 +30,67 @@ export function ShippingMethodSection({
 
       <div
         className="checkout-shipping-grid"
-        style={styles.shippingGrid}
+        style={{
+          ...styles.shippingGrid,
+          gridTemplateColumns:
+            "minmax(0, 1fr)",
+        }}
       >
-        <Choice
-          selected={shippingMethod === "standard"}
-          accent="#00d9ff"
-          title="Standard Shipping"
-          price="$10"
-          delivery="3–5 business days"
-          note="Eligible for lifetime and threshold free delivery."
-          onClick={() => setShippingMethod("standard")}
-        />
+        <button
+          type="button"
+          onClick={() =>
+            setShippingMethod("standard")
+          }
+          style={{
+            ...styles.shippingButton,
+            borderColor: prioritySelected
+              ? "#00d9ff"
+              : "#333",
+            background: prioritySelected
+              ? "linear-gradient(145deg, rgba(0,217,255,.14), rgba(0,0,0,.75))"
+              : "#080808",
+            boxShadow: prioritySelected
+              ? "0 0 18px rgba(0,217,255,.22)"
+              : "none",
+            cursor: "default",
+          }}
+        >
+          <span
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "center",
+            }}
+          >
+            <strong
+              style={{
+                fontSize: 18,
+                color: "#ffffff",
+              }}
+            >
+              Priority Shipping
+            </strong>
 
-        <Choice
-          selected={shippingMethod === "express"}
-          accent="#ff45d8"
-          title="Express Shipping"
-          price="$45"
-          delivery="1–2 business days"
-          note="Fastest delivery option."
-          onClick={() => setShippingMethod("express")}
-        />
+            <strong
+              style={{
+                color: "#00ff99",
+                fontSize: 20,
+              }}
+            >
+              $12
+            </strong>
+          </span>
+
+          <span
+            style={{
+              color: "#dddddd",
+              fontWeight: 700,
+            }}
+          >
+            Priority delivery service
+          </span>
+        </button>
       </div>
 
       {pricing && (
@@ -79,70 +122,5 @@ export function ShippingMethodSection({
         </div>
       )}
     </section>
-  );
-}
-
-function Choice({
-  selected,
-  accent,
-  title,
-  price,
-  delivery,
-  note,
-  onClick,
-}: {
-  selected: boolean;
-  accent: string;
-  title: string;
-  price: string;
-  delivery: string;
-  note: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        ...styles.shippingButton,
-        borderColor: selected ? accent : "#333",
-        background: selected
-          ? `linear-gradient(145deg, ${accent}22, rgba(0,0,0,.75))`
-          : "#080808",
-        boxShadow: selected
-          ? `0 0 18px ${accent}33`
-          : "none",
-      }}
-    >
-      <span
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          alignItems: "center",
-        }}
-      >
-        <strong style={{ fontSize: 17 }}>
-          {title}
-        </strong>
-
-        <strong
-          style={{
-            color: "#00ff99",
-            fontSize: 19,
-          }}
-        >
-          {price}
-        </strong>
-      </span>
-
-      <span style={{ color: "#ddd", fontWeight: 700 }}>
-        {delivery}
-      </span>
-
-      <span style={{ color: "#888", fontSize: 12, lineHeight: 1.5 }}>
-        {note}
-      </span>
-    </button>
   );
 }

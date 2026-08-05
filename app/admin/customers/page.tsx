@@ -170,6 +170,11 @@ export default function AdminCustomersPage() {
   ] = useState("all");
 
   const [
+    lifetimeShippingOnly,
+    setLifetimeShippingOnly,
+  ] = useState(false);
+
+  const [
     selectedCustomer,
     setSelectedCustomer,
   ] =
@@ -609,9 +614,16 @@ export default function AdminCustomersPage() {
             ) ===
               tierFilter;
 
+          const matchesLifetimeShipping =
+            !lifetimeShippingOnly ||
+            Boolean(
+              customer.has_lifetime_free_shipping
+            );
+
           return (
             matchesSearch &&
-            matchesTier
+            matchesTier &&
+            matchesLifetimeShipping
           );
         }
       );
@@ -619,6 +631,7 @@ export default function AdminCustomersPage() {
       customers,
       search,
       tierFilter,
+      lifetimeShippingOnly,
     ]);
 
   const autocompleteResults =
@@ -1202,6 +1215,15 @@ export default function AdminCustomersPage() {
               lifetimeShippingCount
             )}
             accent="#00ff99"
+            active={
+              lifetimeShippingOnly
+            }
+            onClick={() =>
+              setLifetimeShippingOnly(
+                (current) =>
+                  !current
+              )
+            }
           />
 
           <SummaryCard
@@ -1326,12 +1348,25 @@ export default function AdminCustomersPage() {
             </p>
 
             <h2 style={styles.sectionTitle}>
-              {filteredCustomers.length} Customer
-              {filteredCustomers.length ===
-              1
-                ? ""
-                : "s"}
+              {lifetimeShippingOnly
+                ? "Lifetime Free Shipping Members"
+                : "Customers"}{" "}
+              ({filteredCustomers.length})
             </h2>
+
+            {lifetimeShippingOnly && (
+              <button
+                type="button"
+                onClick={() =>
+                  setLifetimeShippingOnly(
+                    false
+                  )
+                }
+                style={styles.clearLifetimeFilter}
+              >
+                Show All Customers
+              </button>
+            )}
           </div>
         </section>
 
@@ -1873,19 +1908,17 @@ function SummaryCard({
   label,
   value,
   accent,
+  active = false,
+  onClick,
 }: {
   label: string;
   value: string;
   accent: string;
+  active?: boolean;
+  onClick?: () => void;
 }) {
-  return (
-    <div
-      style={{
-        ...styles.summaryCard,
-        borderColor:
-          `${accent}55`,
-      }}
-    >
+  const content = (
+    <>
       <span style={styles.summaryLabel}>
         {label}
       </span>
@@ -1898,6 +1931,45 @@ function SummaryCard({
       >
         {value}
       </strong>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        style={{
+          ...styles.summaryCard,
+          ...styles.summaryButton,
+          borderColor:
+            active
+              ? accent
+              : `${accent}55`,
+          boxShadow:
+            active
+              ? `0 0 24px ${accent}44`
+              : "none",
+          background:
+            active
+              ? `linear-gradient(145deg, ${accent}16, rgba(6,6,9,.98))`
+              : styles.summaryCard.background,
+        }}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        ...styles.summaryCard,
+        borderColor:
+          `${accent}55`,
+      }}
+    >
+      {content}
     </div>
   );
 }
@@ -2053,6 +2125,15 @@ const styles = {
       "linear-gradient(145deg, rgba(12,12,17,.97), rgba(6,6,9,.98))",
   },
 
+  summaryButton: {
+    width: "100%",
+    color: "#fff",
+    textAlign:
+      "left" as const,
+    cursor: "pointer",
+    font: "inherit",
+  },
+
   summaryLabel: {
     color: "#a7a7b0",
     fontSize: 12,
@@ -2160,6 +2241,20 @@ const styles = {
 
   resultsHeader: {
     marginTop: 28,
+  },
+
+  clearLifetimeFilter: {
+    marginTop: 10,
+    minHeight: 40,
+    padding: "0 13px",
+    border:
+      "1px solid rgba(0,255,153,.42)",
+    borderRadius: 9,
+    background:
+      "rgba(0,255,153,.07)",
+    color: "#00ff99",
+    fontWeight: 900,
+    cursor: "pointer",
   },
 
   sectionTitle: {
