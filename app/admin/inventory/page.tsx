@@ -15,6 +15,7 @@ type Product = {
   description: string;
   category: string;
   is_active: boolean;
+  deleted_at?: string | null;
 };
 
 type Option = {
@@ -27,6 +28,12 @@ type Option = {
   status: string;
   sale_active: boolean;
   sale_percent: number;
+};
+
+type PricingDraft = {
+  price: string;
+  cost: string;
+  salePercent: string;
 };
 
 type InventoryItem = {
@@ -50,6 +57,7 @@ export default function InventoryManagerPage() {
   const [selectedProduct, setSelectedProduct] = useState<Partial<Product>>({});
 
   const [options, setOptions] = useState<Option[]>([]);
+  const [pricingDrafts, setPricingDrafts] = useState<Record<string, PricingDraft>>({});
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
 
   const [showAddProduct, setShowAddProduct] = useState(false);
@@ -114,7 +122,7 @@ export default function InventoryManagerPage() {
     const { data, error } = await supabase
       .from("products")
       .select("*")
-      .eq("is_active", true)
+      .is("deleted_at", null)
       .order("name", { ascending: true });
 
     if (error) alert(error.message);
@@ -125,7 +133,7 @@ export default function InventoryManagerPage() {
     const { data, error } = await supabase
       .from("products")
       .select("*")
-      .eq("is_active", false)
+      .not("deleted_at", "is", null)
       .order("name", { ascending: true });
 
     if (error) alert(error.message);
@@ -155,8 +163,27 @@ export default function InventoryManagerPage() {
       .eq("product_slug", slug)
       .order("dosage", { ascending: true });
 
-    if (error) alert(error.message);
-    else setOptions(data || []);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    const rows = (data || []) as Option[];
+
+    setOptions(rows);
+
+    setPricingDrafts(
+      Object.fromEntries(
+        rows.map((option) => [
+          option.id,
+          {
+            price: String(option.price ?? 0),
+            cost: String(option.cost ?? 0),
+            salePercent: String(option.sale_percent ?? 0),
+          },
+        ])
+      )
+    );
   }
 
   async function loadInventory(slug: string) {
@@ -235,15 +262,18 @@ export default function InventoryManagerPage() {
       return;
     }
 
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete ${selectedProduct.name}? You can restore it later using Undo Delete.`
+    const confirmArchive = window.confirm(
+      `Archive ${selectedProduct.name}?\n\nThis removes it from the customer site and the active catalog, but keeps it in the database so it can be restored later.`
     );
 
-    if (!confirmDelete) return;
+    if (!confirmArchive) return;
 
     const { error } = await supabase
       .from("products")
-      .update({ is_active: false })
+      .update({
+        is_active: false,
+        deleted_at: new Date().toISOString(),
+      })
       .eq("id", selectedProduct.id);
 
     if (error) {
@@ -256,6 +286,7 @@ export default function InventoryManagerPage() {
     setSelectedSlug("");
     setSelectedProduct({});
     setOptions([]);
+    setPricingDrafts({});
     setInventory([]);
 
     await loadProducts();
@@ -265,7 +296,10 @@ export default function InventoryManagerPage() {
   async function restoreProduct(productId: string) {
     const { error } = await supabase
       .from("products")
-      .update({ is_active: true })
+      .update({
+        deleted_at: null,
+        is_active: false,
+      })
       .eq("id", productId);
 
     if (error) {
@@ -273,10 +307,91 @@ export default function InventoryManagerPage() {
       return;
     }
 
-    setNotice("Product restored.");
+    setNotice(
+      "Product restored. It remains hidden until Active Product is checked."
+    );
 
     await loadProducts();
     await loadDeletedProducts();
+  }
+
+  function updatePricingDraft(
+    optionId: string,
+    patch: Partial<PricingDraft>
+  ) {
+    setPricingDrafts((previous) => ({
+      ...previous,
+      [optionId]: {
+        price: previous[optionId]?.price ?? "0",
+        cost: previous[optionId]?.cost ?? "0",
+        salePercent: previous[optionId]?.salePercent ?? "0",
+        ...patch,
+      },
+    }));
+  }
+
+  function updateOptionLocal(
+    optionId: string,
+    patch: Partial<Option>
+  ) {
+    setOptions((previous) =>
+      previous.map((row) =>
+        row.id === optionId
+          ? {
+              ...row,
+              ...patch,
+            }
+          : row
+      )
+    );
+  }
+
+  async function setProductActive(nextActive: boolean) {
+    if (!selectedProduct.id) {
+      alert("Select a product first.");
+      return;
+    }
+
+    const previousActive = selectedProduct.is_active ?? true;
+
+    setSelectedProduct((previous) => ({
+      ...previous,
+      is_active: nextActive,
+    }));
+
+    setProducts((previous) =>
+      previous.map((row) =>
+        row.id === selectedProduct.id
+          ? {
+              ...row,
+              is_active: nextActive,
+            }
+          : row
+      )
+    );
+
+    const { error } = await supabase
+      .from("products")
+      .update({ is_active: nextActive })
+      .eq("id", selectedProduct.id);
+
+    if (error) {
+      alert(error.message);
+
+      setSelectedProduct((previous) => ({
+        ...previous,
+        is_active: previousActive,
+      }));
+
+      await loadProducts();
+      return;
+    }
+
+    setNotice(
+      nextActive
+        ? "Product is active and visible to customers."
+        : "Product is inactive and hidden from customers."
+    );
   }
 
   async function updateOption(
@@ -520,7 +635,7 @@ export default function InventoryManagerPage() {
         <section style={statsGrid}>
           <StatCard
             label="Active Products"
-            value={String(products.length)}
+            value={String(products.filter((product) => product.is_active).length)}
             accent="#00d9ff"
           />
 
@@ -616,10 +731,19 @@ export default function InventoryManagerPage() {
                         <small>{product.slug}</small>
                       </span>
 
-                      <span style={productCategory}>
-                        {product.category === "lab-material"
-                          ? "Material"
-                          : "Compound"}
+                      <span
+                        style={{
+                          ...productCategory,
+                          color: product.is_active
+                            ? "#8f8f98"
+                            : "#ffcc00",
+                        }}
+                      >
+                        {product.is_active
+                          ? product.category === "lab-material"
+                            ? "Material"
+                            : "Compound"
+                          : "HIDDEN"}
                       </span>
                     </button>
                   );
@@ -955,13 +1079,46 @@ export default function InventoryManagerPage() {
                             ? getKitStatus(quantity)
                             : getSingleStatus(quantity);
 
+                        const draft =
+                          pricingDrafts[option.id] || {
+                            price: String(option.price ?? 0),
+                            cost: String(option.cost ?? 0),
+                            salePercent: String(option.sale_percent ?? 0),
+                          };
+
+                        const regularPrice = Math.max(
+                          0,
+                          Number(draft.price || 0)
+                        );
+
+                        const cost = Math.max(
+                          0,
+                          Number(draft.cost || 0)
+                        );
+
+                        const salePercent = Math.min(
+                          100,
+                          Math.max(
+                            0,
+                            Number(draft.salePercent || 0)
+                          )
+                        );
+
+                        /*
+                         * Profit and Margin ALWAYS preview the typed
+                         * Sale Percent. Sale Active is deliberately
+                         * NOT part of this calculation.
+                         */
+                        const previewPrice =
+                          regularPrice *
+                          (1 - salePercent / 100);
+
                         const profit =
-                          Number(option.price || 0) -
-                          Number(option.cost || 0);
+                          previewPrice - cost;
 
                         const margin =
-                          Number(option.price || 0) > 0
-                            ? (profit / Number(option.price || 0)) * 100
+                          previewPrice > 0
+                            ? (profit / previewPrice) * 100
                             : 0;
 
                         return (
@@ -1001,8 +1158,12 @@ export default function InventoryManagerPage() {
 
                             <div style={optionMetricGrid}>
                               <OptionMetric
-                                label="Price"
-                                value={`$${Number(option.price || 0).toFixed(2)}`}
+                                label={
+                                  salePercent > 0
+                                    ? "Sale Price Preview"
+                                    : "Price"
+                                }
+                                value={`$${previewPrice.toFixed(2)}`}
                               />
 
                               <OptionMetric
@@ -1038,12 +1199,22 @@ export default function InventoryManagerPage() {
                               <Field label="Price">
                                 <input
                                   type="number"
-                                  defaultValue={option.price}
-                                  onBlur={(event) => {
+                                  min="0"
+                                  step="0.01"
+                                  value={draft.price}
+                                  onChange={(event) => {
+                                    updatePricingDraft(option.id, {
+                                      price: event.target.value,
+                                    });
+                                  }}
+                                  onBlur={() => {
                                     void updateOption(
                                       option.id,
                                       "price",
-                                      Number(event.target.value)
+                                      Math.max(
+                                        0,
+                                        Number(draft.price || 0)
+                                      )
                                     );
                                   }}
                                   style={input}
@@ -1053,12 +1224,22 @@ export default function InventoryManagerPage() {
                               <Field label="Cost">
                                 <input
                                   type="number"
-                                  defaultValue={option.cost || 0}
-                                  onBlur={(event) => {
+                                  min="0"
+                                  step="0.01"
+                                  value={draft.cost}
+                                  onChange={(event) => {
+                                    updatePricingDraft(option.id, {
+                                      cost: event.target.value,
+                                    });
+                                  }}
+                                  onBlur={() => {
                                     void updateOption(
                                       option.id,
                                       "cost",
-                                      Number(event.target.value)
+                                      Math.max(
+                                        0,
+                                        Number(draft.cost || 0)
+                                      )
                                     );
                                   }}
                                   style={input}
@@ -1068,33 +1249,87 @@ export default function InventoryManagerPage() {
                               <Field label="Sale Percent">
                                 <input
                                   type="number"
-                                  defaultValue={option.sale_percent || 0}
-                                  onBlur={(event) => {
+                                  min="0"
+                                  max="100"
+                                  step="0.1"
+                                  value={draft.salePercent}
+                                  onChange={(event) => {
+                                    updatePricingDraft(option.id, {
+                                      salePercent: event.target.value,
+                                    });
+                                  }}
+                                  onBlur={() => {
+                                    const nextSalePercent = Math.min(
+                                      100,
+                                      Math.max(
+                                        0,
+                                        Number(draft.salePercent || 0)
+                                      )
+                                    );
+
+                                    /*
+                                     * Leaving this field ONLY saves the
+                                     * percentage. It never changes sale_active.
+                                     */
                                     void updateOption(
                                       option.id,
                                       "sale_percent",
-                                      Number(event.target.value)
+                                      nextSalePercent
                                     );
                                   }}
                                   style={input}
                                 />
                               </Field>
 
-                              <label style={saleToggle}>
-                                <input
-                                  type="checkbox"
-                                  checked={option.sale_active || false}
-                                  onChange={(event) => {
-                                    void updateOption(
-                                      option.id,
-                                      "sale_active",
-                                      event.target.checked
-                                    );
-                                  }}
-                                />
+                              <div
+                                style={{
+                                  minHeight: 52,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 18,
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <label style={saleToggle}>
+                                  <input
+                                    type="checkbox"
+                                    checked={option.sale_active || false}
+                                    onChange={(event) => {
+                                      const checked = event.target.checked;
 
-                                Sale Active
-                              </label>
+                                      updateOptionLocal(option.id, {
+                                        sale_active: checked,
+                                      });
+
+                                      /*
+                                       * This is the ONLY control that
+                                       * activates the customer-facing sale.
+                                       */
+                                      void updateOption(
+                                        option.id,
+                                        "sale_active",
+                                        checked
+                                      );
+                                    }}
+                                  />
+
+                                  Sale Active
+                                </label>
+
+                                <label style={saleToggle}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedProduct.is_active ?? true}
+                                    onChange={(event) => {
+                                      void setProductActive(
+                                        event.target.checked
+                                      );
+                                    }}
+                                  />
+
+                                  Active Product
+                                </label>
+                              </div>
                             </div>
 
                             {inv ? (
@@ -1151,6 +1386,16 @@ export default function InventoryManagerPage() {
                                     style={primaryButton}
                                   >
                                     Save Inventory
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void deleteProduct();
+                                    }}
+                                    style={dangerButton}
+                                  >
+                                    Archive Product
                                   </button>
                                 </div>
                               </div>
@@ -1271,18 +1516,6 @@ export default function InventoryManagerPage() {
                   </Field>
                 </div>
 
-                <label style={activeToggle}>
-                  <input
-                    type="checkbox"
-                    checked={selectedProduct.is_active ?? true}
-                    onChange={(event) =>
-                      updateProductField("is_active", event.target.checked)
-                    }
-                  />
-
-                  Active / Show on Site
-                </label>
-
                 <div style={actionRow}>
                   <button
                     type="button"
@@ -1292,16 +1525,6 @@ export default function InventoryManagerPage() {
                     style={primaryButton}
                   >
                     Save Product Changes
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void deleteProduct();
-                    }}
-                    style={dangerButton}
-                  >
-                    Archive Product
                   </button>
                 </div>
               </section>
@@ -1440,10 +1663,7 @@ const page = {
   lineHeight: 1.5,
   padding: "clamp(18px, 4vw, 34px)",
   background:
-    "linear-gradient(rgba(0,0,0,.72), rgba(0,0,0,.84)), url('/admin-bg.png')",
-  backgroundSize: "cover",
-  backgroundPosition: "center",
-  backgroundAttachment: "fixed",
+    "radial-gradient(circle at 12% 0%, rgba(255,69,216,.12), transparent 30%), radial-gradient(circle at 88% 4%, rgba(0,217,255,.12), transparent 32%), #000000",
   color: "#ffffff",
 };
 

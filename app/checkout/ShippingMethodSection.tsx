@@ -4,12 +4,12 @@ import type {
   PricingResult,
   ShippingMethod,
 } from "../../lib/pricing/types";
-import { money, styles } from "./checkoutTheme";
+import { styles } from "./checkoutTheme";
 
 export function ShippingMethodSection({
   shippingMethod,
   setShippingMethod,
-  pricing,
+  pricing: _pricing,
 }: {
   shippingMethod: ShippingMethod;
   setShippingMethod: (value: ShippingMethod) => void;
@@ -88,39 +88,10 @@ export function ShippingMethodSection({
               fontWeight: 700,
             }}
           >
-            Priority delivery service
+            USPS Priority Mail®
           </span>
         </button>
       </div>
-
-      {pricing && (
-        <div
-          style={{
-            marginTop: 13,
-            padding: 12,
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            border: "1px solid rgba(0,255,153,.55)",
-            borderRadius: 10,
-            background:
-              "linear-gradient(90deg,rgba(0,255,153,.08),rgba(0,217,255,.06))",
-          }}
-        >
-          <span>
-            Selected Delivery:{" "}
-            <strong>
-              {pricing.shipping.shippingMethodLabel}
-            </strong>
-          </span>
-
-          <strong style={{ color: "#00ff99" }}>
-            {pricing.shipping.shippingCollected === 0
-              ? "FREE"
-              : money(pricing.shipping.shippingCollected)}
-          </strong>
-        </div>
-      )}
     </section>
   );
 }

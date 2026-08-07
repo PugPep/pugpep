@@ -28,14 +28,9 @@ type ShippingEngineInput = {
   estimatedPackagingCostOverride?: number;
 };
 
-const PRIORITY_LABEL =
-  "Priority Shipping";
-
-const PRIORITY_DELIVERY =
-  "Priority Delivery";
-
-const PRIORITY_PRICE =
-  12;
+const PRIORITY_LABEL = "Priority Shipping";
+const PRIORITY_DELIVERY = "Priority Delivery";
+const PRIORITY_PRICE = 12;
 
 function normalizeShippingMethod(
   _value: unknown
@@ -43,13 +38,23 @@ function normalizeShippingMethod(
   return "standard";
 }
 
+function shippingReason(
+  value:
+    | "none"
+    | "lifetime_free_shipping"
+    | "order_over_250"
+    | "promotion"
+    | "admin"
+    | "other"
+): ShippingPricingResult["shippingDiscountReason"] {
+  return value as ShippingPricingResult["shippingDiscountReason"];
+}
+
 export function calculateShippingPricing({
   campaign: _campaign,
   marketingRules,
 
-  merchandiseRevenueAfterDiscounts:
-    _merchandiseRevenueAfterDiscounts,
-
+  merchandiseRevenueAfterDiscounts,
   hasLifetimeFreeShipping,
 
   shippingMethod = "standard",
@@ -65,16 +70,26 @@ export function calculateShippingPricing({
       shippingMethod
     );
 
+  const merchandiseRevenue =
+    roundCurrency(
+      nonNegative(
+        merchandiseRevenueAfterDiscounts
+      )
+    );
+
+  const freeShippingThreshold =
+    roundCurrency(
+      nonNegative(
+        marketingRules.free_shipping_threshold
+      )
+    );
+
   const priorityShippingPrice =
     PRIORITY_PRICE;
 
   const standardShippingPrice =
     priorityShippingPrice;
 
-  /*
-   * Retained only for compatibility with the existing result type.
-   * Express shipping is no longer offered.
-   */
   const expressShippingPrice =
     priorityShippingPrice;
 
@@ -87,21 +102,26 @@ export function calculateShippingPricing({
   const estimatedDelivery =
     PRIORITY_DELIVERY;
 
-  /*
-   * Only accounts explicitly flagged for lifetime free shipping
-   * receive free Priority Shipping.
-   *
-   * Order-total threshold shipping has been removed.
-   */
   const lifetimeFreeShippingApplies =
     Boolean(
       marketingRules.lifetime_free_shipping_enabled &&
         hasLifetimeFreeShipping
     );
 
+  const thresholdFreeShippingApplies =
+    freeShippingThreshold > 0 &&
+    merchandiseRevenue >=
+      freeShippingThreshold;
+
+  const promotionFreeShippingApplies =
+    Boolean(
+      freeStandardShippingOverride
+    );
+
   const freePriorityShippingApplies =
     lifetimeFreeShippingApplies ||
-    freeStandardShippingOverride;
+    thresholdFreeShippingApplies ||
+    promotionFreeShippingApplies;
 
   let shippingCollected =
     selectedShippingPrice;
@@ -114,29 +134,39 @@ export function calculateShippingPricing({
 
   let shippingDiscountReason:
     ShippingPricingResult["shippingDiscountReason"] =
-      "none";
+      shippingReason("none");
 
   if (
     freePriorityShippingApplies
   ) {
-    shippingCollected =
-      0;
-
+    shippingCollected = 0;
     shippingDiscountAmount =
       priorityShippingPrice;
-
     merchantPaidShippingAmount =
       priorityShippingPrice;
 
-    shippingDiscountReason =
+    if (
       lifetimeFreeShippingApplies
-        ? "lifetime"
-        : "manual";
+    ) {
+      shippingDiscountReason =
+        shippingReason(
+          "lifetime_free_shipping"
+        );
+    } else if (
+      thresholdFreeShippingApplies
+    ) {
+      shippingDiscountReason =
+        shippingReason(
+          "order_over_250"
+        );
+    } else {
+      shippingDiscountReason =
+        shippingReason(
+          "promotion"
+        );
+    }
   }
 
-  /*
-   * Explicit administrator override is applied last.
-   */
   if (
     shippingCollectedOverride != null
   ) {
@@ -159,22 +189,12 @@ export function calculateShippingPricing({
     merchantPaidShippingAmount =
       shippingDiscountAmount;
 
-    if (
-      shippingDiscountAmount > 0 &&
-      shippingDiscountReason ===
-        "none"
-    ) {
-      shippingDiscountReason =
-        "manual";
-    }
+    shippingDiscountReason =
+      shippingDiscountAmount > 0
+        ? shippingReason("admin")
+        : shippingReason("none");
   }
 
-  /*
-   * The business always carries the $12 Priority Shipping cost
-   * unless an actual carrier-cost override is supplied.
-   *
-   * Lifetime members pay $0, but profit still subtracts $12.
-   */
   const estimatedShippingCost =
     estimatedShippingCostOverride == null
       ? priorityShippingPrice
@@ -230,11 +250,7 @@ export function calculateShippingPricing({
     hasLifetimeFreeShipping:
       lifetimeFreeShippingApplies,
 
-    /*
-     * Threshold-based free shipping is disabled.
-     */
-    freeShippingThreshold:
-      0,
+    freeShippingThreshold,
 
     merchantPaidShippingAmount:
       roundCurrency(
