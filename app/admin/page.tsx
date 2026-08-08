@@ -681,50 +681,19 @@ export default function AdminPage() {
     }
 
     const cleanedTracking = tracking.trim();
-    const currentStatus =
-      currentOrder.shipping_status || "not shipped";
-
-    const finalStatus = cleanedTracking
-      ? "shipped"
-      : status;
-
-    const validManualTransitions: Record<string, string[]> = {
-      "not shipped": ["ready to ship"],
-      "ready to ship": [],
-      "shipped": ["returned"],
-      "out for delivery": ["returned"],
-      "delivered": ["returned"],
-      "returned": [],
-    };
+    const finalStatus = status;
 
     if (
-      finalStatus === "shipped" &&
+      (
+        finalStatus === "shipped" ||
+        finalStatus === "out for delivery" ||
+        finalStatus === "delivered"
+      ) &&
       !cleanedTracking
     ) {
       setNotice(
-        "Enter or scan a tracking number before marking an order shipped."
+        "Enter or scan a tracking number before using Shipped, Out for Delivery, or Delivered."
       );
-      return;
-    }
-
-    if (
-      !cleanedTracking &&
-      finalStatus !== currentStatus &&
-      !validManualTransitions[currentStatus]?.includes(finalStatus)
-    ) {
-      if (
-        finalStatus === "out for delivery" ||
-        finalStatus === "delivered"
-      ) {
-        setNotice(
-          "Out for Delivery and Delivered are updated automatically by the tracking provider."
-        );
-      } else {
-        setNotice(
-          `Cannot change shipping from "${currentStatus}" to "${finalStatus}".`
-        );
-      }
-
       return;
     }
 
@@ -795,7 +764,7 @@ export default function AdminPage() {
               body: JSON.stringify({
                 customerPhone: currentOrder.customer_phone,
                 orderNumber: currentOrder.order_number,
-                shippingStatus: "shipped",
+                shippingStatus: finalStatus,
                 trackingNumber: cleanedTracking,
               }),
             }
@@ -822,8 +791,8 @@ export default function AdminPage() {
           : "";
 
       setNotice(
-        finalStatus === "shipped"
-          ? `Tracking ${cleanedTracking} saved and order marked shipped.${warningText}`
+        cleanedTracking
+          ? `Tracking ${cleanedTracking} saved and delivery status set to ${finalStatus}.${warningText}`
           : `Delivery status updated to ${finalStatus}.${warningText}`
       );
 
@@ -1296,9 +1265,6 @@ export default function AdminPage() {
                             : order.shipping_status ===
                                 "ready to ship"
                             ? "#ffcc00"
-                            : order.shipping_status ===
-                                "returned"
-                            ? "#ff8585"
                             : undefined
                         }
                       />
@@ -1631,26 +1597,12 @@ export default function AdminPage() {
                                 Shipped — Tracking Required
                               </option>
 
-                              <option
-                                value="out for delivery"
-                                disabled={
-                                  deliveryStatus !== "out for delivery"
-                                }
-                              >
-                                Out for Delivery — Automatic
+                              <option value="out for delivery">
+                                Out for Delivery
                               </option>
 
-                              <option
-                                value="delivered"
-                                disabled={
-                                  deliveryStatus !== "delivered"
-                                }
-                              >
-                                Delivered — Automatic
-                              </option>
-
-                              <option value="returned">
-                                Returned
+                              <option value="delivered">
+                                Delivered
                               </option>
                             </select>
                           </label>
@@ -1756,7 +1708,6 @@ function getStatusLabel(order: Order) {
   if (order.deleted_at) return "DELETED";
   if (order.closed_at) return "CLOSED";
   if (order.status === "cancelled") return "CANCELLED";
-  if (order.shipping_status === "returned") return "RETURNED";
   if (order.shipping_status === "delivered") return "DELIVERED";
   if (order.shipping_status === "out for delivery") return "OUT FOR DELIVERY";
   if (order.shipping_status === "shipped") return "SHIPPED";
@@ -1783,9 +1734,6 @@ function getStatusBadgeStyle(order: Order) {
   } else if (cancelled) {
     background = "rgba(255,111,111,.10)";
     color = "#ff7f7f";
-  } else if (shippingStatus === "returned") {
-    background = "rgba(255,93,93,.12)";
-    color = "#ff8585";
   } else if (shippingStatus === "delivered") {
     background = "rgba(0,255,153,.12)";
     color = "#00ff99";
