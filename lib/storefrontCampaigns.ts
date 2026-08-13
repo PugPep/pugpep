@@ -20,6 +20,8 @@ type ProductOptionRow = {
   product_slug: string;
   sale_active: boolean | null;
   sale_percent: number | null;
+  is_active: boolean | null;
+  archived_at?: string | null;
 };
 
 type CampaignRpcRow = {
@@ -127,11 +129,18 @@ export async function loadStorefrontSales(
 ): Promise<Record<string, StorefrontSale>> {
   const { data, error } = await supabase
     .from("product_options")
-    .select("id,product_slug,sale_active,sale_percent");
+    .select("id,product_slug,sale_active,sale_percent,is_active,archived_at");
 
   if (error) throw error;
 
-  const options = (data || []) as unknown as ProductOptionRow[];
+  const allOptions = (data || []) as unknown as ProductOptionRow[];
+
+  const options = allOptions.filter(
+    (option) =>
+      option.is_active !== false &&
+      !option.archived_at
+  );
+
   const sales: Record<string, StorefrontSale> = {};
 
   options.forEach((option) => {

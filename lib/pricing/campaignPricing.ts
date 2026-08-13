@@ -58,6 +58,8 @@ type ProductOptionMetadata = {
   id: string;
   product_slug: string;
   status: string;
+  is_active: boolean | null;
+  archived_at: string | null;
 };
 
 type ProductMetadata = {
@@ -265,7 +267,7 @@ async function loadProductMetadata(
   } = await supabase
     .from("product_options")
     .select(
-      "id,product_slug,status"
+      "id,product_slug,status,is_active,archived_at"
     )
     .in("id", optionIds);
 
@@ -641,6 +643,26 @@ export async function calculateCampaignPricing({
             "PRODUCT_OPTION_NOT_FOUND",
           message:
             "A product option in the cart no longer exists.",
+          severity:
+            "critical",
+          productOptionId:
+            input.productOptionId,
+        })
+      );
+
+      continue;
+    }
+
+    if (
+      itemMetadata.option.is_active === false ||
+      itemMetadata.option.archived_at
+    ) {
+      warnings.push(
+        createWarning({
+          code:
+            "PRODUCT_INACTIVE",
+          message:
+            "This product option is no longer active.",
           severity:
             "critical",
           productOptionId:

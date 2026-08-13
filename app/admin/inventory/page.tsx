@@ -28,6 +28,8 @@ type Option = {
   status: string;
   sale_active: boolean;
   sale_percent: number;
+  is_active: boolean;
+  archived_at?: string | null;
 };
 
 type PricingDraft = {
@@ -214,7 +216,6 @@ export default function InventoryManagerPage() {
   image: selectedProduct.image,
   short_description: selectedProduct.short_description,
   description: selectedProduct.description,
-  is_active: selectedProduct.is_active,
 })
       .eq("id", selectedProduct.id);
 
@@ -256,49 +257,12 @@ export default function InventoryManagerPage() {
     await loadProducts();
   }
 
-  async function deleteProduct() {
-    if (!selectedProduct.id || !selectedSlug) {
-      alert("Select a product first.");
-      return;
-    }
-
-    const confirmArchive = window.confirm(
-      `Archive ${selectedProduct.name}?\n\nThis removes it from the customer site and the active catalog, but keeps it in the database so it can be restored later.`
-    );
-
-    if (!confirmArchive) return;
-
-    const { error } = await supabase
-      .from("products")
-      .update({
-        is_active: false,
-        deleted_at: new Date().toISOString(),
-      })
-      .eq("id", selectedProduct.id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    setNotice("Product archived. You can restore it from Archived Products.");
-
-    setSelectedSlug("");
-    setSelectedProduct({});
-    setOptions([]);
-    setPricingDrafts({});
-    setInventory([]);
-
-    await loadProducts();
-    await loadDeletedProducts();
-  }
-
   async function restoreProduct(productId: string) {
     const { error } = await supabase
       .from("products")
       .update({
         deleted_at: null,
-        is_active: false,
+        is_active: true,
       })
       .eq("id", productId);
 
@@ -307,9 +271,7 @@ export default function InventoryManagerPage() {
       return;
     }
 
-    setNotice(
-      "Product restored. It remains hidden until Active Product is checked."
-    );
+    setNotice("Archived product restored.");
 
     await loadProducts();
     await loadDeletedProducts();
@@ -346,51 +308,113 @@ export default function InventoryManagerPage() {
     );
   }
 
-  async function setProductActive(nextActive: boolean) {
-    if (!selectedProduct.id) {
-      alert("Select a product first.");
+  async function setOptionActive(
+    optionId: string,
+    nextActive: boolean
+  ) {
+    const option = options.find((row) => row.id === optionId);
+
+    if (!option) {
+      alert("Option not found.");
       return;
     }
 
-    const previousActive = selectedProduct.is_active ?? true;
+    if (option.archived_at) {
+      alert("Restore this option before making it active.");
+      return;
+    }
 
-    setSelectedProduct((previous) => ({
-      ...previous,
+    updateOptionLocal(optionId, {
       is_active: nextActive,
-    }));
-
-    setProducts((previous) =>
-      previous.map((row) =>
-        row.id === selectedProduct.id
-          ? {
-              ...row,
-              is_active: nextActive,
-            }
-          : row
-      )
-    );
+    });
 
     const { error } = await supabase
-      .from("products")
+      .from("product_options")
       .update({ is_active: nextActive })
-      .eq("id", selectedProduct.id);
+      .eq("id", optionId);
 
     if (error) {
       alert(error.message);
-
-      setSelectedProduct((previous) => ({
-        ...previous,
-        is_active: previousActive,
-      }));
-
-      await loadProducts();
+      await loadOptions(selectedSlug);
       return;
     }
 
     setNotice(
       nextActive
-        ? "Product is active and visible to customers."
-        : "Product is inactive and hidden from customers."
+        ? `${option.dosage} ${option.purchase_type} is active and visible to customers.`
+        : `${option.dosage} ${option.purchase_type} is inactive and hidden from customers.`
+    );
+  }
+
+  async function archiveOption(optionId: string) {
+    const option = options.find((row) => row.id === optionId);
+
+    if (!option) {
+      alert("Option not found.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Archive ${option.dosage} ${option.purchase_type}?\n\nOnly this exact option will be archived. Other dosages, singles, and kits will not be changed.`
+    );
+
+    if (!confirmed) return;
+
+    const archivedAt = new Date().toISOString();
+
+    const { error } = await supabase
+      .from("product_options")
+      .update({
+        is_active: false,
+        archived_at: archivedAt,
+        sale_active: false,
+      })
+      .eq("id", optionId);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    updateOptionLocal(optionId, {
+      is_active: false,
+      archived_at: archivedAt,
+      sale_active: false,
+    });
+
+    setNotice(
+      `${option.dosage} ${option.purchase_type} archived. No other option was changed.`
+    );
+  }
+
+  async function restoreOption(optionId: string) {
+    const option = options.find((row) => row.id === optionId);
+
+    if (!option) {
+      alert("Option not found.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("product_options")
+      .update({
+        archived_at: null,
+        is_active: false,
+      })
+      .eq("id", optionId);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    updateOptionLocal(optionId, {
+      archived_at: null,
+      is_active: false,
+    });
+
+    setNotice(
+      `${option.dosage} ${option.purchase_type} restored. Check Active Product when you want it visible to customers.`
     );
   }
 
@@ -496,6 +520,8 @@ export default function InventoryManagerPage() {
       status: autoStatus,
       sale_active: false,
       sale_percent: 0,
+      is_active: true,
+      archived_at: null,
     });
 
     if (optionError) {
@@ -568,6 +594,8 @@ export default function InventoryManagerPage() {
 
   const saleOptions = options.filter(
     (option) =>
+      option.is_active !== false &&
+      !option.archived_at &&
       option.sale_active &&
       Number(option.sale_percent || 0) > 0
   ).length;
@@ -1070,6 +1098,7 @@ export default function InventoryManagerPage() {
                     <div style={optionCards}>
                       {options.map((option) => {
                         const inv = getInventoryForOption(option);
+                        const isArchived = Boolean(option.archived_at);
                         const quantity = inv
                           ? Number(inv.quantity || 0)
                           : 0;
@@ -1122,7 +1151,16 @@ export default function InventoryManagerPage() {
                             : 0;
 
                         return (
-                          <article key={option.id} style={optionCard}>
+                          <article
+                            key={option.id}
+                            style={{
+                              ...optionCard,
+                              opacity: isArchived ? 0.62 : 1,
+                              border: isArchived
+                                ? "1px solid rgba(255,204,0,.42)"
+                                : optionCard.border,
+                            }}
+                          >
                             <div style={optionHeader}>
                               <div>
                                 <input
@@ -1319,9 +1357,11 @@ export default function InventoryManagerPage() {
                                 <label style={saleToggle}>
                                   <input
                                     type="checkbox"
-                                    checked={selectedProduct.is_active ?? true}
+                                    checked={option.is_active !== false}
+                                    disabled={isArchived}
                                     onChange={(event) => {
-                                      void setProductActive(
+                                      void setOptionActive(
+                                        option.id,
                                         event.target.checked
                                       );
                                     }}
@@ -1329,6 +1369,18 @@ export default function InventoryManagerPage() {
 
                                   Active Product
                                 </label>
+
+                                {isArchived && (
+                                  <span
+                                    style={{
+                                      color: "#ffcc00",
+                                      fontSize: 12,
+                                      fontWeight: 900,
+                                    }}
+                                  >
+                                    ARCHIVED
+                                  </span>
+                                )}
                               </div>
                             </div>
 
@@ -1391,18 +1443,58 @@ export default function InventoryManagerPage() {
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      void deleteProduct();
+                                      if (isArchived) {
+                                        void restoreOption(option.id);
+                                      } else {
+                                        void archiveOption(option.id);
+                                      }
                                     }}
-                                    style={dangerButton}
+                                    style={
+                                      isArchived
+                                        ? secondaryButton
+                                        : dangerButton
+                                    }
                                   >
-                                    Archive Product
+                                    {isArchived
+                                      ? "Restore Option"
+                                      : "Archive Product"}
                                   </button>
                                 </div>
                               </div>
                             ) : (
-                              <p style={muted}>
-                                This kit uses the matching single-unit inventory.
-                              </p>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  gap: 12,
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <p style={{ ...muted, margin: 0 }}>
+                                  This kit uses the matching single-unit inventory.
+                                </p>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (isArchived) {
+                                      void restoreOption(option.id);
+                                    } else {
+                                      void archiveOption(option.id);
+                                    }
+                                  }}
+                                  style={
+                                    isArchived
+                                      ? secondaryButton
+                                      : dangerButton
+                                  }
+                                >
+                                  {isArchived
+                                    ? "Restore Option"
+                                    : "Archive Product"}
+                                </button>
+                              </div>
                             )}
                           </article>
                         );

@@ -29,6 +29,8 @@ type ProductOption = {
   sale_active: boolean;
   sale_percent: number;
   cost: number;
+  is_active: boolean;
+  archived_at?: string | null;
 };
 
 type InventoryItem = {
@@ -80,7 +82,9 @@ export default function ProductDetailPage() {
         await supabase
           .from("product_options")
           .select("*")
-          .eq("product_slug", slug);
+          .eq("product_slug", slug)
+          .eq("is_active", true)
+          .is("archived_at", null);
 
       if (optionError) {
         console.error("Option loading error:", optionError);
@@ -153,6 +157,10 @@ export default function ProductDetailPage() {
   }
 
   function isOptionAvailable(option: ProductOption) {
+    if (option.is_active === false || option.archived_at) {
+      return false;
+    }
+
     const availableQuantity =
       getAvailableQuantity(option);
 
