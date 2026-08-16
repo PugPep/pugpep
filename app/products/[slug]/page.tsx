@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -396,12 +395,9 @@ export default function ProductDetailPage() {
           {/* Left side: product image and research snapshot */}
           <div style={imageColumn}>
             <div style={imageBox}>
-              <Image
+              <img
                 src={product.image}
                 alt={product.name}
-                width={650}
-                height={650}
-                priority
                 style={productImage}
               />
             </div>

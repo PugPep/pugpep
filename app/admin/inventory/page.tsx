@@ -68,6 +68,7 @@ export default function InventoryManagerPage() {
 
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
+  const [imageUploading, setImageUploading] = useState(false);
 
 
   const emptyNewOption = {
@@ -201,6 +202,101 @@ export default function InventoryManagerPage() {
 
   function updateProductField(field: keyof Product, value: string | boolean) {
     setSelectedProduct((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function uploadProductImage(file: File) {
+    if (!selectedProduct.id || !selectedProduct.slug) {
+      alert("Select a product first.");
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file.");
+      return;
+    }
+
+    const maxFileSize = 5 * 1024 * 1024;
+
+    if (file.size > maxFileSize) {
+      alert("Product images must be 5 MB or smaller.");
+      return;
+    }
+
+    setImageUploading(true);
+
+    try {
+      const extension =
+        file.name.split(".").pop()?.toLowerCase() || "png";
+
+      const safeSlug = String(selectedProduct.slug)
+        .toLowerCase()
+        .replace(/[^a-z0-9-_]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+
+      const objectPath =
+        `products/${safeSlug}-${Date.now()}.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("product-images")
+        .upload(objectPath, file, {
+          cacheControl: "3600",
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from("product-images")
+        .getPublicUrl(objectPath);
+
+      const publicUrl = publicUrlData.publicUrl;
+
+      if (!publicUrl) {
+        throw new Error("Supabase did not return a public image URL.");
+      }
+
+      const { error: productError } = await supabase
+        .from("products")
+        .update({
+          image: publicUrl,
+        })
+        .eq("id", selectedProduct.id);
+
+      if (productError) {
+        throw productError;
+      }
+
+      setSelectedProduct((previous) => ({
+        ...previous,
+        image: publicUrl,
+      }));
+
+      setProducts((previous) =>
+        previous.map((product) =>
+          product.id === selectedProduct.id
+            ? {
+                ...product,
+                image: publicUrl,
+              }
+            : product
+        )
+      );
+
+      setNotice("Product image uploaded and updated on the website.");
+    } catch (error) {
+      console.error("Product image upload failed:", error);
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "The product image could not be uploaded."
+      );
+    } finally {
+      setImageUploading(false);
+    }
   }
 
   async function saveProductChanges() {
@@ -1521,6 +1617,136 @@ export default function InventoryManagerPage() {
                   >
                     View Live Page
                   </a>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(180px, 280px) minmax(0, 1fr)",
+                    gap: 22,
+                    marginBottom: 24,
+                    padding: 18,
+                    border: "1px solid rgba(0,217,255,.26)",
+                    borderRadius: 16,
+                    background:
+                      "linear-gradient(145deg, rgba(0,217,255,.055), rgba(255,69,216,.035))",
+                  }}
+                >
+                  <div>
+                    <p style={sectionEyebrow}>PRODUCT IMAGE</p>
+
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: 10,
+                        border: "1px solid rgba(255,255,255,.12)",
+                        borderRadius: 14,
+                        background: "#050505",
+                      }}
+                    >
+                      <img
+                        src={
+                          selectedProduct.image ||
+                          "/pugpep-logo.png"
+                        }
+                        alt={
+                          selectedProduct.name ||
+                          "Product preview"
+                        }
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          aspectRatio: "1 / 1",
+                          objectFit: "contain",
+                          borderRadius: 10,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "center",
+                      gap: 12,
+                    }}
+                  >
+                    <div>
+                      <h3
+                        style={{
+                          margin: 0,
+                          color: "#fff",
+                          fontSize: 20,
+                        }}
+                      >
+                        Change Website Photo
+                      </h3>
+
+                      <p
+                        style={{
+                          ...helperText,
+                          marginTop: 7,
+                          marginBottom: 0,
+                        }}
+                      >
+                        Choose a PNG, JPG, or WebP image up to 5 MB.
+                        The new image is uploaded to Supabase Storage and
+                        becomes the website image automatically.
+                      </p>
+                    </div>
+
+                    <label
+                      style={{
+                        ...primaryButton,
+                        display: "inline-flex",
+                        width: "fit-content",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: imageUploading
+                          ? "wait"
+                          : "pointer",
+                        opacity: imageUploading
+                          ? 0.6
+                          : 1,
+                      }}
+                    >
+                      {imageUploading
+                        ? "Uploading Image..."
+                        : "Choose New Product Image"}
+
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        disabled={imageUploading}
+                        onChange={(event) => {
+                          const file =
+                            event.target.files?.[0];
+
+                          if (file) {
+                            void uploadProductImage(file);
+                          }
+
+                          event.currentTarget.value = "";
+                        }}
+                        style={{
+                          display: "none",
+                        }}
+                      />
+                    </label>
+
+                    <span
+                      style={{
+                        color: "#777",
+                        fontSize: 12,
+                        overflowWrap: "anywhere",
+                      }}
+                    >
+                      Current image:{" "}
+                      {selectedProduct.image ||
+                        "No image selected"}
+                    </span>
+                  </div>
                 </div>
 
                 <div style={formGrid}>

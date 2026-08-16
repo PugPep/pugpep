@@ -289,7 +289,7 @@ export default function HomePage() {
                       </div>
                     )}
 
-                  <Image
+                  <img
                     src={
                       typeof product.image === "string" &&
                       product.image.length > 0
@@ -297,8 +297,6 @@ export default function HomePage() {
                         : "/pugpep-logo.png"
                     }
                     alt={product.name}
-                    width={280}
-                    height={280}
                     style={{
                       width: "100%",
                       height: 360,
