@@ -65,6 +65,43 @@ export function OrderReview({
                   item.productOptionId
               );
 
+            const quantity =
+              Math.max(
+                1,
+                Number(item.quantity || 1)
+              );
+
+            /*
+             * The cart already knows the product price.
+             * Use it while authoritative checkout pricing
+             * is still waiting for the shipping address.
+             */
+            const fallbackUnitPrice =
+              Number(
+                item.salePrice ??
+                item.price ??
+                0
+              );
+
+            const fallbackRegularUnitPrice =
+              Number(
+                item.regularPrice ??
+                item.price ??
+                fallbackUnitPrice
+              );
+
+            const fallbackLinePrice =
+              fallbackUnitPrice *
+              quantity;
+
+            const fallbackRegularLinePrice =
+              fallbackRegularUnitPrice *
+              quantity;
+
+            const fallbackHasSavings =
+              fallbackRegularLinePrice >
+              fallbackLinePrice;
+
             return (
               <article
                 key={`${item.productOptionId || item.slug}-${index}`}
@@ -80,7 +117,13 @@ export function OrderReview({
                   style={styles.image}
                 />
 
-                <div style={{ minWidth: 0, display: "grid", gap: 5 }}>
+                <div
+                  style={{
+                    minWidth: 0,
+                    display: "grid",
+                    gap: 5,
+                  }}
+                >
                   <strong
                     style={{
                       color: "#ff45d8",
@@ -90,7 +133,12 @@ export function OrderReview({
                     {item.name}
                   </strong>
 
-                  <span style={{ color: "#bbb", fontSize: 14 }}>
+                  <span
+                    style={{
+                      color: "#bbb",
+                      fontSize: 14,
+                    }}
+                  >
                     {item.dosage} ·{" "}
                     {item.purchaseType === "single"
                       ? "Single"
@@ -106,6 +154,19 @@ export function OrderReview({
                       }}
                     >
                       {pricedLine.saleCampaignName}
+                    </span>
+                  )}
+
+                  {!pricing && (
+                    <span
+                      style={{
+                        color: "#888",
+                        fontSize: 11,
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      Final savings, shipping, and tax update
+                      after required delivery information is entered.
                     </span>
                   )}
 
@@ -131,24 +192,37 @@ export function OrderReview({
                       −
                     </button>
 
-                    <span style={{ minWidth: 25, textAlign: "center" }}>
+                    <span
+                      style={{
+                        minWidth: 25,
+                        textAlign: "center",
+                      }}
+                    >
                       {item.quantity}
                     </span>
 
                     <button
                       type="button"
                       onClick={() => {
-                        const current = Number(item.quantity || 1);
+                        const current =
+                          Number(
+                            item.quantity || 1
+                          );
 
                         if (
                           item.purchaseType === "single" &&
                           item.status !== "pre-sale"
                         ) {
-                          const maximum = Number(
-                            item.maxAvailable || current
-                          );
+                          const maximum =
+                            Number(
+                              item.maxAvailable ||
+                              current
+                            );
 
-                          if (current + 1 > maximum) {
+                          if (
+                            current + 1 >
+                            maximum
+                          ) {
                             alert(
                               `Only ${maximum} item(s) are currently available.`
                             );
@@ -156,7 +230,10 @@ export function OrderReview({
                           }
                         }
 
-                        updateQuantity(index, current + 1);
+                        updateQuantity(
+                          index,
+                          current + 1
+                        );
                       }}
                       style={styles.qtyButton}
                     >
@@ -165,7 +242,9 @@ export function OrderReview({
 
                     <button
                       type="button"
-                      onClick={() => removeFromCart(index)}
+                      onClick={() =>
+                        removeFromCart(index)
+                      }
                       style={styles.removeButton}
                     >
                       Remove
@@ -183,26 +262,75 @@ export function OrderReview({
                 >
                   {pricedLine ? (
                     <>
-                      {pricedLine.saleDiscountAmount > 0 && (
+                      {pricedLine.regularLineValue >
+                        pricedLine.campaignLineRevenue && (
                         <span
                           style={{
                             color: "#777",
                             fontSize: 13,
-                            textDecoration: "line-through",
+                            textDecoration:
+                              "line-through",
                           }}
                         >
-                          {money(pricedLine.regularLineValue)}
+                          {money(
+                            pricedLine.regularLineValue
+                          )}
                         </span>
                       )}
 
                       <strong>
-                        {money(pricedLine.campaignLineRevenue)}
+                        {money(
+                          pricedLine.campaignLineRevenue
+                        )}
                       </strong>
+
+                      {pricedLine.bundleDiscountAmount >
+                        0 && (
+                        <span
+                          style={{
+                            color: "#00ff99",
+                            fontSize: 11,
+                            fontWeight: 800,
+                          }}
+                        >
+                          Bundle savings included
+                        </span>
+                      )}
                     </>
                   ) : (
-                    <span style={{ color: "#999" }}>
-                      Pricing…
-                    </span>
+                    <>
+                      {fallbackHasSavings && (
+                        <span
+                          style={{
+                            color: "#777",
+                            fontSize: 13,
+                            textDecoration:
+                              "line-through",
+                          }}
+                        >
+                          {money(
+                            fallbackRegularLinePrice
+                          )}
+                        </span>
+                      )}
+
+                      <strong>
+                        {money(
+                          fallbackLinePrice
+                        )}
+                      </strong>
+
+                      <span
+                        style={{
+                          color: "#888",
+                          fontSize: 10,
+                          fontWeight: 700,
+                          textAlign: "right",
+                        }}
+                      >
+                        PRODUCT PRICE
+                      </span>
+                    </>
                   )}
                 </div>
               </article>
@@ -220,7 +348,25 @@ export function OrderBreakdown({
   pricing: PricingResult | null;
 }) {
   if (!pricing) {
-    return null;
+    return (
+      <div
+        style={{
+          marginTop: 12,
+          padding: "12px 14px",
+          borderRadius: 10,
+          border:
+            "1px solid rgba(0,217,255,.20)",
+          background:
+            "rgba(0,217,255,.035)",
+          color: "#999",
+          fontSize: 12,
+          lineHeight: 1.55,
+        }}
+      >
+        Complete the required delivery information to
+        calculate final discounts, shipping, and tax.
+      </div>
+    );
   }
 
   return (
@@ -235,12 +381,19 @@ export function OrderBreakdown({
         Order Breakdown
       </summary>
 
-      <div style={{ display: "grid", gap: 8, marginTop: 15 }}>
+      <div
+        style={{
+          display: "grid",
+          gap: 8,
+          marginTop: 15,
+        }}
+      >
         {pricing.snapshot.steps
           .filter((step) => {
             if (
               step.category === "cost" ||
-              step.category === "commission" ||
+              step.category ===
+                "commission" ||
               step.category === "profit"
             ) {
               return false;

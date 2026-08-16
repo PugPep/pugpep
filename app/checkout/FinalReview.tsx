@@ -18,26 +18,43 @@ export function FinalReview({
   hasMissingOptionIds: boolean;
   proceedToPayment: () => void;
 }) {
+  const buttonDisabled =
+    proceeding ||
+    cartIsEmpty ||
+    hasMissingOptionIds;
+
   return (
     <section style={styles.finalCard}>
       <div style={styles.finalHeader}>
         <div>
           <p style={styles.eyebrow}>
-            RESEARCH READY
+            {pricing
+              ? "RESEARCH READY"
+              : "FINAL REVIEW"}
           </p>
 
           <h2
             style={{
               margin: "5px 0 0",
               color: "#fff",
-              fontSize: "clamp(26px,5vw,36px)",
+              fontSize:
+                "clamp(26px,5vw,36px)",
             }}
           >
-            Everything Checks Out
+            {pricing
+              ? "Everything Checks Out"
+              : "Almost Ready"}
           </h2>
 
-          <p style={{ margin: "7px 0 0", color: "#bbb" }}>
-            Your savings, rewards, shipping choice, and total are ready.
+          <p
+            style={{
+              margin: "7px 0 0",
+              color: "#bbb",
+            }}
+          >
+            {pricing
+              ? "Your savings, rewards, shipping choice, and total are ready."
+              : "Complete the required checkout information and we’ll verify your final pricing before payment."}
           </p>
         </div>
 
@@ -48,8 +65,15 @@ export function FinalReview({
           >
             <span>Your Total</span>
 
-            <strong style={{ fontSize: 26 }}>
-              {money(pricing.accounting.customerTotal)}
+            <strong
+              style={{
+                fontSize: 26,
+              }}
+            >
+              {money(
+                pricing.accounting
+                  .customerTotal
+              )}
             </strong>
           </div>
         )}
@@ -60,49 +84,85 @@ export function FinalReview({
         style={styles.finalGrid}
       >
         <div>
-          {pricing && (
+          {pricing ? (
             <>
               <Row
                 label="Items"
                 value={money(
-                  pricing.accounting.regularMerchandiseValue
+                  pricing.accounting
+                    .regularMerchandiseValue
                 )}
               />
 
               <Discount
                 label="Sale Savings"
-                value={pricing.discounts.saleDiscount}
+                value={
+                  pricing.discounts
+                    .saleDiscount
+                }
+              />
+
+              <Discount
+                label="Bundle Savings"
+                value={
+                  pricing.discounts
+                    .bundleDiscount
+                }
               />
 
               <Discount
                 label="Promo Savings"
-                value={pricing.discounts.generalPromoDiscount}
+                value={
+                  pricing.discounts
+                    .generalPromoDiscount
+                }
               />
 
               <Discount
                 label="Partner Savings"
-                value={pricing.discounts.salesRepDiscount}
+                value={
+                  pricing.discounts
+                    .salesRepDiscount
+                }
               />
 
               <Discount
                 label="Referral Savings"
-                value={pricing.discounts.referralDiscount}
+                value={
+                  pricing.discounts
+                    .referralDiscount
+                }
               />
 
               <Discount
                 label="VIP Savings"
-                value={pricing.discounts.vipDiscount}
+                value={
+                  pricing.discounts
+                    .vipDiscount
+                }
+              />
+
+              <Discount
+                label="Hero Appreciation"
+                value={
+                  pricing.discounts
+                    .heroDiscount
+                }
               />
 
               <Discount
                 label="Rewards Applied"
-                value={pricing.discounts.rewardsDiscount}
+                value={
+                  pricing.discounts
+                    .rewardsDiscount
+                }
               />
 
               <Discount
                 label="PugPep Credit"
                 value={
-                  pricing.discounts.merchantTaxOffsetDiscount
+                  pricing.discounts
+                    .merchantTaxOffsetDiscount
                 }
               />
 
@@ -115,24 +175,60 @@ export function FinalReview({
               />
 
               <Row
-                label={pricing.shipping.shippingMethodLabel}
+                label={
+                  pricing.shipping
+                    .shippingMethodLabel
+                }
                 value={
-                  pricing.shipping.shippingCollected === 0
+                  pricing.shipping
+                    .shippingCollected === 0
                     ? "FREE"
-                    : money(pricing.shipping.shippingCollected)
+                    : money(
+                        pricing.shipping
+                          .shippingCollected
+                      )
                 }
                 positive={
-                  pricing.shipping.shippingCollected === 0
+                  pricing.shipping
+                    .shippingCollected === 0
                 }
               />
 
               {pricing.tax.enabled && (
                 <Row
                   label="Sales Tax"
-                  value={money(pricing.tax.salesTaxAmount)}
+                  value={money(
+                    pricing.tax
+                      .salesTaxAmount
+                  )}
                 />
               )}
             </>
+          ) : (
+            <div
+              style={{
+                padding: "16px 0",
+                color: "#aaa",
+                lineHeight: 1.65,
+              }}
+            >
+              <strong
+                style={{
+                  display: "block",
+                  marginBottom: 6,
+                  color: "#00d9ff",
+                }}
+              >
+                Final pricing is waiting on your
+                checkout information.
+              </strong>
+
+              Product prices remain visible in the
+              Research Summary above. Your discounts,
+              shipping eligibility, and applicable tax
+              are verified before you enter the payment
+              screen.
+            </div>
           )}
         </div>
 
@@ -142,36 +238,35 @@ export function FinalReview({
         >
           <button
             type="button"
-            disabled={
-              proceeding ||
-              pricingLoading ||
-              cartIsEmpty ||
-              hasMissingOptionIds ||
-              !pricing
-            }
+            disabled={buttonDisabled}
             onClick={proceedToPayment}
             style={{
               ...styles.primaryButton,
-              background: "linear-gradient(180deg,#2eea6f,#19b857)",
-              border: "2px solid #45d97a",
-              boxShadow: "0 0 18px rgba(46,234,111,.32), 0 0 36px rgba(46,234,111,.14)",
+              background:
+                "linear-gradient(180deg,#2eea6f,#19b857)",
+              border:
+                "2px solid #45d97a",
+              boxShadow:
+                "0 0 18px rgba(46,234,111,.32), 0 0 36px rgba(46,234,111,.14)",
               minHeight: 66,
               fontSize: 20,
               opacity:
-                proceeding ||
-                pricingLoading ||
-                cartIsEmpty ||
-                hasMissingOptionIds ||
-                !pricing
+                buttonDisabled
                   ? 0.65
                   : 1,
+              cursor:
+                buttonDisabled
+                  ? "not-allowed"
+                  : "pointer",
             }}
           >
             {proceeding
               ? "Preparing the Lab..."
               : pricingLoading
-              ? "Verifying Your Research..."
-              : "Enter the Lab →"}
+              ? "Verify Pricing & Enter →"
+              : pricing
+              ? "Enter the Lab →"
+              : "Verify Pricing & Enter the Lab →"}
           </button>
 
           <p
@@ -180,9 +275,12 @@ export function FinalReview({
               color: "#888",
               fontSize: 12,
               textAlign: "center",
+              lineHeight: 1.5,
             }}
           >
-            Secure checkout · Pricing verified before payment
+            {pricingLoading
+              ? "Pricing is updating. You can continue and final pricing will be verified before payment."
+              : "Secure checkout · Pricing verified before payment"}
           </p>
         </div>
       </div>
@@ -205,7 +303,9 @@ function Row({
 
       <strong
         style={{
-          color: positive ? "#00ff99" : "#fff",
+          color: positive
+            ? "#00ff99"
+            : "#fff",
         }}
       >
         {value}
@@ -229,7 +329,11 @@ function Discount({
     <div style={styles.summaryRow}>
       <span>{label}</span>
 
-      <strong style={{ color: "#00ff99" }}>
+      <strong
+        style={{
+          color: "#00ff99",
+        }}
+      >
         -{money(value)}
       </strong>
     </div>
