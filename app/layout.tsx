@@ -3,6 +3,7 @@
 import Link from "next/link";
 import {
   useEffect,
+  useRef,
   useState,
 } from "react";
 
@@ -26,6 +27,35 @@ export default function RootLayout({
     setDesktopHeaderOpen,
   ] = useState(false);
 
+  const desktopHeaderCloseTimer =
+    useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function cancelDesktopHeaderClose() {
+    if (desktopHeaderCloseTimer.current) {
+      clearTimeout(desktopHeaderCloseTimer.current);
+      desktopHeaderCloseTimer.current = null;
+    }
+  }
+
+  function openDesktopHeader() {
+    cancelDesktopHeaderClose();
+    setDesktopHeaderOpen(true);
+  }
+
+  function closeDesktopHeaderImmediately() {
+    cancelDesktopHeaderClose();
+    setDesktopHeaderOpen(false);
+  }
+
+  function scheduleDesktopHeaderClose() {
+    cancelDesktopHeaderClose();
+
+    desktopHeaderCloseTimer.current = setTimeout(() => {
+      setDesktopHeaderOpen(false);
+      desktopHeaderCloseTimer.current = null;
+    }, 1200);
+  }
+
   useEffect(() => {
     function handleEscape(
       event: KeyboardEvent
@@ -35,7 +65,7 @@ export default function RootLayout({
         "Escape"
       ) {
         setMenuOpen(false);
-        setDesktopHeaderOpen(false);
+        closeDesktopHeaderImmediately();
       }
     }
 
@@ -49,6 +79,8 @@ export default function RootLayout({
         "keydown",
         handleEscape
       );
+
+      cancelDesktopHeaderClose();
     };
   }, []);
 
@@ -69,8 +101,8 @@ export default function RootLayout({
           .siteHeaderShell {
             transform: translateY(-100%);
             transition:
-              transform 220ms ease,
-              box-shadow 220ms ease;
+              transform 360ms ease,
+              box-shadow 360ms ease;
           }
 
           .siteHeaderShell.open {
@@ -160,11 +192,7 @@ export default function RootLayout({
           <div
             className="topActivationStrip"
             style={activationStrip}
-            onMouseEnter={() =>
-              setDesktopHeaderOpen(
-                true
-              )
-            }
+            onMouseEnter={openDesktopHeader}
             aria-hidden="true"
           >
             <span style={activationGlow} />
@@ -177,16 +205,8 @@ export default function RootLayout({
                 : ""
             }`}
             style={headerShell}
-            onMouseEnter={() =>
-              setDesktopHeaderOpen(
-                true
-              )
-            }
-            onMouseLeave={() =>
-              setDesktopHeaderOpen(
-                false
-              )
-            }
+            onMouseEnter={openDesktopHeader}
+            onMouseLeave={scheduleDesktopHeaderClose}
           >
             <div style={topTicker}>
               <div
@@ -244,9 +264,7 @@ export default function RootLayout({
                   style={logoText}
                   onClick={() => {
                     setMenuOpen(false);
-                    setDesktopHeaderOpen(
-                      false
-                    );
+                    closeDesktopHeaderImmediately();
                   }}
                 >
                   <span
@@ -269,51 +287,31 @@ export default function RootLayout({
                 <NavLink
                   href="/"
                   label="HOME"
-                  closeHeader={() =>
-                    setDesktopHeaderOpen(
-                      false
-                    )
-                  }
+                  closeHeader={closeDesktopHeaderImmediately}
                 />
 
                 <NavLink
                   href="/about"
                   label="ABOUT"
-                  closeHeader={() =>
-                    setDesktopHeaderOpen(
-                      false
-                    )
-                  }
+                  closeHeader={closeDesktopHeaderImmediately}
                 />
 
                 <NavLink
                   href="/quality"
                   label="QUALITY"
-                  closeHeader={() =>
-                    setDesktopHeaderOpen(
-                      false
-                    )
-                  }
+                  closeHeader={closeDesktopHeaderImmediately}
                 />
 
                 <NavLink
                   href="/contact"
                   label="CONTACT"
-                  closeHeader={() =>
-                    setDesktopHeaderOpen(
-                      false
-                    )
-                  }
+                  closeHeader={closeDesktopHeaderImmediately}
                 />
 
                 <NavLink
                   href="/account"
                   label="MY ACCOUNT"
-                  closeHeader={() =>
-                    setDesktopHeaderOpen(
-                      false
-                    )
-                  }
+                  closeHeader={closeDesktopHeaderImmediately}
                 />
               </div>
 

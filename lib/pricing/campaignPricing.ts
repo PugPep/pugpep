@@ -60,6 +60,15 @@ type ProductOptionMetadata = {
   status: string;
   is_active: boolean | null;
   archived_at: string | null;
+  sale_active: boolean | null;
+  sale_percent: number | null;
+  bundle_discount_enabled: boolean | null;
+  bundle_qty_1: number | null;
+  bundle_discount_1: number | null;
+  bundle_qty_2: number | null;
+  bundle_discount_2: number | null;
+  bundle_qty_3: number | null;
+  bundle_discount_3: number | null;
 };
 
 type ProductMetadata = {
@@ -267,7 +276,22 @@ async function loadProductMetadata(
   } = await supabase
     .from("product_options")
     .select(
-      "id,product_slug,status,is_active,archived_at"
+      [
+        "id",
+        "product_slug",
+        "status",
+        "is_active",
+        "archived_at",
+        "sale_active",
+        "sale_percent",
+        "bundle_discount_enabled",
+        "bundle_qty_1",
+        "bundle_discount_1",
+        "bundle_qty_2",
+        "bundle_discount_2",
+        "bundle_qty_3",
+        "bundle_discount_3",
+      ].join(",")
     )
     .in("id", optionIds);
 
@@ -374,12 +398,14 @@ function buildPricedLine({
   input,
   campaignPrice,
   productName,
+  optionMetadata,
   isTaxable,
   taxCode,
 }: {
   input: PricingCartItemInput;
   campaignPrice: ProductOptionCampaignPrice;
   productName: string;
+  optionMetadata: ProductOptionMetadata;
   isTaxable: boolean;
   taxCode: string | null;
 }): PricedCartLine {
@@ -403,9 +429,25 @@ function buildPricedLine({
 
   let freeQuantity = 0;
 
+  const hasManualSale =
+    !campaignPrice.hasCampaign &&
+    Boolean(optionMetadata.sale_active) &&
+    nonNegative(optionMetadata.sale_percent) > 0;
+
+  const manualSalePercent =
+    hasManualSale
+      ? Math.min(
+          100,
+          nonNegative(optionMetadata.sale_percent)
+        )
+      : 0;
+
   let campaignLineRevenue =
     roundCurrency(
-      campaignPrice.saleUnitPrice *
+      (hasManualSale
+        ? regularUnitPrice *
+          (1 - manualSalePercent / 100)
+        : campaignPrice.saleUnitPrice) *
         quantity
     );
 
@@ -416,6 +458,11 @@ function buildPricedLine({
             quantity
         )
       : 0;
+
+  let bundleDiscountApplied = false;
+  let bundleDiscountPercent = 0;
+  let bundleDiscountAmount = 0;
+  let bundleTierQuantity: number | null = null;
 
   if (
     campaignPrice.hasCampaign &&
@@ -454,6 +501,52 @@ function buildPricedLine({
         : 0;
   }
 
+  if (
+    !campaignPrice.hasCampaign &&
+    !hasManualSale &&
+    optionMetadata.bundle_discount_enabled !== false
+  ) {
+    const tiers = [
+      {
+        quantity: Math.max(1, Math.floor(nonNegative(optionMetadata.bundle_qty_1) || 1)),
+        percent: Math.min(100, nonNegative(optionMetadata.bundle_discount_1)),
+      },
+      {
+        quantity: Math.max(1, Math.floor(nonNegative(optionMetadata.bundle_qty_2) || 1)),
+        percent: Math.min(100, nonNegative(optionMetadata.bundle_discount_2)),
+      },
+      {
+        quantity: Math.max(1, Math.floor(nonNegative(optionMetadata.bundle_qty_3) || 1)),
+        percent: Math.min(100, nonNegative(optionMetadata.bundle_discount_3)),
+      },
+    ]
+      .filter((tier) => tier.percent > 0 && quantity >= tier.quantity)
+      .sort((a, b) => b.quantity - a.quantity);
+
+    const bestTier = tiers[0];
+
+    if (bestTier) {
+      bundleDiscountApplied = true;
+      bundleDiscountPercent = bestTier.percent;
+      bundleTierQuantity = bestTier.quantity;
+
+      const preBundleRevenue = campaignLineRevenue;
+
+      campaignLineRevenue = roundCurrency(
+        preBundleRevenue *
+          (1 - bundleDiscountPercent / 100)
+      );
+
+      bundleDiscountAmount = roundCurrency(
+        Math.max(0, preBundleRevenue - campaignLineRevenue)
+      );
+
+      actualUnitPrice = quantity > 0
+        ? roundCurrency(campaignLineRevenue / quantity)
+        : 0;
+    }
+  }
+
   const regularLineValue =
     roundCurrency(
       regularUnitPrice *
@@ -465,7 +558,8 @@ function buildPricedLine({
       Math.max(
         0,
         regularLineValue -
-          campaignLineRevenue
+          campaignLineRevenue -
+          bundleDiscountAmount
       )
     );
 
@@ -515,6 +609,14 @@ function buildPricedLine({
     campaignLineRevenue,
 
     saleDiscountAmount,
+
+    hasManualSale,
+    manualSalePercent,
+
+    bundleDiscountApplied,
+    bundleDiscountPercent,
+    bundleDiscountAmount,
+    bundleTierQuantity,
 
     paidQuantity,
 
@@ -653,26 +755,6 @@ export async function calculateCampaignPricing({
       continue;
     }
 
-    if (
-      itemMetadata.option.is_active === false ||
-      itemMetadata.option.archived_at
-    ) {
-      warnings.push(
-        createWarning({
-          code:
-            "PRODUCT_INACTIVE",
-          message:
-            "This product option is no longer active.",
-          severity:
-            "critical",
-          productOptionId:
-            input.productOptionId,
-        })
-      );
-
-      continue;
-    }
-
     const product =
       itemMetadata.product;
 
@@ -713,6 +795,22 @@ export async function calculateCampaignPricing({
     }
 
     if (
+      itemMetadata.option.is_active === false ||
+      itemMetadata.option.archived_at
+    ) {
+      warnings.push(
+        createWarning({
+          code: "PRODUCT_INACTIVE",
+          message: `${product.name} ${itemMetadata.option.product_slug} is no longer available.`,
+          severity: "critical",
+          productOptionId: input.productOptionId,
+        })
+      );
+
+      continue;
+    }
+
+    if (
       itemMetadata.option.status ===
         "out of stock"
     ) {
@@ -742,6 +840,8 @@ export async function calculateCampaignPricing({
         campaignPrice,
         productName:
           product.name,
+        optionMetadata:
+          itemMetadata.option,
         isTaxable:
           product.is_taxable !== false,
         taxCode:
@@ -771,6 +871,14 @@ export async function calculateCampaignPricing({
       lines.map(
         (line) =>
           line.saleDiscountAmount
+      )
+    );
+
+  const bundleDiscount =
+    sumCurrency(
+      lines.map(
+        (line) =>
+          line.bundleDiscountAmount
       )
     );
 
@@ -851,6 +959,7 @@ export async function calculateCampaignPricing({
     campaignMerchandiseRevenue,
 
     saleDiscount,
+    bundleDiscount,
 
     primaryCampaignId:
       primaryCampaign?.id ||
@@ -867,7 +976,8 @@ export async function calculateCampaignPricing({
     hasSaleItems:
       lines.some(
         (line) =>
-          line.hasCampaign
+          line.hasCampaign ||
+          line.hasManualSale
       ),
 
     taxOffsetMode:

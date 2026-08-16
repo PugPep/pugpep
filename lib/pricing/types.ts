@@ -17,6 +17,8 @@ export type DiscountSourceType =
   | "referral"
   | "rewards"
   | "vip"
+  | "bundle"
+  | "hero"
   | "manual"
   | "merchant_tax_offset";
 
@@ -146,6 +148,14 @@ export type PricedCartLine = {
   campaignLineRevenue: number;
   saleDiscountAmount: number;
 
+  hasManualSale: boolean;
+  manualSalePercent: number;
+
+  bundleDiscountApplied: boolean;
+  bundleDiscountPercent: number;
+  bundleDiscountAmount: number;
+  bundleTierQuantity: number | null;
+
   paidQuantity: number;
   freeQuantity: number;
 
@@ -172,6 +182,7 @@ export type CampaignPricingResult = {
   regularMerchandiseValue: number;
   campaignMerchandiseRevenue: number;
   saleDiscount: number;
+  bundleDiscount: number;
 
   primaryCampaignId: string | null;
   primaryCampaignName: string | null;
@@ -249,6 +260,12 @@ export type VipPricingResult = {
   vipDiscount: number;
 };
 
+export type HeroPricingResult = {
+  isHeroAccount: boolean;
+  heroDiscountPercent: number;
+  heroDiscount: number;
+};
+
 export type ShippingPricingResult = {
   shippingMethod: ShippingMethod;
   shippingMethodLabel: string;
@@ -323,11 +340,13 @@ export type TaxPricingResult = {
 
 export type DiscountBreakdown = {
   saleDiscount: number;
+  bundleDiscount: number;
   generalPromoDiscount: number;
   salesRepDiscount: number;
   referralDiscount: number;
   rewardsDiscount: number;
   vipDiscount: number;
+  heroDiscount: number;
   manualDiscount: number;
   merchantTaxOffsetDiscount: number;
   totalDiscount: number;
@@ -394,6 +413,9 @@ export type PricingSnapshot = {
 
   vipTierAtPurchase: string;
 
+  heroAccountAtPurchase: boolean;
+  heroDiscountPercent: number;
+
   qualifiedReferralCount: number;
   referralDiscountPercent: number;
 
@@ -435,6 +457,7 @@ export type PricingResult = {
   referral: ReferralPricingResult;
   rewards: RewardsPricingResult;
   vip: VipPricingResult;
+  hero: HeroPricingResult;
   shipping: ShippingPricingResult;
   tax: TaxPricingResult;
   discounts: DiscountBreakdown;
@@ -478,6 +501,8 @@ export type CustomerPricingProfile = {
   lifetimeSpend: number;
   vipTier: string;
   hasLifetimeFreeShipping: boolean;
+  isHeroAccount: boolean;
+  heroDiscountPercent: number;
   qualifiedReferralCount: number;
   referralLifetimeDiscountPercent: number;
   isTaxExempt: boolean;

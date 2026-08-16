@@ -8,6 +8,10 @@ import {
   useState,
 } from "react";
 
+import type {
+  KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+
 import { useCart } from "../cartContext";
 import { createClient } from "../../lib/supabaseClient";
 import { trackEvent } from "../../lib/trackEvent";
@@ -45,6 +49,8 @@ type CustomerProfile = {
   state?: string | null;
   zip?: string | null;
   reward_points?: number | null;
+  is_hero_account?: boolean | null;
+  hero_discount_percent?: number | null;
 };
 
 type SupabaseErrorDetails = {
@@ -343,6 +349,8 @@ export default function CheckoutPage() {
               "state",
               "zip",
               "reward_points",
+              "is_hero_account",
+              "hero_discount_percent",
             ].join(",")
           )
           .eq("id", user.id)
@@ -841,6 +849,82 @@ export default function CheckoutPage() {
   }
 
 
+  function handleCheckoutEnter(
+    event: ReactKeyboardEvent<HTMLElement>
+  ) {
+    if (
+      event.key !== "Enter" ||
+      event.defaultPrevented
+    ) {
+      return;
+    }
+
+    const target =
+      event.target as HTMLElement | null;
+
+    if (!target) {
+      return;
+    }
+
+    /*
+     * Let buttons and links use their normal Enter behavior.
+     */
+    if (
+      target.closest(
+        "button, a, [role='button']"
+      )
+    ) {
+      return;
+    }
+
+    if (
+      target.tagName === "TEXTAREA"
+    ) {
+      return;
+    }
+
+    /*
+     * Enter in the promo-code area means Apply Promo,
+     * not Proceed to Payment.
+     */
+    if (
+      target.closest(
+        ".checkout-promo-row"
+      )
+    ) {
+      event.preventDefault();
+
+      if (
+        !promoLoading &&
+        !pricingLoading
+      ) {
+        void applyPromoCode();
+      }
+
+      return;
+    }
+
+    /*
+     * Enter from the customer/shipping form behaves
+     * like the Proceed to Payment button.
+     */
+    if (
+      target.closest(
+        ".checkout-form-grid"
+      )
+    ) {
+      event.preventDefault();
+
+      if (
+        !proceeding &&
+        !pricingLoading
+      ) {
+        void proceedToPayment();
+      }
+    }
+  }
+
+
   if (initializing) {
     return (
       <main style={styles.page}>
@@ -858,7 +942,10 @@ export default function CheckoutPage() {
   }
 
   return (
-    <main style={styles.page}>
+    <main
+      style={styles.page}
+      onKeyDownCapture={handleCheckoutEnter}
+    >
       <div style={styles.content}>
         <header style={styles.header}>
           <div>
@@ -928,6 +1015,51 @@ export default function CheckoutPage() {
           </section>
 
           <section style={styles.column}>
+            {pricing?.hero.isHeroAccount && (
+              <div
+                style={{
+                  padding: 16,
+                  borderRadius: 14,
+                  border: "1px solid rgba(125,249,255,.42)",
+                  background:
+                    "linear-gradient(135deg, rgba(0,217,255,.09), rgba(255,45,216,.055))",
+                }}
+              >
+                <strong style={{ color: "#7df9ff", fontSize: 16 }}>
+                  Hero Appreciation
+                </strong>
+                <p style={{ margin: "7px 0 0", color: "#cfd6dc", lineHeight: 1.55 }}>
+                  Your Hero Account adds {pricing.hero.heroDiscountPercent}% on top of
+                  your other eligible savings.
+                </p>
+                <p
+                  style={{
+                    margin: "8px 0 0",
+                    color: "#00ff99",
+                    fontWeight: 900,
+                  }}
+                >
+                  Hero savings: -${Number(pricing.hero.heroDiscount || 0).toFixed(2)}
+                </p>
+              </div>
+            )}
+
+            {pricing && pricing.discounts.bundleDiscount > 0 && (
+              <div
+                style={{
+                  padding: 14,
+                  borderRadius: 12,
+                  border: "1px solid rgba(0,255,153,.30)",
+                  background: "rgba(0,255,153,.05)",
+                  color: "#bfffe3",
+                  fontWeight: 800,
+                }}
+              >
+                Bundle savings applied: -$
+                {Number(pricing.discounts.bundleDiscount).toFixed(2)}
+              </div>
+            )}
+
             <RewardsSection
               rewardPoints={rewardPoints}
               pointsToUse={pointsToUse}

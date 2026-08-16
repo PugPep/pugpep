@@ -3,6 +3,7 @@ import type {
   CampaignPricingResult,
   CommissionResult,
   DiscountBreakdown,
+  HeroPricingResult,
   PricingSnapshot,
   PricingStep,
   PricingWarning,
@@ -31,6 +32,7 @@ type SnapshotEngineInput = {
   referral: ReferralPricingResult;
   rewards: RewardsPricingResult;
   vip: VipPricingResult;
+  hero: HeroPricingResult;
   shipping: ShippingPricingResult;
   tax: TaxPricingResult;
   discounts: DiscountBreakdown;
@@ -46,6 +48,7 @@ function buildPricingSteps({
   referral,
   rewards,
   vip,
+  hero,
   shipping,
   tax,
   discounts,
@@ -81,6 +84,19 @@ function buildPricingSteps({
         `${campaign.primaryCampaignName || "Campaign discount"}: -${formatCurrency(
           discounts.saleDiscount
         )}`,
+      category: "discount",
+    });
+  }
+
+  if (
+    discounts.bundleDiscount > 0
+  ) {
+    steps.push({
+      label: "Bundle savings",
+      amount: -discounts.bundleDiscount,
+      message: `Bundle savings: -${formatCurrency(
+        discounts.bundleDiscount
+      )}`,
       category: "discount",
     });
   }
@@ -189,6 +205,29 @@ function buildPricingSteps({
       label: "VIP tier",
       message:
         `VIP tier at purchase: ${vip.vipTier}`,
+      category: "rule",
+    });
+  }
+
+  if (
+    discounts.heroDiscount > 0
+  ) {
+    steps.push({
+      label: "Hero Appreciation",
+      amount: -discounts.heroDiscount,
+      message: `Hero Appreciation (${formatPercent(
+        hero.heroDiscountPercent
+      )}): -${formatCurrency(
+        discounts.heroDiscount
+      )}`,
+      category: "discount",
+    });
+  } else if (hero.isHeroAccount) {
+    steps.push({
+      label: "Hero Account",
+      message: `Hero Account active (${formatPercent(
+        hero.heroDiscountPercent
+      )})`,
       category: "rule",
     });
   }
@@ -423,6 +462,7 @@ export function createPricingSnapshot({
   referral,
   rewards,
   vip,
+  hero,
   shipping,
   tax,
   discounts,
@@ -466,6 +506,12 @@ export function createPricingSnapshot({
 
     vipTierAtPurchase:
       vip.vipTier,
+
+    heroAccountAtPurchase:
+      hero.isHeroAccount,
+
+    heroDiscountPercent:
+      hero.heroDiscountPercent,
 
     qualifiedReferralCount:
       referral.qualifiedReferralCount,
@@ -537,6 +583,7 @@ export function createPricingSnapshot({
         referral,
         rewards,
         vip,
+        hero,
         shipping,
         tax,
         discounts,

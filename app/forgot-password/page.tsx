@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { createClient } from "../../lib/supabaseClient";
 
 export default function ForgotPasswordPage() {
@@ -11,7 +11,13 @@ export default function ForgotPasswordPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [sending, setSending] = useState(false);
 
-  async function sendResetEmail() {
+  async function sendResetEmail(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+
+    if (sending) {
+      return;
+    }
+
     const normalizedEmail = email.trim().toLowerCase();
 
     if (!normalizedEmail) {
@@ -82,43 +88,35 @@ export default function ForgotPasswordPage() {
           to your account.
         </p>
 
-        <input
-          type="email"
-          autoComplete="email"
-          placeholder="Enter your email"
-          value={email}
-          onChange={(event) =>
-            setEmail(event.target.value)
-          }
-          onKeyDown={(event) => {
-            if (
-              event.key === "Enter" &&
-              !sending
-            ) {
-              void sendResetEmail();
+        <form onSubmit={sendResetEmail}>
+          <input
+            type="email"
+            autoComplete="email"
+            placeholder="Enter your email"
+            value={email}
+            onChange={(event) =>
+              setEmail(event.target.value)
             }
-          }}
-          style={input}
-        />
+            style={input}
+            required
+          />
 
-        <button
-          type="button"
-          onClick={() =>
-            void sendResetEmail()
-          }
-          disabled={sending}
-          style={{
-            ...button,
-            opacity: sending ? 0.65 : 1,
-            cursor: sending
-              ? "not-allowed"
-              : "pointer",
-          }}
-        >
-          {sending
-            ? "Sending..."
-            : "Send Reset Email"}
-        </button>
+          <button
+            type="submit"
+            disabled={sending}
+            style={{
+              ...button,
+              opacity: sending ? 0.65 : 1,
+              cursor: sending
+                ? "not-allowed"
+                : "pointer",
+            }}
+          >
+            {sending
+              ? "Sending..."
+              : "Send Reset Email"}
+          </button>
+        </form>
 
         {message && (
           <p style={{ color: "#00ff99" }}>

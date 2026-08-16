@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../../../lib/supabaseClient";
+import {
+  loadStorefrontSales,
+  type StorefrontSale,
+} from "../../../lib/storefrontCampaigns";
 import { useCart } from "../../cartContext";
 
 type Product = {
@@ -14,6 +18,7 @@ type Product = {
   image: string;
   short_description?: string | null;
   description?: string | null;
+  storage?: string | null;
   category?: string | null;
   is_active: boolean;
 };
@@ -30,6 +35,13 @@ type ProductOption = {
   cost: number;
   is_active: boolean;
   archived_at?: string | null;
+  bundle_discount_enabled?: boolean;
+  bundle_qty_1?: number;
+  bundle_discount_1?: number;
+  bundle_qty_2?: number;
+  bundle_discount_2?: number;
+  bundle_qty_3?: number;
+  bundle_discount_3?: number;
 };
 
 type InventoryItem = {
@@ -39,6 +51,28 @@ type InventoryItem = {
   purchase_type: string;
   quantity: number;
 };
+
+type RecommendationProduct = {
+  id: string;
+  name: string;
+  slug: string;
+  image: string;
+  color?: string | null;
+  category?: string | null;
+  is_active: boolean;
+};
+
+type RecentlyViewedItem = {
+  id: string;
+  name: string;
+  slug: string;
+  image: string;
+  color?: string | null;
+};
+
+const RECENTLY_VIEWED_KEY =
+  "pugpep_recently_viewed";
+
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -55,6 +89,341 @@ export default function ProductDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
+
+  const [activeInfoTab, setActiveInfoTab] =
+    useState<"description" | "storage">("description");
+
+  const [recentlyViewed, setRecentlyViewed] =
+    useState<RecentlyViewedItem[]>([]);
+
+  const [alsoBought, setAlsoBought] =
+    useState<RecommendationProduct[]>([]);
+
+  const [saleRecommendations, setSaleRecommendations] =
+    useState<RecommendationProduct[]>([]);
+
+  const [saleMap, setSaleMap] =
+    useState<Record<string, StorefrontSale>>({});
+
+  function readRecentlyViewed() {
+    try {
+      const raw =
+        localStorage.getItem(
+          RECENTLY_VIEWED_KEY
+        );
+
+      if (!raw) {
+        return [] as RecentlyViewedItem[];
+      }
+
+      const parsed =
+        JSON.parse(raw);
+
+      if (!Array.isArray(parsed)) {
+        return [] as RecentlyViewedItem[];
+      }
+
+      return parsed.filter(
+        (item): item is RecentlyViewedItem =>
+          Boolean(
+            item &&
+            typeof item.slug === "string" &&
+            typeof item.name === "string"
+          )
+      );
+    } catch {
+      return [] as RecentlyViewedItem[];
+    }
+  }
+
+  function saveRecentlyViewed(
+    viewedProduct: Product
+  ) {
+    const existing =
+      readRecentlyViewed();
+
+    const next: RecentlyViewedItem[] = [
+      {
+        id: viewedProduct.id,
+        name: viewedProduct.name,
+        slug: viewedProduct.slug,
+        image: viewedProduct.image,
+        color: viewedProduct.color,
+      },
+      ...existing.filter(
+        (item) =>
+          item.slug !== viewedProduct.slug
+      ),
+    ].slice(0, 8);
+
+    localStorage.setItem(
+      RECENTLY_VIEWED_KEY,
+      JSON.stringify(next)
+    );
+
+    setRecentlyViewed(
+      next.filter(
+        (item) =>
+          item.slug !== viewedProduct.slug
+      ).slice(0, 4)
+    );
+  }
+
+  async function loadRecommendationProducts(
+    currentProduct: Product
+  ) {
+    try {
+      const [
+        productsResult,
+        storefrontSales,
+      ] = await Promise.all([
+        supabase
+          .from("products")
+          .select(
+            "id,name,slug,image,color,category,is_active"
+          )
+          .eq("is_active", true),
+
+        loadStorefrontSales(
+          supabase
+        ),
+      ]);
+
+      if (productsResult.error) {
+        throw productsResult.error;
+      }
+
+      const activeProducts =
+        ((productsResult.data ||
+          []) as RecommendationProduct[])
+          .filter(
+            (item) =>
+              item.slug !==
+              currentProduct.slug
+          );
+
+      setSaleMap(
+        storefrontSales
+      );
+
+      const saleItems =
+        activeProducts
+          .filter(
+            (item) =>
+              Boolean(
+                storefrontSales[
+                  item.slug
+                ]?.isOnSale
+              )
+          )
+          .sort(
+            (a, b) => {
+              const sameCategoryA =
+                a.category ===
+                currentProduct.category
+                  ? 1
+                  : 0;
+
+              const sameCategoryB =
+                b.category ===
+                currentProduct.category
+                  ? 1
+                  : 0;
+
+              return (
+                sameCategoryB -
+                sameCategoryA
+              );
+            }
+          )
+          .slice(0, 4);
+
+      setSaleRecommendations(
+        saleItems
+      );
+
+      /*
+       * Customers Also Bought:
+       * Find orders containing the current product,
+       * count the other product slugs appearing in
+       * those same orders, and rank by frequency.
+       *
+       * If order history is unavailable through RLS
+       * or there is not enough history yet, fall back
+       * to other active products in the same category.
+       */
+      try {
+        const {
+          data: seedItems,
+          error: seedError,
+        } =
+          await supabase
+            .from("order_items")
+            .select("order_id")
+            .eq(
+              "product_slug",
+              currentProduct.slug
+            )
+            .limit(150);
+
+        if (seedError) {
+          throw seedError;
+        }
+
+        const orderIds =
+          Array.from(
+            new Set(
+              (seedItems || [])
+                .map(
+                  (row) =>
+                    row.order_id as string
+                )
+                .filter(Boolean)
+            )
+          ).slice(0, 75);
+
+        if (
+          orderIds.length >
+          0
+        ) {
+          const {
+            data:
+              companionItems,
+            error:
+              companionError,
+          } =
+            await supabase
+              .from(
+                "order_items"
+              )
+              .select(
+                "product_slug"
+              )
+              .in(
+                "order_id",
+                orderIds
+              );
+
+          if (companionError) {
+            throw companionError;
+          }
+
+          const counts =
+            new Map<
+              string,
+              number
+            >();
+
+          (
+            companionItems ||
+            []
+          ).forEach(
+            (row) => {
+              const itemSlug =
+                String(
+                  row.product_slug ||
+                    ""
+                );
+
+              if (
+                !itemSlug ||
+                itemSlug ===
+                  currentProduct.slug
+              ) {
+                return;
+              }
+
+              counts.set(
+                itemSlug,
+                (counts.get(
+                  itemSlug
+                ) || 0) + 1
+              );
+            }
+          );
+
+          const rankedSlugs =
+            Array.from(
+              counts.entries()
+            )
+              .sort(
+                (a, b) =>
+                  b[1] - a[1]
+              )
+              .map(
+                ([itemSlug]) =>
+                  itemSlug
+              );
+
+          const rankedProducts =
+            rankedSlugs
+              .map(
+                (itemSlug) =>
+                  activeProducts.find(
+                    (item) =>
+                      item.slug ===
+                      itemSlug
+                  )
+              )
+              .filter(
+                (
+                  item
+                ): item is RecommendationProduct =>
+                  Boolean(item)
+              )
+              .slice(0, 4);
+
+          if (
+            rankedProducts.length >
+            0
+          ) {
+            setAlsoBought(
+              rankedProducts
+            );
+
+            return;
+          }
+        }
+      } catch (
+        historyError
+      ) {
+        console.warn(
+          "Customers Also Bought history unavailable; using fallback.",
+          historyError
+        );
+      }
+
+      const fallback =
+        activeProducts
+          .filter(
+            (item) =>
+              item.category ===
+              currentProduct.category
+          )
+          .slice(0, 4);
+
+      setAlsoBought(
+        fallback.length >
+          0
+          ? fallback
+          : activeProducts.slice(
+              0,
+              4
+            )
+      );
+    } catch (
+      error
+    ) {
+      console.error(
+        "Product recommendations failed:",
+        error
+      );
+
+      setAlsoBought([]);
+      setSaleRecommendations([]);
+      setSaleMap({});
+    }
+  }
 
   useEffect(() => {
     async function loadProduct() {
@@ -75,7 +444,20 @@ export default function ProductDetailPage() {
         return;
       }
 
-      setProduct(productData as Product);
+      const loadedProduct =
+        productData as Product;
+
+      setProduct(
+        loadedProduct
+      );
+
+      saveRecentlyViewed(
+        loadedProduct
+      );
+
+      void loadRecommendationProducts(
+        loadedProduct
+      );
 
       const { data: optionData, error: optionError } =
         await supabase
@@ -213,6 +595,60 @@ export default function ProductDetailPage() {
     );
   }
 
+  function getBundleTier(option: ProductOption, requestedQuantity: number) {
+    const saleActive =
+      Boolean(
+        option.sale_active &&
+        Number(option.sale_percent || 0) > 0
+      ) ||
+      Boolean(saleMap[option.product_slug]?.isOnSale);
+
+    if (
+      saleActive ||
+      option.bundle_discount_enabled === false
+    ) {
+      return null;
+    }
+
+    const tiers = [
+      {
+        quantity: Number(option.bundle_qty_1 || 0),
+        discount: Number(option.bundle_discount_1 || 0),
+      },
+      {
+        quantity: Number(option.bundle_qty_2 || 0),
+        discount: Number(option.bundle_discount_2 || 0),
+      },
+      {
+        quantity: Number(option.bundle_qty_3 || 0),
+        discount: Number(option.bundle_discount_3 || 0),
+      },
+    ]
+      .filter(
+        (tier) =>
+          tier.quantity > 0 &&
+          tier.discount > 0
+      )
+      .sort((a, b) => b.quantity - a.quantity);
+
+    return (
+      tiers.find(
+        (tier) =>
+          requestedQuantity >= tier.quantity
+      ) || null
+    );
+  }
+
+  function hasActiveSaleForOption(option: ProductOption) {
+    return (
+      Boolean(
+        option.sale_active &&
+        Number(option.sale_percent || 0) > 0
+      ) ||
+      Boolean(saleMap[option.product_slug]?.isOnSale)
+    );
+  }
+
   function handleAddToCart() {
     if (!product || !selectedOption) {
       return;
@@ -285,6 +721,94 @@ export default function ProductDetailPage() {
     }
 
     alert(`${product.name} added to cart.`);
+  }
+
+  function renderRecommendationSection({
+    title,
+    eyebrow,
+    items,
+  }: {
+    title: string;
+    eyebrow: string;
+    items:
+      | RecommendationProduct[]
+      | RecentlyViewedItem[];
+  }) {
+    if (
+      items.length === 0
+    ) {
+      return null;
+    }
+
+    return (
+      <section style={recommendationSection}>
+        <div style={recommendationHeader}>
+          <span style={recommendationEyebrow}>
+            {eyebrow}
+          </span>
+
+          <h2 style={recommendationTitle}>
+            {title}
+          </h2>
+        </div>
+
+        <div style={recommendationGrid}>
+          {items.map(
+            (item) => {
+              const effectiveSale =
+                saleMap[
+                  item.slug
+                ];
+
+              return (
+                <Link
+                  key={item.slug}
+                  href={`/products/${item.slug}`}
+                  style={recommendationLink}
+                >
+                  <article style={recommendationCard}>
+                    <div style={recommendationImageWrap}>
+                      <img
+                        src={
+                          item.image ||
+                          "/pugpep-logo.png"
+                        }
+                        alt={item.name}
+                        style={recommendationImage}
+                      />
+
+                      {effectiveSale?.isOnSale && (
+                        <span style={recommendationSaleBadge}>
+                          {effectiveSale.badgeText}
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={recommendationCopy}>
+                      <strong style={recommendationName}>
+                        {item.name}
+                      </strong>
+
+                      {effectiveSale?.source ===
+                        "campaign" &&
+                        effectiveSale.campaignName && (
+                          <span style={recommendationCampaign}>
+                            {effectiveSale.campaignName}
+                          </span>
+                        )}
+
+                      <span style={recommendationCta}>
+                        VIEW PRODUCT →
+                      </span>
+                    </div>
+                  </article>
+                </Link>
+              );
+            }
+          )}
+        </div>
+      </section>
+    );
   }
 
   function renderDescription(description: string) {
@@ -632,6 +1156,67 @@ export default function ProductDetailPage() {
                   </div>
                 </div>
 
+                <div style={bundleSavingsCard}>
+                  <div style={bundleSavingsHeader}>
+                    <strong>Bundle Savings</strong>
+
+                    {hasActiveSaleForOption(selectedOption) ? (
+                      <span style={bundlePausedBadge}>
+                        PAUSED DURING SALE
+                      </span>
+                    ) : getBundleTier(selectedOption, quantity) ? (
+                      <span style={bundleActiveBadge}>
+                        {getBundleTier(selectedOption, quantity)?.discount}% APPLIED
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {hasActiveSaleForOption(selectedOption) ? (
+                    <p style={bundleHelpText}>
+                      Bundle pricing does not stack with an active product or campaign sale.
+                      Your active sale pricing is being used instead.
+                    </p>
+                  ) : selectedOption.bundle_discount_enabled === false ? (
+                    <p style={bundleHelpText}>
+                      Bundle savings are not enabled for this option.
+                    </p>
+                  ) : (
+                    <div style={bundleTierGrid}>
+                      {[
+                        {
+                          quantity: Number(selectedOption.bundle_qty_1 || 0),
+                          discount: Number(selectedOption.bundle_discount_1 || 0),
+                        },
+                        {
+                          quantity: Number(selectedOption.bundle_qty_2 || 0),
+                          discount: Number(selectedOption.bundle_discount_2 || 0),
+                        },
+                        {
+                          quantity: Number(selectedOption.bundle_qty_3 || 0),
+                          discount: Number(selectedOption.bundle_discount_3 || 0),
+                        },
+                      ]
+                        .filter((tier) => tier.quantity > 0 && tier.discount > 0)
+                        .map((tier) => {
+                          const active = quantity >= tier.quantity;
+
+                          return (
+                            <div
+                              key={`${tier.quantity}-${tier.discount}`}
+                              style={{
+                                ...bundleTier,
+                                ...(active ? bundleTierActive : {}),
+                              }}
+                            >
+                              <strong>{tier.quantity}+ units</strong>
+                              <span>{tier.discount}% off</span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+
                 <div style={availabilityBox}>
                   {selectedOption.purchase_type ===
                   "single" ? (
@@ -740,28 +1325,100 @@ export default function ProductDetailPage() {
             )}
 
           </div>
+
+          <aside style={recommendationSidebar}>
+            {renderRecommendationSection({
+              eyebrow: "CONTINUE EXPLORING",
+              title: "Recently Viewed",
+              items: recentlyViewed,
+            })}
+
+            {renderRecommendationSection({
+              eyebrow: "PURCHASE PATTERNS",
+              title: "Customers Also Bought",
+              items: alsoBought,
+            })}
+
+            {renderRecommendationSection({
+              eyebrow: "ACTIVE SAVINGS",
+              title: "Relevant Items On Sale",
+              items: saleRecommendations,
+            })}
+          </aside>
         </section>
 
-        {/* Full research details below the product */}
-        {product.description && (
-          <section style={descriptionSection}>
-            <div style={descriptionHeader}>
-              <span style={descriptionEyebrow}>
-                Product Information
-              </span>
+        <section style={descriptionSection}>
+          <div style={descriptionHeader}>
+            <span style={descriptionEyebrow}>
+              Product Information
+            </span>
 
-              <h2 style={descriptionTitle}>
-                Research Overview
-              </h2>
-            </div>
+            <h2 style={descriptionTitle}>
+              Research Details
+            </h2>
+          </div>
 
-            <div style={descriptionContent}>
-              {renderDescription(
-                product.description
-              )}
-            </div>
-          </section>
-        )}
+          <div style={infoTabs}>
+            <button
+              type="button"
+              onClick={() =>
+                setActiveInfoTab(
+                  "description"
+                )
+              }
+              style={{
+                ...infoTabButton,
+                ...(activeInfoTab ===
+                "description"
+                  ? infoTabButtonActive
+                  : {}),
+              }}
+            >
+              Description
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                setActiveInfoTab(
+                  "storage"
+                )
+              }
+              style={{
+                ...infoTabButton,
+                ...(activeInfoTab ===
+                "storage"
+                  ? infoTabButtonActive
+                  : {}),
+              }}
+            >
+              Storage
+            </button>
+          </div>
+
+          <div style={descriptionContent}>
+            {activeInfoTab ===
+            "description" ? (
+              product.description ? (
+                renderDescription(
+                  product.description
+                )
+              ) : (
+                <p style={descriptionParagraph}>
+                  No description has been added for this product yet.
+                </p>
+              )
+            ) : product.storage ? (
+              renderDescription(
+                product.storage
+              )
+            ) : (
+              <p style={descriptionParagraph}>
+                Storage information has not been added for this product yet.
+              </p>
+            )}
+          </div>
+        </section>
       </div>
     </main>
   );
@@ -802,8 +1459,8 @@ const productLayout = {
   width: "100%",
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fit, minmax(min(100%, 400px), 1fr))",
-  gap: "clamp(32px, 5vw, 62px)",
+    "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+  gap: "clamp(22px, 3vw, 38px)",
   alignItems: "start",
   marginBottom: 56,
 };
@@ -1077,6 +1734,74 @@ const qtyButton = {
   fontSize: 18,
 };
 
+const bundleSavingsCard = {
+  marginTop: 16,
+  padding: 14,
+  borderRadius: 12,
+  border: "1px solid rgba(0,217,255,.22)",
+  background: "rgba(0,217,255,.045)",
+};
+
+const bundleSavingsHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap" as const,
+  color: "#fff",
+};
+
+const bundleTierGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 8,
+  marginTop: 12,
+};
+
+const bundleTier = {
+  display: "grid",
+  gap: 3,
+  padding: "9px 7px",
+  borderRadius: 9,
+  border: "1px solid rgba(255,255,255,.12)",
+  background: "#0b0b0b",
+  color: "#aaa",
+  fontSize: 12,
+  textAlign: "center" as const,
+};
+
+const bundleTierActive = {
+  border: "1px solid rgba(0,255,153,.55)",
+  background: "rgba(0,255,153,.08)",
+  color: "#bfffe3",
+};
+
+const bundleActiveBadge = {
+  padding: "4px 8px",
+  borderRadius: 999,
+  background: "#00ff99",
+  color: "#000",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const bundlePausedBadge = {
+  padding: "4px 8px",
+  borderRadius: 999,
+  background: "rgba(255,204,0,.12)",
+  border: "1px solid rgba(255,204,0,.35)",
+  color: "#ffcc00",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const bundleHelpText = {
+  margin: "10px 0 0",
+  color: "#aaa",
+  fontSize: 12,
+  lineHeight: 1.5,
+};
+
 const availabilityBox = {
   marginTop: 16,
   padding: 14,
@@ -1165,6 +1890,147 @@ const descriptionParagraph = {
   lineHeight: 1.85,
   whiteSpace: "pre-line" as const,
   overflowWrap: "anywhere" as const,
+};
+
+const recommendationSidebar = {
+  minWidth: 0,
+  display: "grid",
+  gap: 16,
+  alignSelf: "start",
+  position: "sticky" as const,
+  top: 24,
+};
+
+const recommendationSection = {
+  width: "100%",
+  marginBottom: 0,
+  padding: 14,
+  boxSizing: "border-box" as const,
+  border: "1px solid rgba(255,255,255,.10)",
+  borderRadius: 22,
+  background:
+    "linear-gradient(145deg, rgba(255,255,255,.035), rgba(0,0,0,.72))",
+};
+
+const recommendationHeader = {
+  marginBottom: 18,
+};
+
+const recommendationEyebrow = {
+  display: "block",
+  marginBottom: 7,
+  color: "#ff65dc",
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: "0.14em",
+};
+
+const recommendationTitle = {
+  margin: 0,
+  color: "#00d9ff",
+  fontSize: "clamp(24px, 3vw, 32px)",
+};
+
+const recommendationGrid = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: 10,
+};
+
+const recommendationLink = {
+  textDecoration: "none",
+  color: "inherit",
+};
+
+const recommendationCard = {
+  minHeight: 78,
+  overflow: "hidden",
+  display: "grid",
+  gridTemplateColumns: "78px minmax(0, 1fr)",
+  border: "1px solid rgba(0,217,255,.20)",
+  borderRadius: 16,
+  background: "#080808",
+  transition: "transform .2s ease, border-color .2s ease",
+};
+
+const recommendationImageWrap = {
+  position: "relative" as const,
+  width: 78,
+  height: 78,
+  overflow: "hidden",
+  background: "#030303",
+};
+
+const recommendationImage = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover" as const,
+  display: "block",
+};
+
+const recommendationSaleBadge = {
+  position: "absolute" as const,
+  top: 10,
+  right: 10,
+  maxWidth: "78%",
+  padding: "5px 9px",
+  borderRadius: 999,
+  background: "#00ff99",
+  color: "#000",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const recommendationCopy = {
+  display: "grid",
+  gap: 7,
+  padding: 14,
+};
+
+const recommendationName = {
+  color: "#fff",
+  fontSize: 16,
+  lineHeight: 1.35,
+};
+
+const recommendationCampaign = {
+  color: "#ff75df",
+  fontSize: 11,
+  fontWeight: 800,
+};
+
+const recommendationCta = {
+  marginTop: 3,
+  color: "#00d9ff",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: ".08em",
+};
+
+const infoTabs = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap" as const,
+  marginBottom: 26,
+};
+
+const infoTabButton = {
+  minWidth: 130,
+  padding: "11px 18px",
+  border: "1px solid rgba(255,255,255,.16)",
+  borderRadius: 999,
+  background: "#0b0b0b",
+  color: "#aaa",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const infoTabButtonActive = {
+  border: "1px solid #00d9ff",
+  background:
+    "linear-gradient(90deg, rgba(0,217,255,.12), rgba(255,69,216,.10))",
+  color: "#fff",
+  boxShadow: "0 0 16px rgba(0,217,255,.15)",
 };
 
 const backButton = {

@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { calculateAccounting } from "./accountingEngine";
 import { calculateCampaignPricing } from "./campaignPricing";
 import { calculateCommission } from "./commissionEngine";
+import { calculateHeroPricing } from "./heroEngine";
 import { calculatePromoPricing } from "./promoEngine";
 import { calculateReferralPricing } from "./referralEngine";
 import { calculateRewardsPricing } from "./rewardsEngine";
@@ -41,6 +42,8 @@ type CustomerProfileRow = {
   lifetime_spend: number | null;
   vip_tier: string | null;
   has_lifetime_free_shipping: boolean | null;
+  is_hero_account: boolean | null;
+  hero_discount_percent: number | null;
   qualified_referral_count: number | null;
   referral_lifetime_discount_percent: number | null;
 
@@ -195,19 +198,19 @@ async function loadMarketingRules(
       ),
 
     default_shipping_cost:
-      nonNegative(
-        row.default_shipping_cost
-      ),
+  nonNegative(
+    row.default_shipping_cost
+  ),
 
-    default_express_shipping_cost:
-      nonNegative(
-        (row as any).default_express_shipping_cost
-      ),
+default_express_shipping_cost:
+  nonNegative(
+    row.default_express_shipping_cost
+  ),
 
-    default_packaging_cost:
-      nonNegative(
-        row.default_packaging_cost
-      ),
+default_packaging_cost:
+  nonNegative(
+    row.default_packaging_cost
+  ),
 
     minimum_margin_warning_percent:
       nonNegative(
@@ -240,6 +243,8 @@ async function loadCustomerProfile({
         "lifetime_spend",
         "vip_tier",
         "has_lifetime_free_shipping",
+        "is_hero_account",
+        "hero_discount_percent",
         "qualified_referral_count",
         "referral_lifetime_discount_percent",
         "is_tax_exempt",
@@ -289,6 +294,19 @@ async function loadCustomerProfile({
     hasLifetimeFreeShipping:
       Boolean(
         row.has_lifetime_free_shipping
+      ),
+
+    isHeroAccount:
+      Boolean(
+        row.is_hero_account
+      ),
+
+    heroDiscountPercent:
+      Math.min(
+        100,
+        nonNegative(
+          row.hero_discount_percent ?? 5
+        )
       ),
 
     qualifiedReferralCount:
@@ -360,6 +378,7 @@ function calculateRemainingMerchandise({
   salesRepDiscount,
   referralDiscount,
   vipDiscount,
+  heroDiscount,
   rewardsDiscount,
   manualDiscount,
 }: {
@@ -368,6 +387,7 @@ function calculateRemainingMerchandise({
   salesRepDiscount: number;
   referralDiscount: number;
   vipDiscount: number;
+  heroDiscount: number;
   rewardsDiscount: number;
   manualDiscount: number;
 }) {
@@ -379,6 +399,7 @@ function calculateRemainingMerchandise({
         salesRepDiscount -
         referralDiscount -
         vipDiscount -
+        heroDiscount -
         rewardsDiscount -
         manualDiscount
     )
@@ -447,6 +468,7 @@ export async function calculatePricing(
       campaign,
       marketingRules,
 
+
       generalPromoDiscount:
         promo.generalPromoDiscount,
 
@@ -459,6 +481,7 @@ export async function calculatePricing(
       campaignRevenue:
         campaign.campaignMerchandiseRevenue,
 
+
       generalPromoDiscount:
         promo.generalPromoDiscount,
 
@@ -469,6 +492,7 @@ export async function calculatePricing(
         referral.referralDiscount,
 
       vipDiscount: 0,
+      heroDiscount: 0,
       rewardsDiscount: 0,
       manualDiscount: 0,
     });
@@ -498,6 +522,7 @@ export async function calculatePricing(
       campaignRevenue:
         campaign.campaignMerchandiseRevenue,
 
+
       generalPromoDiscount:
         promo.generalPromoDiscount,
 
@@ -509,6 +534,8 @@ export async function calculatePricing(
 
       vipDiscount:
         vip.vipDiscount,
+
+      heroDiscount: 0,
 
       rewardsDiscount: 0,
 
@@ -528,6 +555,41 @@ export async function calculatePricing(
       )
     );
 
+  const merchandiseBeforeHero =
+    calculateRemainingMerchandise({
+      campaignRevenue:
+        campaign.campaignMerchandiseRevenue,
+
+
+      generalPromoDiscount:
+        promo.generalPromoDiscount,
+
+      salesRepDiscount:
+        promo.salesRepDiscount,
+
+      referralDiscount:
+        referral.referralDiscount,
+
+      vipDiscount:
+        vip.vipDiscount,
+
+      heroDiscount: 0,
+      rewardsDiscount: 0,
+
+      manualDiscount:
+        cappedManualDiscount,
+    });
+
+  const hero =
+    calculateHeroPricing({
+      isHeroAccount:
+        customerProfile.isHeroAccount,
+      heroDiscountPercent:
+        customerProfile.heroDiscountPercent,
+      eligibleMerchandiseAmount:
+        merchandiseBeforeHero,
+    });
+
   const rewards =
     await calculateRewardsPricing({
       supabase,
@@ -538,6 +600,7 @@ export async function calculatePricing(
       rewardPointsRequested:
         input.rewardPointsRequested,
 
+
       generalPromoDiscount:
         promo.generalPromoDiscount,
 
@@ -549,6 +612,9 @@ export async function calculatePricing(
 
       vipDiscount:
         vip.vipDiscount,
+
+      heroDiscount:
+        hero.heroDiscount,
 
       manualDiscount:
         cappedManualDiscount,
@@ -559,6 +625,7 @@ export async function calculatePricing(
       campaignRevenue:
         campaign.campaignMerchandiseRevenue,
 
+
       generalPromoDiscount:
         promo.generalPromoDiscount,
 
@@ -570,6 +637,9 @@ export async function calculatePricing(
 
       vipDiscount:
         vip.vipDiscount,
+
+      heroDiscount:
+        hero.heroDiscount,
 
       rewardsDiscount:
         rewards.rewardDiscount,
@@ -588,9 +658,6 @@ export async function calculatePricing(
 
       hasLifetimeFreeShipping:
         customerProfile.hasLifetimeFreeShipping,
-
-      shippingMethod:
-        input.shippingMethod ?? "standard",
     });
 
   const tax =
@@ -617,6 +684,10 @@ export async function calculatePricing(
       shipping,
       tax,
 
+      bundleDiscount:
+        campaign.bundleDiscount,
+
+
       generalPromoDiscount:
         promo.generalPromoDiscount,
 
@@ -631,6 +702,9 @@ export async function calculatePricing(
 
       vipDiscount:
         vip.vipDiscount,
+
+      heroDiscount:
+        hero.heroDiscount,
 
       manualDiscount:
         cappedManualDiscount,
@@ -744,6 +818,7 @@ export async function calculatePricing(
       referral,
       rewards,
       vip,
+      hero,
       shipping,
       tax,
       discounts,
@@ -758,6 +833,7 @@ export async function calculatePricing(
     referral,
     rewards,
     vip,
+    hero,
     shipping,
     tax,
     discounts,

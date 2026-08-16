@@ -54,6 +54,8 @@ type AccountProfile = {
   lifetime_spend?: number | null;
   reward_points?: number | null;
   has_lifetime_free_shipping?: boolean | null;
+  is_hero_account?: boolean | null;
+  hero_discount_percent?: number | null;
 };
 
 type DeliveryForm = {
@@ -1339,6 +1341,28 @@ export default function AccountPage() {
           </div>
         </section>
 
+        {profile?.is_hero_account && (
+          <section style={heroBanner}>
+            <div>
+              <p style={heroEyebrow}>PUGPEP HERO ACCOUNT</p>
+              <h2 style={heroTitle}>Thank you for your service.</h2>
+              <p style={heroCopy}>
+                You served our communities and our country. Now it is our privilege
+                to serve you. Your Hero Account automatically receives an additional{" "}
+                <strong>
+                  {Number(profile.hero_discount_percent || 5)}% Hero Appreciation Discount
+                </strong>{" "}
+                on eligible orders, including sale pricing and other eligible savings.
+              </p>
+            </div>
+
+            <div style={heroPercent}>
+              +{Number(profile.hero_discount_percent || 5)}%
+              <span>APPRECIATION</span>
+            </div>
+          </section>
+        )}
+
         <div
           className="account-grid"
           style={mainGrid}
@@ -2161,6 +2185,52 @@ const statValue = {
     "clamp(17px, 3vw, 22px)",
   overflowWrap:
     "anywhere" as const,
+};
+
+const heroBanner = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 24,
+  flexWrap: "wrap" as const,
+  marginBottom: 24,
+  padding: "24px clamp(20px, 4vw, 34px)",
+  border: "1px solid rgba(125,249,255,.42)",
+  borderRadius: 20,
+  background:
+    "linear-gradient(135deg, rgba(0,217,255,.10), rgba(255,45,216,.07), rgba(255,255,255,.025))",
+  boxShadow: "0 16px 45px rgba(0,0,0,.28)",
+};
+
+const heroEyebrow = {
+  margin: "0 0 7px",
+  color: "#7df9ff",
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: "0.16em",
+};
+
+const heroTitle = {
+  margin: "0 0 8px",
+  color: "#fff",
+  fontSize: 27,
+};
+
+const heroCopy = {
+  maxWidth: 760,
+  margin: 0,
+  color: "#cfd6dc",
+  lineHeight: 1.7,
+};
+
+const heroPercent = {
+  display: "grid",
+  gap: 2,
+  minWidth: 130,
+  textAlign: "center" as const,
+  color: "#7df9ff",
+  fontSize: 30,
+  fontWeight: 900,
 };
 
 const mainGrid = {

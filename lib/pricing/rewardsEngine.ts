@@ -27,6 +27,7 @@ type RewardsEngineInput = {
   salesRepDiscount?: number;
   referralDiscount?: number;
   vipDiscount?: number;
+  heroDiscount?: number;
   manualDiscount?: number;
 };
 
@@ -125,6 +126,7 @@ export async function calculateRewardsPricing({
   salesRepDiscount = 0,
   referralDiscount = 0,
   vipDiscount = 0,
+  heroDiscount = 0,
   manualDiscount = 0,
 }: RewardsEngineInput): Promise<RewardsPricingResult> {
   const warnings:
@@ -207,6 +209,9 @@ export async function calculateRewardsPricing({
         ) +
         nonNegative(
           vipDiscount
+        ) +
+        nonNegative(
+          heroDiscount
         ) +
         nonNegative(
           manualDiscount

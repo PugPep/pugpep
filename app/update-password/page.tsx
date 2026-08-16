@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { createClient } from "../../lib/supabaseClient";
 
 export default function UpdatePasswordPage() {
@@ -92,7 +97,15 @@ export default function UpdatePasswordPage() {
     };
   }, [supabase]);
 
-  async function updatePassword() {
+  async function updatePassword(
+    event?: FormEvent<HTMLFormElement>
+  ) {
+    event?.preventDefault();
+
+    if (updating) {
+      return;
+    }
+
     const newPassword = password.trim();
     const confirmedPassword =
       confirmPassword.trim();
@@ -227,56 +240,51 @@ export default function UpdatePasswordPage() {
           Create New Password
         </h1>
 
-        <input
-          type="password"
-          autoComplete="new-password"
-          placeholder="New password"
-          value={password}
-          onChange={(event) =>
-            setPassword(event.target.value)
-          }
-          style={input}
-        />
-
-        <input
-          type="password"
-          autoComplete="new-password"
-          placeholder="Confirm new password"
-          value={confirmPassword}
-          onChange={(event) =>
-            setConfirmPassword(
-              event.target.value
-            )
-          }
-          onKeyDown={(event) => {
-            if (
-              event.key === "Enter" &&
-              !updating
-            ) {
-              void updatePassword();
+        <form onSubmit={updatePassword}>
+          <input
+            type="password"
+            autoComplete="new-password"
+            placeholder="New password"
+            value={password}
+            onChange={(event) =>
+              setPassword(event.target.value)
             }
-          }}
-          style={input}
-        />
+            style={input}
+            minLength={8}
+            required
+          />
 
-        <button
-          type="button"
-          onClick={() =>
-            void updatePassword()
-          }
-          disabled={updating}
-          style={{
-            ...button,
-            opacity: updating ? 0.65 : 1,
-            cursor: updating
-              ? "not-allowed"
-              : "pointer",
-          }}
-        >
-          {updating
-            ? "Updating Password..."
-            : "Update Password"}
-        </button>
+          <input
+            type="password"
+            autoComplete="new-password"
+            placeholder="Confirm new password"
+            value={confirmPassword}
+            onChange={(event) =>
+              setConfirmPassword(
+                event.target.value
+              )
+            }
+            style={input}
+            minLength={8}
+            required
+          />
+
+          <button
+            type="submit"
+            disabled={updating}
+            style={{
+              ...button,
+              opacity: updating ? 0.65 : 1,
+              cursor: updating
+                ? "not-allowed"
+                : "pointer",
+            }}
+          >
+            {updating
+              ? "Updating Password..."
+              : "Update Password"}
+          </button>
+        </form>
 
         {errorMessage && (
           <p style={{ color: "#ff6666" }}>

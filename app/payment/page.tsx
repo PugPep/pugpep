@@ -684,6 +684,18 @@ export default function PaymentPage() {
           discounts
             .totalDiscount,
 
+        hero_account_at_purchase:
+          pricing.hero.isHeroAccount,
+
+        hero_discount_percent:
+          pricing.hero.heroDiscountPercent,
+
+        hero_discount:
+          discounts.heroDiscount,
+
+        bundle_discount:
+          discounts.bundleDiscount,
+
         product_cost_total:
           accounting
             .productCostTotal,
@@ -1047,6 +1059,15 @@ export default function PaymentPage() {
               sale_discount_amount:
                 item.saleDiscountAmount,
 
+              bundle_discount_amount:
+                item.bundleDiscountAmount,
+
+              bundle_discount_percent:
+                item.bundleDiscountPercent,
+
+              bundle_tier_quantity:
+                item.bundleTierQuantity,
+
               referral_discount_amount:
                 0,
 
@@ -1145,6 +1166,34 @@ export default function PaymentPage() {
           sourceCode:
             pricing.campaign
               .primaryCampaignName,
+        },
+        {
+          label:
+            "Bundle discount",
+          amount:
+            discounts.bundleDiscount,
+          category:
+            "bundle_discount",
+          sourceType:
+            "bundle",
+          sourceId: null,
+          sourceCode: null,
+        },
+        {
+          label:
+            "Hero Appreciation discount",
+          amount:
+            discounts.heroDiscount,
+          category:
+            "hero_discount",
+          sourceType:
+            "hero",
+          sourceId:
+            order.userId,
+          sourceCode:
+            pricing.hero.isHeroAccount
+              ? "HERO_ACCOUNT"
+              : null,
         },
         {
           label:
@@ -1825,6 +1874,61 @@ export default function PaymentPage() {
       setConfirming(false);
     }
   }
+
+  useEffect(() => {
+    function handlePaymentEnter(
+      event: KeyboardEvent
+    ) {
+      if (
+        event.key !== "Enter" ||
+        event.defaultPrevented ||
+        confirming ||
+        !order ||
+        Boolean(order.confirmed)
+      ) {
+        return;
+      }
+
+      const target =
+        event.target as HTMLElement | null;
+
+      /*
+       * If focus is already on a real interactive control,
+       * let the browser activate that control normally.
+       *
+       * This means Enter on Cash App, Venmo, Apple Cash,
+       * Crypto, Aurpay, links, etc. does not accidentally
+       * confirm the order.
+       */
+      if (
+        target?.closest(
+          "button, a, input, select, textarea, [role='button']"
+        )
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      void confirmOrder();
+    }
+
+    window.addEventListener(
+      "keydown",
+      handlePaymentEnter
+    );
+
+    return () => {
+      window.removeEventListener(
+        "keydown",
+        handlePaymentEnter
+      );
+    };
+  }, [
+    confirming,
+    order,
+  ]);
+
 
   if (loadingOrder) {
     return (

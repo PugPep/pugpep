@@ -13,6 +13,7 @@ type Product = {
   image: string;
   short_description: string;
   description: string;
+  storage?: string | null;
   category: string;
   is_active: boolean;
   deleted_at?: string | null;
@@ -30,6 +31,13 @@ type Option = {
   sale_percent: number;
   is_active: boolean;
   archived_at?: string | null;
+  bundle_discount_enabled: boolean;
+  bundle_qty_1: number;
+  bundle_discount_1: number;
+  bundle_qty_2: number;
+  bundle_discount_2: number;
+  bundle_qty_3: number;
+  bundle_discount_3: number;
 };
 
 type PricingDraft = {
@@ -87,6 +95,7 @@ export default function InventoryManagerPage() {
   image: "",
   short_description: "",
   description: "",
+  storage: "",
   category: "peptide",
   is_active: true,
 });
@@ -346,6 +355,7 @@ export default function InventoryManagerPage() {
   image: "",
   short_description: "",
   description: "",
+  storage: "",
   category: "peptide",
   is_active: true,
 });
@@ -1033,6 +1043,18 @@ export default function InventoryManagerPage() {
                       style={bigTextarea}
                     />
                   </Field>
+
+                  <Field label="Storage Instructions" wide>
+                    <textarea
+                      value={selectedProduct.storage || ""}
+                      onChange={(event) =>
+                        updateProductField("storage", event.target.value)
+                      }
+                      rows={5}
+                      style={textarea}
+                      placeholder="Example: Store refrigerated at 2–8°C. Protect from light."
+                    />
+                  </Field>
                 </div>
 
                 <button
@@ -1466,6 +1488,26 @@ export default function InventoryManagerPage() {
                                   Active Product
                                 </label>
 
+                                <label style={saleToggle}>
+                                  <input
+                                    type="checkbox"
+                                    checked={option.bundle_discount_enabled !== false}
+                                    onChange={(event) => {
+                                      const checked = event.target.checked;
+                                      updateOptionLocal(option.id, {
+                                        bundle_discount_enabled: checked,
+                                      });
+                                      void updateOption(
+                                        option.id,
+                                        "bundle_discount_enabled",
+                                        checked
+                                      );
+                                    }}
+                                  />
+
+                                  Bundle Savings
+                                </label>
+
                                 {isArchived && (
                                   <span
                                     style={{
@@ -1477,6 +1519,87 @@ export default function InventoryManagerPage() {
                                     ARCHIVED
                                   </span>
                                 )}
+                              </div>
+                            </div>
+
+                            <div style={bundleEditor}>
+                              <div style={bundleEditorHeader}>
+                                <div>
+                                  <strong style={{ color: "#00d9ff" }}>
+                                    Bundle Quantity Discounts
+                                  </strong>
+                                  <p style={bundleEditorHelp}>
+                                    These tiers apply only when this option has no active manual or campaign sale.
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div style={bundleEditorGrid}>
+                                {[
+                                  ["Tier 1", "bundle_qty_1", "bundle_discount_1"],
+                                  ["Tier 2", "bundle_qty_2", "bundle_discount_2"],
+                                  ["Tier 3", "bundle_qty_3", "bundle_discount_3"],
+                                ].map(([label, qtyField, discountField]) => (
+                                  <div key={label} style={bundleTierAdminCard}>
+                                    <strong>{label}</strong>
+
+                                    <Field label="Quantity">
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={Number(option[qtyField as keyof Option] || 0)}
+                                        onChange={(event) =>
+                                          updateOptionLocal(option.id, {
+                                            [qtyField]: Math.max(1, Number(event.target.value || 1)),
+                                          } as Partial<Option>)
+                                        }
+                                        onBlur={() =>
+                                          void updateOption(
+                                            option.id,
+                                            qtyField,
+                                            Math.max(
+                                              1,
+                                              Number(option[qtyField as keyof Option] || 1)
+                                            )
+                                          )
+                                        }
+                                        style={input}
+                                      />
+                                    </Field>
+
+                                    <Field label="Discount %">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        step="0.1"
+                                        value={Number(option[discountField as keyof Option] || 0)}
+                                        onChange={(event) =>
+                                          updateOptionLocal(option.id, {
+                                            [discountField]: Math.min(
+                                              100,
+                                              Math.max(0, Number(event.target.value || 0))
+                                            ),
+                                          } as Partial<Option>)
+                                        }
+                                        onBlur={() =>
+                                          void updateOption(
+                                            option.id,
+                                            discountField,
+                                            Math.min(
+                                              100,
+                                              Math.max(
+                                                0,
+                                                Number(option[discountField as keyof Option] || 0)
+                                              )
+                                            )
+                                          )
+                                        }
+                                        style={input}
+                                      />
+                                    </Field>
+                                  </div>
+                                ))}
                               </div>
                             </div>
 
@@ -2488,6 +2611,40 @@ const saleToggle = {
   gap: 8,
   color: "#d0d0d6",
   fontWeight: 800,
+};
+
+const bundleEditor = {
+  marginTop: 14,
+  padding: 14,
+  border: "1px solid rgba(0,217,255,.22)",
+  borderRadius: 12,
+  background: "rgba(0,217,255,.035)",
+};
+
+const bundleEditorHeader = {
+  marginBottom: 12,
+};
+
+const bundleEditorHelp = {
+  margin: "5px 0 0",
+  color: "#888",
+  fontSize: 12,
+  lineHeight: 1.45,
+};
+
+const bundleEditorGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gap: 10,
+};
+
+const bundleTierAdminCard = {
+  display: "grid",
+  gap: 8,
+  padding: 10,
+  border: "1px solid rgba(255,255,255,.1)",
+  borderRadius: 10,
+  background: "#0b0b0b",
 };
 
 const inventoryEditor = {

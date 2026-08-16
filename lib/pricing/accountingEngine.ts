@@ -18,11 +18,13 @@ type AccountingEngineInput = {
   shipping: ShippingPricingResult;
   tax: TaxPricingResult;
 
+  bundleDiscount?: number;
   generalPromoDiscount?: number;
   salesRepDiscount?: number;
   referralDiscount?: number;
   rewardsDiscount?: number;
   vipDiscount?: number;
+  heroDiscount?: number;
   manualDiscount?: number;
 
   otherDirectCost?: number;
@@ -46,11 +48,13 @@ export function calculateAccounting({
   shipping,
   tax,
 
+  bundleDiscount = campaign.bundleDiscount,
   generalPromoDiscount = 0,
   salesRepDiscount = 0,
   referralDiscount = 0,
   rewardsDiscount = 0,
   vipDiscount = 0,
+  heroDiscount = 0,
   manualDiscount = 0,
 
   otherDirectCost = 0,
@@ -60,6 +64,13 @@ export function calculateAccounting({
     roundCurrency(
       nonNegative(
         campaign.saleDiscount
+      )
+    );
+
+  const safeBundleDiscount =
+    roundCurrency(
+      nonNegative(
+        bundleDiscount
       )
     );
 
@@ -98,6 +109,13 @@ export function calculateAccounting({
       )
     );
 
+  const safeHeroDiscount =
+    roundCurrency(
+      nonNegative(
+        heroDiscount
+      )
+    );
+
   const safeManualDiscount =
     roundCurrency(
       nonNegative(
@@ -115,17 +133,22 @@ export function calculateAccounting({
   const totalDiscount =
     sumCurrency([
       saleDiscount,
+      safeBundleDiscount,
       safeGeneralPromoDiscount,
       safeSalesRepDiscount,
       safeReferralDiscount,
       safeRewardsDiscount,
       safeVipDiscount,
+      safeHeroDiscount,
       safeManualDiscount,
       merchantTaxOffsetDiscount,
     ]);
 
   const discounts: DiscountBreakdown = {
     saleDiscount,
+
+    bundleDiscount:
+      safeBundleDiscount,
 
     generalPromoDiscount:
       safeGeneralPromoDiscount,
@@ -141,6 +164,9 @@ export function calculateAccounting({
 
     vipDiscount:
       safeVipDiscount,
+
+    heroDiscount:
+      safeHeroDiscount,
 
     manualDiscount:
       safeManualDiscount,
@@ -161,6 +187,7 @@ export function calculateAccounting({
       safeReferralDiscount,
       safeRewardsDiscount,
       safeVipDiscount,
+      safeHeroDiscount,
       safeManualDiscount,
       merchantTaxOffsetDiscount,
     ]);

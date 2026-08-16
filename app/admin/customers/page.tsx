@@ -23,6 +23,8 @@ type Customer = {
   reward_points: number | null;
   vip_tier: string | null;
   has_lifetime_free_shipping: boolean | null;
+  is_hero_account: boolean | null;
+  hero_discount_percent: number | null;
   total_order_count: number;
   paid_order_count: number;
   pending_order_count: number;
@@ -295,6 +297,8 @@ export default function AdminCustomersPage() {
               "reward_points",
               "vip_tier",
               "has_lifetime_free_shipping",
+              "is_hero_account",
+              "hero_discount_percent",
             ].join(",")
           )
           .order(
@@ -834,6 +838,60 @@ export default function AdminCustomersPage() {
       setSavingCustomer(
         false
       );
+    }
+  }
+
+  async function toggleHeroAccount(
+    customer: Customer
+  ) {
+    if (savingCustomer) return;
+
+    setSavingCustomer(true);
+    setNotice("");
+
+    try {
+      const next = !Boolean(customer.is_hero_account);
+
+      const { error } = await supabase
+        .from("customer_profiles")
+        .update({
+          is_hero_account: next,
+          hero_discount_percent:
+            Number(customer.hero_discount_percent || 5) || 5,
+        })
+        .eq("id", customer.id);
+
+      if (error) throw error;
+
+      const patch = {
+        is_hero_account: next,
+        hero_discount_percent:
+          Number(customer.hero_discount_percent || 5) || 5,
+      };
+
+      setCustomers((current) =>
+        current.map((item) =>
+          item.id === customer.id
+            ? { ...item, ...patch }
+            : item
+        )
+      );
+
+      setSelectedCustomer((current) =>
+        current?.id === customer.id
+          ? { ...current, ...patch }
+          : current
+      );
+
+      setNotice(
+        next
+          ? "Hero Account enabled. The customer will automatically receive the additional Hero Appreciation discount."
+          : "Hero Account disabled."
+      );
+    } catch (error) {
+      setNotice(getErrorMessage(error));
+    } finally {
+      setSavingCustomer(false);
     }
   }
 
@@ -1536,6 +1594,40 @@ export default function AdminCustomersPage() {
                     ? "Disable Lifetime Shipping"
                     : "Enable Lifetime Shipping"}
                 </button>
+
+                <div style={{ marginTop: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void toggleHeroAccount(selectedCustomer)
+                    }
+                    disabled={savingCustomer}
+                    style={
+                      selectedCustomer.is_hero_account
+                        ? styles.dangerButton
+                        : styles.successButton
+                    }
+                  >
+                    {selectedCustomer.is_hero_account
+                      ? "Disable Hero Account"
+                      : "Upgrade to Hero Account"}
+                  </button>
+
+                  {selectedCustomer.is_hero_account && (
+                    <p
+                      style={{
+                        margin: "10px 0 0",
+                        color: "#7df9ff",
+                        fontSize: 13,
+                        fontWeight: 800,
+                      }}
+                    >
+                      HERO ACCOUNT · {Number(
+                        selectedCustomer.hero_discount_percent || 5
+                      )}% appreciation discount
+                    </p>
+                  )}
+                </div>
               </section>
 
               <section style={styles.drawerSection}>
@@ -1874,6 +1966,19 @@ function CustomerCard({
       </div>
 
       <div style={styles.cardFooter}>
+        {customer.is_hero_account && (
+          <span
+            style={{
+              ...styles.shippingBadge,
+              color: "#7df9ff",
+              borderColor: "rgba(125,249,255,.45)",
+              background: "rgba(125,249,255,.07)",
+            }}
+          >
+            HERO · {Number(customer.hero_discount_percent || 5)}%
+          </span>
+        )}
+
         <span
           style={{
             ...styles.shippingBadge,
