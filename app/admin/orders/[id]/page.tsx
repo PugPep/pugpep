@@ -108,6 +108,7 @@ export default function OrderDetailsPage() {
   const [editingOrder, setEditingOrder] = useState(false);
   const [draftItems, setDraftItems] = useState<EditableOrderItem[]>([]);
   const [adjustmentReason, setAdjustmentReason] = useState("");
+  const [netRevenueOverride, setNetRevenueOverride] = useState("");
   const [savingAdjustment, setSavingAdjustment] = useState(false);
   const [adjustmentNotice, setAdjustmentNotice] = useState("");
   const [adjustments, setAdjustments] = useState<any[]>([]);
@@ -213,6 +214,9 @@ export default function OrderDetailsPage() {
   function startOrderEdit() {
     setDraftItems(items.map(toEditableOrderItem));
     setAdjustmentReason("");
+    setNetRevenueOverride(
+      Number(order?.net_revenue ?? order?.total ?? 0).toFixed(2)
+    );
     setAdjustmentNotice("");
     setEditingOrder(true);
   }
@@ -220,6 +224,7 @@ export default function OrderDetailsPage() {
   function cancelOrderEdit() {
     setDraftItems(items.map(toEditableOrderItem));
     setAdjustmentReason("");
+    setNetRevenueOverride("");
     setAdjustmentNotice("");
     setEditingOrder(false);
   }
@@ -327,6 +332,10 @@ export default function OrderDetailsPage() {
           p_order_id: order.id,
           p_reason: reason,
           p_items: payload,
+          p_net_revenue_override:
+            netRevenueOverride.trim() === ""
+              ? null
+              : Math.max(0, safeNumber(netRevenueOverride)),
         }
       );
 
@@ -346,6 +355,7 @@ export default function OrderDetailsPage() {
       );
 
       setAdjustmentReason("");
+      setNetRevenueOverride("");
       setEditingOrder(false);
       await loadOrder();
     } catch (error) {
@@ -609,6 +619,112 @@ export default function OrderDetailsPage() {
                 </p>
               ) : editingOrder ? (
                 <div style={itemList}>
+                  {(() => {
+                    const draftProductCost = draftItems.reduce(
+                      (sum, item) =>
+                        sum + item.unit_cost * item.quantity,
+                      0
+                    );
+
+                    const overrideNetRevenue =
+                      netRevenueOverride.trim() === ""
+                        ? Number(order.net_revenue ?? order.total ?? 0)
+                        : Math.max(0, safeNumber(netRevenueOverride));
+
+                    const taxAmount = Number(order.sales_tax_amount || 0);
+                    const shippingCollected = Number(
+                      order.shipping_collected ??
+                        order.shipping ??
+                        0
+                    );
+                    const otherDirectCost = Number(
+                      order.other_direct_cost || 0
+                    );
+                    const commissionAmount = Number(
+                      order.commission_amount || 0
+                    );
+
+                    const projectedProfit =
+                      overrideNetRevenue -
+                      draftProductCost -
+                      shippingCost -
+                      packagingCost -
+                      otherDirectCost -
+                      commissionAmount;
+
+                    const projectedMargin =
+                      overrideNetRevenue > 0
+                        ? (projectedProfit / overrideNetRevenue) * 100
+                        : 0;
+
+                    const projectedCustomerTotal =
+                      overrideNetRevenue + taxAmount;
+
+                    const projectedMerchandiseRevenue =
+                      Math.max(
+                        0,
+                        overrideNetRevenue - shippingCollected
+                      );
+
+                    return (
+                      <div style={netRevenueEditor}>
+                        <div>
+                          <span style={editLabel}>
+                            Net Revenue Override
+                          </span>
+
+                          <p style={adjustmentHelp}>
+                            Enter the corrected merchant revenue for this
+                            historical order. Sales tax is excluded from net
+                            revenue.
+                          </p>
+                        </div>
+
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={netRevenueOverride}
+                          onChange={(event) =>
+                            setNetRevenueOverride(event.target.value)
+                          }
+                          style={input}
+                        />
+
+                        <div style={netRevenuePreviewGrid}>
+                          <PreviewMetric
+                            label="Merchandise After Discounts"
+                            value={money(projectedMerchandiseRevenue)}
+                          />
+
+                          <PreviewMetric
+                            label="Customer Total"
+                            value={money(projectedCustomerTotal)}
+                          />
+
+                          <PreviewMetric
+                            label="Projected Profit"
+                            value={money(projectedProfit)}
+                            accent={
+                              projectedProfit >= 0
+                                ? "#00ff99"
+                                : "#ff6f6f"
+                            }
+                          />
+
+                          <PreviewMetric
+                            label="Projected Margin"
+                            value={`${projectedMargin.toFixed(1)}%`}
+                            accent={
+                              projectedMargin >= 15
+                                ? "#00ff99"
+                                : "#ffcc66"
+                            }
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {draftItems.map((item) => {
                     const lineRevenue =
                       item.actual_unit_price * item.quantity;
@@ -1255,6 +1371,25 @@ function Info({
   );
 }
 
+function PreviewMetric({
+  label: previewLabel,
+  value,
+  accent = "#7df9ff",
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+}) {
+  return (
+    <div style={previewMetric}>
+      <span style={editLabel}>{previewLabel}</span>
+      <strong style={{ color: accent, fontSize: 18 }}>
+        {value}
+      </strong>
+    </div>
+  );
+}
+
 function EditNumberField({
   label: fieldLabel,
   value,
@@ -1643,6 +1778,31 @@ const calculatedStrip = {
   background: "rgba(0,0,0,.35)",
   color: "#ccc",
   fontSize: 13,
+};
+
+const netRevenueEditor = {
+  padding: 16,
+  border: "1px solid rgba(125,249,255,.34)",
+  borderRadius: 12,
+  background:
+    "linear-gradient(145deg, rgba(0,217,255,.07), rgba(0,0,0,.28))",
+};
+
+const netRevenuePreviewGrid = {
+  marginTop: 12,
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit, minmax(150px, 1fr))",
+  gap: 9,
+};
+
+const previewMetric = {
+  padding: 11,
+  display: "grid",
+  gap: 5,
+  border: "1px solid rgba(255,255,255,.10)",
+  borderRadius: 9,
+  background: "rgba(0,0,0,.28)",
 };
 
 const adjustmentPanel = {
