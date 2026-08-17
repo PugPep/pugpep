@@ -105,6 +105,13 @@ export default function ProductDetailPage() {
   const [saleMap, setSaleMap] =
     useState<Record<string, StorefrontSale>>({});
 
+  /*
+   * Campaign assignments must be tracked by product OPTION, not only
+   * by product slug. A product can have 20mg on sale while 10mg is not.
+   */
+  const [optionCampaignSaleMap, setOptionCampaignSaleMap] =
+    useState<Record<string, boolean>>({});
+
   function readRecentlyViewed() {
     try {
       const raw =
@@ -490,6 +497,64 @@ export default function ProductDetailPage() {
 
       setOptions(sortedOptions);
 
+      /*
+       * Determine campaign-sale status for every individual option.
+       *
+       * loadStorefrontSales() is intentionally product-level and is
+       * useful for badges/recommendations, but it cannot tell us whether
+       * a specific dosage/purchase option is assigned to the campaign.
+       *
+       * Bundle Savings must therefore use this option-level map.
+       */
+      const optionCampaignEntries =
+        await Promise.all(
+          sortedOptions.map(async (option) => {
+            try {
+              const { data, error } =
+                await supabase.rpc(
+                  "get_product_option_campaign_price",
+                  {
+                    p_product_option_id: option.id,
+                  }
+                );
+
+              if (error) {
+                console.warn(
+                  `Unable to load campaign status for option ${option.id}:`,
+                  error
+                );
+
+                return [option.id, false] as const;
+              }
+
+              const campaignData =
+                data && typeof data === "object"
+                  ? (data as Record<string, unknown>)
+                  : null;
+
+              return [
+                option.id,
+                Boolean(
+                  campaignData?.has_campaign
+                ),
+              ] as const;
+            } catch (campaignError) {
+              console.warn(
+                `Unable to load campaign status for option ${option.id}:`,
+                campaignError
+              );
+
+              return [option.id, false] as const;
+            }
+          })
+        );
+
+      setOptionCampaignSaleMap(
+        Object.fromEntries(
+          optionCampaignEntries
+        )
+      );
+
       const { data: inventoryData, error: inventoryError } =
         await supabase
           .from("inventory")
@@ -672,7 +737,9 @@ export default function ProductDetailPage() {
         option.sale_active &&
         Number(option.sale_percent || 0) > 0
       ) ||
-      Boolean(saleMap[option.product_slug]?.isOnSale);
+      Boolean(
+        optionCampaignSaleMap[option.id]
+      );
 
     if (
       saleActive ||
@@ -716,7 +783,9 @@ export default function ProductDetailPage() {
         option.sale_active &&
         Number(option.sale_percent || 0) > 0
       ) ||
-      Boolean(saleMap[option.product_slug]?.isOnSale)
+      Boolean(
+        optionCampaignSaleMap[option.id]
+      )
     );
   }
 
