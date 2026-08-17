@@ -424,46 +424,71 @@ function buildPricedLine({
       campaignPrice.unitCost
     );
 
-  let paidQuantity =
-    quantity;
+  /*
+   * ----------------------------------------------------------
+   * MANUAL SALE CANDIDATE
+   * ----------------------------------------------------------
+   *
+   * A manual product-option sale is now evaluated even when
+   * the option is also assigned to an active campaign.
+   *
+   * Manual and campaign discounts NEVER stack with each other.
+   * We calculate both possible prices and use whichever gives
+   * the customer the lower merchandise price.
+   */
+  const manualSaleAvailable =
+    Boolean(
+      optionMetadata.sale_active
+    ) &&
+    nonNegative(
+      optionMetadata.sale_percent
+    ) > 0;
 
-  let freeQuantity = 0;
-
-  const hasManualSale =
-    !campaignPrice.hasCampaign &&
-    Boolean(optionMetadata.sale_active) &&
-    nonNegative(optionMetadata.sale_percent) > 0;
-
-  const manualSalePercent =
-    hasManualSale
+  const configuredManualSalePercent =
+    manualSaleAvailable
       ? Math.min(
           100,
-          nonNegative(optionMetadata.sale_percent)
+          nonNegative(
+            optionMetadata.sale_percent
+          )
         )
       : 0;
 
-  let campaignLineRevenue =
-    roundCurrency(
-      (hasManualSale
-        ? regularUnitPrice *
-          (1 - manualSalePercent / 100)
-        : campaignPrice.saleUnitPrice) *
-        quantity
-    );
-
-  let actualUnitPrice =
-    quantity > 0
+  const manualSaleLineRevenue =
+    manualSaleAvailable
       ? roundCurrency(
-          campaignLineRevenue /
+          regularUnitPrice *
+            (1 -
+              configuredManualSalePercent /
+                100) *
             quantity
         )
-      : 0;
+      : null;
 
-  let bundleDiscountApplied = false;
-  let bundleDiscountPercent = 0;
-  let bundleDiscountAmount = 0;
-  let bundleTierQuantity: number | null = null;
+  /*
+   * ----------------------------------------------------------
+   * CAMPAIGN CANDIDATE
+   * ----------------------------------------------------------
+   */
+  let campaignCandidateRevenue =
+    roundCurrency(
+      campaignPrice.hasCampaign
+        ? campaignPrice.saleUnitPrice *
+            quantity
+        : regularUnitPrice *
+            quantity
+    );
 
+  let campaignPaidQuantity =
+    quantity;
+
+  let campaignFreeQuantity = 0;
+
+  /*
+   * Buy-X-Get-Y needs to be calculated from quantities rather
+   * than sale_unit_price so it can be compared fairly against
+   * an active manual percentage sale.
+   */
   if (
     campaignPrice.hasCampaign &&
     campaignPrice.saleCampaignType ===
@@ -480,70 +505,210 @@ function buildPricedLine({
           1,
       });
 
-    paidQuantity =
+    campaignPaidQuantity =
       bogo.paidQuantity;
 
-    freeQuantity =
+    campaignFreeQuantity =
       bogo.freeQuantity;
 
-    campaignLineRevenue =
+    campaignCandidateRevenue =
       roundCurrency(
         regularUnitPrice *
-          paidQuantity
+          campaignPaidQuantity
       );
-
-    actualUnitPrice =
-      quantity > 0
-        ? roundCurrency(
-            campaignLineRevenue /
-              quantity
-          )
-        : 0;
   }
+
+  /*
+   * ----------------------------------------------------------
+   * CHOOSE THE BETTER SALE
+   * ----------------------------------------------------------
+   *
+   * Examples:
+   *
+   * Manual 20% vs Campaign 15% -> Manual wins
+   * Manual 10% vs Campaign 20% -> Campaign wins
+   * Manual 20% vs Campaign 20% -> Campaign wins tie,
+   *                                but discount applies once
+   *
+   * Using a strict "<" for the manual comparison means an
+   * exact tie keeps the campaign metadata attached to the line.
+   */
+  const manualSaleWins =
+    manualSaleLineRevenue !== null &&
+    (
+      !campaignPrice.hasCampaign ||
+      manualSaleLineRevenue <
+        campaignCandidateRevenue
+    );
+
+  const effectiveCampaignUsed =
+    campaignPrice.hasCampaign &&
+    !manualSaleWins;
+
+  const hasManualSale =
+    manualSaleWins;
+
+  const manualSalePercent =
+    hasManualSale
+      ? configuredManualSalePercent
+      : 0;
+
+  let paidQuantity =
+    effectiveCampaignUsed
+      ? campaignPaidQuantity
+      : quantity;
+
+  let freeQuantity =
+    effectiveCampaignUsed
+      ? campaignFreeQuantity
+      : 0;
+
+  let campaignLineRevenue =
+    roundCurrency(
+      hasManualSale &&
+      manualSaleLineRevenue !== null
+        ? manualSaleLineRevenue
+        : effectiveCampaignUsed
+        ? campaignCandidateRevenue
+        : regularUnitPrice *
+          quantity
+    );
+
+  let actualUnitPrice =
+    quantity > 0
+      ? roundCurrency(
+          campaignLineRevenue /
+            quantity
+        )
+      : 0;
+
+  /*
+   * ----------------------------------------------------------
+   * BUNDLE SAVINGS
+   * ----------------------------------------------------------
+   *
+   * Bundle savings remain mutually exclusive with sales.
+   *
+   * We intentionally check the raw campaign assignment here,
+   * not only effectiveCampaignUsed. If an option is currently
+   * assigned to a campaign, bundle pricing stays paused.
+   *
+   * Manual sale configured + active also pauses bundle pricing.
+   */
+  let bundleDiscountApplied = false;
+  let bundleDiscountPercent = 0;
+  let bundleDiscountAmount = 0;
+  let bundleTierQuantity:
+    number | null = null;
 
   if (
     !campaignPrice.hasCampaign &&
-    !hasManualSale &&
-    optionMetadata.bundle_discount_enabled !== false
+    !manualSaleAvailable &&
+    optionMetadata.bundle_discount_enabled !==
+      false
   ) {
     const tiers = [
       {
-        quantity: Math.max(1, Math.floor(nonNegative(optionMetadata.bundle_qty_1) || 1)),
-        percent: Math.min(100, nonNegative(optionMetadata.bundle_discount_1)),
+        quantity: Math.max(
+          1,
+          Math.floor(
+            nonNegative(
+              optionMetadata.bundle_qty_1
+            ) || 1
+          )
+        ),
+        percent: Math.min(
+          100,
+          nonNegative(
+            optionMetadata.bundle_discount_1
+          )
+        ),
       },
       {
-        quantity: Math.max(1, Math.floor(nonNegative(optionMetadata.bundle_qty_2) || 1)),
-        percent: Math.min(100, nonNegative(optionMetadata.bundle_discount_2)),
+        quantity: Math.max(
+          1,
+          Math.floor(
+            nonNegative(
+              optionMetadata.bundle_qty_2
+            ) || 1
+          )
+        ),
+        percent: Math.min(
+          100,
+          nonNegative(
+            optionMetadata.bundle_discount_2
+          )
+        ),
       },
       {
-        quantity: Math.max(1, Math.floor(nonNegative(optionMetadata.bundle_qty_3) || 1)),
-        percent: Math.min(100, nonNegative(optionMetadata.bundle_discount_3)),
+        quantity: Math.max(
+          1,
+          Math.floor(
+            nonNegative(
+              optionMetadata.bundle_qty_3
+            ) || 1
+          )
+        ),
+        percent: Math.min(
+          100,
+          nonNegative(
+            optionMetadata.bundle_discount_3
+          )
+        ),
       },
     ]
-      .filter((tier) => tier.percent > 0 && quantity >= tier.quantity)
-      .sort((a, b) => b.quantity - a.quantity);
+      .filter(
+        (tier) =>
+          tier.percent > 0 &&
+          quantity >=
+            tier.quantity
+      )
+      .sort(
+        (a, b) =>
+          b.quantity -
+          a.quantity
+      );
 
-    const bestTier = tiers[0];
+    const bestTier =
+      tiers[0];
 
     if (bestTier) {
-      bundleDiscountApplied = true;
-      bundleDiscountPercent = bestTier.percent;
-      bundleTierQuantity = bestTier.quantity;
+      bundleDiscountApplied =
+        true;
 
-      const preBundleRevenue = campaignLineRevenue;
+      bundleDiscountPercent =
+        bestTier.percent;
 
-      campaignLineRevenue = roundCurrency(
-        preBundleRevenue *
-          (1 - bundleDiscountPercent / 100)
-      );
+      bundleTierQuantity =
+        bestTier.quantity;
 
-      bundleDiscountAmount = roundCurrency(
-        Math.max(0, preBundleRevenue - campaignLineRevenue)
-      );
+      const preBundleRevenue =
+        campaignLineRevenue;
 
-      actualUnitPrice = quantity > 0
-        ? roundCurrency(campaignLineRevenue / quantity)
-        : 0;
+      campaignLineRevenue =
+        roundCurrency(
+          preBundleRevenue *
+            (1 -
+              bundleDiscountPercent /
+                100)
+        );
+
+      bundleDiscountAmount =
+        roundCurrency(
+          Math.max(
+            0,
+            preBundleRevenue -
+              campaignLineRevenue
+          )
+        );
+
+      actualUnitPrice =
+        quantity > 0
+          ? roundCurrency(
+              campaignLineRevenue /
+                quantity
+            )
+          : 0;
     }
   }
 
@@ -553,6 +718,14 @@ function buildPricedLine({
         quantity
     );
 
+  /*
+   * campaignLineRevenue already contains the final line revenue.
+   *
+   * bundleDiscountAmount is subtracted here so saleDiscountAmount
+   * contains ONLY campaign/manual-sale savings. Bundle savings are
+   * reported separately in campaign.bundleDiscount and therefore
+   * are not double-counted by the accounting engine.
+   */
   const saleDiscountAmount =
     roundCurrency(
       Math.max(
@@ -622,29 +795,54 @@ function buildPricedLine({
 
     freeQuantity,
 
+    /*
+     * Only mark the campaign as the active sale source when its
+     * price actually won the comparison. This prevents the UI,
+     * snapshots, and campaign reporting from claiming a campaign
+     * produced a price that actually came from the manual sale.
+     */
     hasCampaign:
-      campaignPrice.hasCampaign,
+      effectiveCampaignUsed,
 
     saleCampaignId:
-      campaignPrice.saleCampaignId,
+      effectiveCampaignUsed
+        ? campaignPrice.saleCampaignId
+        : null,
 
     saleCampaignName:
-      campaignPrice.saleCampaignName,
+      effectiveCampaignUsed
+        ? campaignPrice.saleCampaignName
+        : null,
 
     saleCampaignType:
-      campaignPrice.saleCampaignType,
+      effectiveCampaignUsed
+        ? campaignPrice.saleCampaignType
+        : null,
 
+    /*
+     * When the manual sale wins, treat it like a normal manual
+     * product sale instead of inheriting stacking restrictions
+     * from a campaign whose price was not used.
+     */
     allowRewardPoints:
-      campaignPrice.allowRewardPoints,
+      effectiveCampaignUsed
+        ? campaignPrice.allowRewardPoints
+        : true,
 
     allowGeneralPromos:
-      campaignPrice.allowGeneralPromos,
+      effectiveCampaignUsed
+        ? campaignPrice.allowGeneralPromos
+        : true,
 
     allowSalesRepDiscount:
-      campaignPrice.allowSalesRepDiscount,
+      effectiveCampaignUsed
+        ? campaignPrice.allowSalesRepDiscount
+        : true,
 
     allowReferralDiscount:
-      campaignPrice.allowReferralDiscount,
+      effectiveCampaignUsed
+        ? campaignPrice.allowReferralDiscount
+        : true,
 
     isTaxable,
 
