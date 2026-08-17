@@ -10,6 +10,83 @@ const EMAILJS_SERVICE_ID = "service_quxnkin";
 const EMAILJS_PUBLIC_KEY = "yc_0cE0Mcl3tfzc11";
 const SHIPPING_TEMPLATE_ID = "template_piq2u0f";
 
+
+type EditableOrderItem = {
+  id: string;
+  product_name: string;
+  dosage: string;
+  purchase_type: string;
+  quantity: number;
+  regular_unit_price: number;
+  actual_unit_price: number;
+  unit_cost: number;
+  was_on_sale: boolean;
+  sale_percent: number;
+};
+
+function safeNumber(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function money(value: unknown) {
+  return `$${safeNumber(value).toFixed(2)}`;
+}
+
+function toEditableOrderItem(item: any): EditableOrderItem {
+  const quantity = Math.max(1, Math.floor(safeNumber(item.quantity, 1)));
+
+  const regular = Math.max(
+    0,
+    safeNumber(
+      item.regular_unit_price ??
+        item.sale_unit_price ??
+        item.actual_unit_price ??
+        0
+    )
+  );
+
+  const actual = Math.max(
+    0,
+    safeNumber(
+      item.actual_unit_price ??
+        item.sale_unit_price ??
+        regular
+    )
+  );
+
+  return {
+    id: String(item.id),
+    product_name: String(item.product_name || "Product"),
+    dosage: String(item.dosage || ""),
+    purchase_type: String(item.purchase_type || ""),
+    quantity,
+    regular_unit_price: regular,
+    actual_unit_price: actual,
+    unit_cost: Math.max(0, safeNumber(item.cost, 0)),
+    was_on_sale: Boolean(item.was_on_sale),
+    sale_percent: Math.min(
+      100,
+      Math.max(0, safeNumber(item.sale_percent, 0))
+    ),
+  };
+}
+
+function getErrorMessage(error: unknown) {
+  if (
+    error &&
+    typeof error === "object" &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
+
+  return error instanceof Error
+    ? error.message
+    : "The order could not be updated.";
+}
+
 export default function OrderDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -26,6 +103,14 @@ export default function OrderDetailsPage() {
   const [savingCosts, setSavingCosts] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+
+
+  const [editingOrder, setEditingOrder] = useState(false);
+  const [draftItems, setDraftItems] = useState<EditableOrderItem[]>([]);
+  const [adjustmentReason, setAdjustmentReason] = useState("");
+  const [savingAdjustment, setSavingAdjustment] = useState(false);
+  const [adjustmentNotice, setAdjustmentNotice] = useState("");
+  const [adjustments, setAdjustments] = useState<any[]>([]);
 
   useEffect(() => {
     if (id) loadOrder();
@@ -48,8 +133,27 @@ export default function OrderDetailsPage() {
 
     if (itemError) return alert(itemError.message);
 
+    const { data: adjustmentData, error: adjustmentError } = await supabase
+      .from("order_manual_adjustments")
+      .select(
+        "id,adjusted_at,adjusted_by_email,reason,merchandise_revenue_before,merchandise_revenue_after,customer_total_before,customer_total_after,profit_before,profit_after"
+      )
+      .eq("order_id", orderData.id)
+      .order("adjusted_at", { ascending: false })
+      .limit(10);
+
+    if (adjustmentError && adjustmentError.code !== "42P01") {
+      console.error("Unable to load manual adjustment history:", adjustmentError);
+    }
+
     setOrder(orderData);
     setItems(itemData || []);
+    setAdjustments(adjustmentData || []);
+
+    if (!editingOrder) {
+      setDraftItems((itemData || []).map(toEditableOrderItem));
+    }
+
     setShippingStatus(orderData.shipping_status || "not shipped");
     setTrackingNumber(orderData.tracking_number || "");
     setShippingCost(Number(orderData.estimated_shipping_cost || 0));
@@ -74,14 +178,27 @@ export default function OrderDetailsPage() {
 
     const productCostTotal = Number(order.product_cost_total || 0);
     const netRevenue = Number(order.net_revenue ?? order.total ?? 0);
-    const estimatedProfit = netRevenue - productCostTotal - shippingCost - packagingCost;
-    const profitMarginPercent = netRevenue > 0 ? (estimatedProfit / netRevenue) * 100 : 0;
+    const otherDirectCost = Number(order.other_direct_cost || 0);
+    const commissionAmount = Number(order.commission_amount || 0);
+
+    const estimatedProfit =
+      netRevenue -
+      productCostTotal -
+      shippingCost -
+      packagingCost -
+      otherDirectCost -
+      commissionAmount;
+
+    const profitMarginPercent =
+      netRevenue > 0 ? (estimatedProfit / netRevenue) * 100 : 0;
 
     const { error } = await supabase
       .from("orders")
       .update({
         estimated_shipping_cost: shippingCost,
         estimated_packaging_cost: packagingCost,
+        actual_shipping_cost: shippingCost,
+        actual_packaging_cost: packagingCost,
         estimated_profit: estimatedProfit,
         profit_margin_percent: profitMarginPercent,
       })
@@ -91,6 +208,152 @@ export default function OrderDetailsPage() {
     if (error) return alert(error.message);
     alert("Costs and profit updated.");
     await loadOrder();
+  }
+
+  function startOrderEdit() {
+    setDraftItems(items.map(toEditableOrderItem));
+    setAdjustmentReason("");
+    setAdjustmentNotice("");
+    setEditingOrder(true);
+  }
+
+  function cancelOrderEdit() {
+    setDraftItems(items.map(toEditableOrderItem));
+    setAdjustmentReason("");
+    setAdjustmentNotice("");
+    setEditingOrder(false);
+  }
+
+  function updateDraftItem(
+    itemId: string,
+    patch: Partial<EditableOrderItem>
+  ) {
+    setDraftItems((current) =>
+      current.map((item) =>
+        item.id === itemId ? { ...item, ...patch } : item
+      )
+    );
+  }
+
+  function applySalePercent(itemId: string, rawPercent: number) {
+    setDraftItems((current) =>
+      current.map((item) => {
+        if (item.id !== itemId) return item;
+
+        const percent = Math.min(100, Math.max(0, rawPercent));
+        const actual =
+          percent > 0
+            ? Number(
+                (
+                  item.regular_unit_price *
+                  (1 - percent / 100)
+                ).toFixed(2)
+              )
+            : item.regular_unit_price;
+
+        return {
+          ...item,
+          was_on_sale: percent > 0,
+          sale_percent: percent,
+          actual_unit_price: actual,
+        };
+      })
+    );
+  }
+
+  async function saveManualCorrection() {
+    if (!order || savingAdjustment) return;
+
+    const reason = adjustmentReason.trim();
+
+    if (!reason) {
+      setAdjustmentNotice(
+        "Enter a reason for this manual correction."
+      );
+      return;
+    }
+
+    for (const item of draftItems) {
+      if (
+        item.quantity < 1 ||
+        item.regular_unit_price < 0 ||
+        item.actual_unit_price < 0 ||
+        item.unit_cost < 0
+      ) {
+        setAdjustmentNotice(
+          "Quantity must be at least 1 and prices/costs cannot be negative."
+        );
+        return;
+      }
+
+      if (
+        item.was_on_sale &&
+        item.actual_unit_price > item.regular_unit_price
+      ) {
+        setAdjustmentNotice(
+          `${item.product_name}: sale price cannot be higher than regular price.`
+        );
+        return;
+      }
+    }
+
+    const confirmed = window.confirm(
+      `Save this manual correction to order ${order.order_number}?\\n\\n` +
+        "This will update the historical order-item pricing snapshot, " +
+        "recalculate the order totals and profit, and create an audit record."
+    );
+
+    if (!confirmed) return;
+
+    setSavingAdjustment(true);
+    setAdjustmentNotice("");
+
+    try {
+      const payload = draftItems.map((item) => ({
+        id: item.id,
+        quantity: Math.max(1, Math.floor(item.quantity)),
+        regular_unit_price: Math.max(0, item.regular_unit_price),
+        actual_unit_price: Math.max(0, item.actual_unit_price),
+        unit_cost: Math.max(0, item.unit_cost),
+        was_on_sale: Boolean(item.was_on_sale),
+        sale_percent: item.was_on_sale
+          ? Math.min(100, Math.max(0, item.sale_percent))
+          : 0,
+      }));
+
+      const { data, error } = await supabase.rpc(
+        "admin_correct_order_pricing",
+        {
+          p_order_id: order.id,
+          p_reason: reason,
+          p_items: payload,
+        }
+      );
+
+      if (error) throw error;
+
+      const result =
+        data && typeof data === "object"
+          ? (data as Record<string, unknown>)
+          : null;
+
+      setAdjustmentNotice(
+        result?.new_total != null
+          ? `Order corrected. New total: ${money(
+              result.new_total
+            )} · New profit: ${money(result.new_profit)}.`
+          : "Order corrected successfully."
+      );
+
+      setAdjustmentReason("");
+      setEditingOrder(false);
+      await loadOrder();
+    } catch (error) {
+      console.error("Manual order correction failed:", error);
+      setAdjustmentNotice(getErrorMessage(error));
+    } finally {
+      setSavingAdjustment(false);
+    }
   }
 
   function formatPhoneNumber(phone: string) {
@@ -227,8 +490,24 @@ export default function OrderDetailsPage() {
             <span style={deliveryBadge}>
               {(shippingStatus || "not shipped").toUpperCase()}
             </span>
+
+            {Number(order.manual_adjustment_count || 0) > 0 && (
+              <span style={adjustedBadge}>
+                ADJUSTED ×{Number(order.manual_adjustment_count || 0)}
+              </span>
+            )}
           </div>
         </header>
+
+        {order.manual_adjusted_at && (
+          <div style={manualAdjustmentBanner}>
+            <strong>Historical order correction recorded</strong>
+            <p style={{ margin: "6px 0 0", color: "#d2d2d8", lineHeight: 1.55 }}>
+              Last corrected {new Date(order.manual_adjusted_at).toLocaleString()}.
+              {" "}Reason: {order.manual_adjustment_reason || "No reason recorded."}
+            </p>
+          </div>
+        )}
 
         <div style={summaryGrid}>
           <Metric
@@ -303,24 +582,259 @@ export default function OrderDetailsPage() {
             </section>
 
             <section style={card}>
-              <SectionHeader
-                eyebrow="CONTENTS"
-                title="Order Contents"
-              />
+              <div style={contentsHeader}>
+                <SectionHeader
+                  eyebrow="CONTENTS"
+                  title="Order Contents"
+                />
+
+                {!editingOrder ? (
+                  <button
+                    type="button"
+                    onClick={startOrderEdit}
+                    style={editOrderButton}
+                  >
+                    ✏️ Edit Order
+                  </button>
+                ) : (
+                  <span style={editingBadge}>
+                    EDITING HISTORICAL SNAPSHOT
+                  </span>
+                )}
+              </div>
 
               {items.length === 0 ? (
                 <p style={warningText}>
                   No order items found.
                 </p>
+              ) : editingOrder ? (
+                <div style={itemList}>
+                  {draftItems.map((item) => {
+                    const lineRevenue =
+                      item.actual_unit_price * item.quantity;
+                    const lineCost =
+                      item.unit_cost * item.quantity;
+                    const lineProfit =
+                      lineRevenue - lineCost;
+
+                    return (
+                      <article
+                        key={item.id}
+                        style={editableItemCard}
+                      >
+                        <div style={itemHeader}>
+                          <div>
+                            <strong style={itemTitle}>
+                              {item.product_name}
+                            </strong>
+
+                            <p style={itemSubline}>
+                              {item.dosage || "-"} ·{" "}
+                              {item.purchase_type || "-"}
+                            </p>
+                          </div>
+
+                          {item.was_on_sale && (
+                            <span style={saleBadge}>
+                              SALE {Number(item.sale_percent || 0)}% OFF
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={editGrid}>
+                          <EditNumberField
+                            label="Quantity"
+                            value={item.quantity}
+                            min={1}
+                            step={1}
+                            onChange={(value) =>
+                              updateDraftItem(item.id, {
+                                quantity: Math.max(
+                                  1,
+                                  Math.floor(value)
+                                ),
+                              })
+                            }
+                          />
+
+                          <EditNumberField
+                            label="Regular Unit Price"
+                            value={item.regular_unit_price}
+                            onChange={(value) =>
+                              updateDraftItem(item.id, {
+                                regular_unit_price: Math.max(0, value),
+                              })
+                            }
+                          />
+
+                          <EditNumberField
+                            label="Actual / Sale Unit Price"
+                            value={item.actual_unit_price}
+                            onChange={(value) =>
+                              updateDraftItem(item.id, {
+                                actual_unit_price: Math.max(0, value),
+                              })
+                            }
+                          />
+
+                          <EditNumberField
+                            label="Unit Cost"
+                            value={item.unit_cost}
+                            onChange={(value) =>
+                              updateDraftItem(item.id, {
+                                unit_cost: Math.max(0, value),
+                              })
+                            }
+                          />
+
+                          <label style={editFieldWrap}>
+                            <span style={editLabel}>Sale Applied</span>
+
+                            <div style={checkboxRow}>
+                              <input
+                                type="checkbox"
+                                checked={item.was_on_sale}
+                                onChange={(event) => {
+                                  const checked = event.target.checked;
+
+                                  updateDraftItem(item.id, {
+                                    was_on_sale: checked,
+                                    sale_percent: checked
+                                      ? item.sale_percent
+                                      : 0,
+                                    actual_unit_price: checked
+                                      ? item.actual_unit_price
+                                      : item.regular_unit_price,
+                                  });
+                                }}
+                              />
+
+                              <span>
+                                This item was on sale
+                              </span>
+                            </div>
+                          </label>
+
+                          <EditNumberField
+                            label="Sale Percent"
+                            value={item.sale_percent}
+                            min={0}
+                            max={100}
+                            step={0.01}
+                            disabled={!item.was_on_sale}
+                            onChange={(value) =>
+                              applySalePercent(item.id, value)
+                            }
+                          />
+                        </div>
+
+                        <div style={calculatedStrip}>
+                          <span>
+                            Line Revenue{" "}
+                            <strong>{money(lineRevenue)}</strong>
+                          </span>
+
+                          <span>
+                            Line Cost{" "}
+                            <strong>{money(lineCost)}</strong>
+                          </span>
+
+                          <span
+                            style={{
+                              color:
+                                lineProfit >= 0
+                                  ? "#00ff99"
+                                  : "#ff6f6f",
+                            }}
+                          >
+                            Line Profit{" "}
+                            <strong>{money(lineProfit)}</strong>
+                          </span>
+                        </div>
+                      </article>
+                    );
+                  })}
+
+                  <div style={adjustmentPanel}>
+                    <label style={label}>
+                      Reason for Manual Correction *
+                    </label>
+
+                    <textarea
+                      value={adjustmentReason}
+                      onChange={(event) =>
+                        setAdjustmentReason(event.target.value)
+                      }
+                      placeholder="Example: Correcting Tesamorelin 20mg sale price that was not applied during the campaign."
+                      rows={4}
+                      style={textarea}
+                    />
+
+                    <p style={adjustmentHelp}>
+                      This changes only this historical order.
+                      It does not change the current product price
+                      or the product inventory record.
+                    </p>
+
+                    <div style={correctionActions}>
+                      <button
+                        type="button"
+                        onClick={cancelOrderEdit}
+                        disabled={savingAdjustment}
+                        style={cancelButton}
+                      >
+                        Cancel Changes
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => void saveManualCorrection()}
+                        disabled={savingAdjustment}
+                        style={{
+                          ...saveCorrectionButton,
+                          opacity: savingAdjustment ? 0.65 : 1,
+                        }}
+                      >
+                        {savingAdjustment
+                          ? "Saving Correction..."
+                          : "Save & Recalculate Order"}
+                      </button>
+                    </div>
+
+                    {adjustmentNotice && (
+                      <p style={adjustmentNoticeStyle}>
+                        {adjustmentNotice}
+                      </p>
+                    )}
+                  </div>
+                </div>
               ) : (
                 <div style={itemList}>
                   {items.map((item) => {
                     const quantity = Number(item.quantity || 1);
-                    const regular = Number(item.regular_unit_price ?? item.sale_unit_price ?? 0);
-                    const sale = Number(item.sale_unit_price ?? regular);
-                    const revenue = Number(item.line_revenue ?? item.price ?? 0);
-                    const cost = Number(item.line_cost ?? Number(item.cost || 0) * quantity);
-                    const profit = Number(item.line_profit ?? revenue - cost);
+                    const regular = Number(
+                      item.regular_unit_price ??
+                        item.sale_unit_price ??
+                        item.actual_unit_price ??
+                        0
+                    );
+                    const sale = Number(
+                      item.actual_unit_price ??
+                        item.sale_unit_price ??
+                        regular
+                    );
+                    const revenue = Number(
+                      item.line_revenue ??
+                        item.price ??
+                        sale * quantity
+                    );
+                    const cost = Number(
+                      item.line_cost ??
+                        Number(item.cost || 0) * quantity
+                    );
+                    const profit = Number(
+                      item.line_profit ?? revenue - cost
+                    );
 
                     return (
                       <article key={item.id} style={itemCard}>
@@ -331,7 +845,9 @@ export default function OrderDetailsPage() {
                             </strong>
 
                             <p style={itemSubline}>
-                              {item.dosage || "-"} · {item.purchase_type || "-"} · Qty {quantity}
+                              {item.dosage || "-"} ·{" "}
+                              {item.purchase_type || "-"} · Qty{" "}
+                              {quantity}
                             </p>
                           </div>
 
@@ -351,21 +867,49 @@ export default function OrderDetailsPage() {
                         </div>
 
                         <InfoGrid>
-                          <Info label="Regular Unit" value={`$${regular.toFixed(2)}`} />
-                          <Info label="Sale Unit" value={`$${sale.toFixed(2)}`} />
-                          <Info label="Unit Cost" value={`$${Number(item.cost || 0).toFixed(2)}`} />
-                          <Info label="Line Revenue" value={`$${revenue.toFixed(2)}`} />
-                          <Info label="Line Cost" value={`$${cost.toFixed(2)}`} />
+                          <Info
+                            label="Regular Unit"
+                            value={money(regular)}
+                          />
+                          <Info
+                            label="Actual / Sale Unit"
+                            value={money(sale)}
+                          />
+                          <Info
+                            label="Unit Cost"
+                            value={money(item.cost || 0)}
+                          />
+                          <Info
+                            label="Line Revenue"
+                            value={money(revenue)}
+                          />
+                          <Info
+                            label="Line Cost"
+                            value={money(cost)}
+                          />
                           <Info
                             label="Line Profit"
-                            value={`$${profit.toFixed(2)}`}
-                            accent={profit >= 0 ? "#00ff99" : "#ff6f6f"}
+                            value={money(profit)}
+                            accent={
+                              profit >= 0
+                                ? "#00ff99"
+                                : "#ff6f6f"
+                            }
                           />
-                          <Info label="Inventory Status" value={item.inventory_status || "-"} />
+                          <Info
+                            label="Inventory Status"
+                            value={item.inventory_status || "-"}
+                          />
                         </InfoGrid>
                       </article>
                     );
                   })}
+
+                  {adjustmentNotice && (
+                    <p style={adjustmentNoticeStyle}>
+                      {adjustmentNotice}
+                    </p>
+                  )}
                 </div>
               )}
             </section>
@@ -379,6 +923,8 @@ export default function OrderDetailsPage() {
               <InfoGrid>
                 <Info label="Subtotal" value={`$${Number(order.subtotal || 0).toFixed(2)}`} />
                 <Info label="Gross Revenue" value={`$${Number(order.gross_revenue || 0).toFixed(2)}`} />
+                <Info label="Sale Savings" value={`-$${Number(order.sale_discount || 0).toFixed(2)}`} accent="#00ff99" />
+                <Info label="Bundle Savings" value={`-$${Number(order.bundle_discount || 0).toFixed(2)}`} accent="#00ff99" />
                 <Info label="Promo Code" value={order.promo_code || "None"} accent="#00ff99" />
                 <Info label="Promo Type" value={order.promo_discount_type || "-"} />
                 <Info
@@ -390,11 +936,13 @@ export default function OrderDetailsPage() {
                   }
                 />
                 <Info label="Promo Discount" value={`-$${Number(order.promo_discount || 0).toFixed(2)}`} accent="#00ff99" />
+                <Info label="Hero Appreciation" value={`-$${Number(order.hero_discount || 0).toFixed(2)}`} accent="#7df9ff" />
                 <Info label="PugPoints Used" value={String(Number(order.reward_points_used || 0))} />
                 <Info label="PugPoints Discount" value={`-$${Number(order.reward_discount || 0).toFixed(2)}`} accent="#00ff99" />
                 <Info label="PugPoints Earned" value={String(Number(order.rewards_points_earned || 0))} accent="#00ff99" />
                 <Info label="Total Discount" value={`-$${Number(order.total_discount || 0).toFixed(2)}`} accent="#00ff99" />
                 <Info label="Delivery Charged" value={`$${Number(order.shipping || 0).toFixed(2)}`} />
+                <Info label="Sales Tax" value={`$${Number(order.sales_tax_amount || 0).toFixed(2)}`} />
                 <Info label="Payment Method" value={order.payment_method || "Not recorded"} />
               </InfoGrid>
 
@@ -403,6 +951,60 @@ export default function OrderDetailsPage() {
                 <strong>${Number(order.total || 0).toFixed(2)}</strong>
               </div>
             </section>
+
+            {adjustments.length > 0 && (
+              <section style={card}>
+                <SectionHeader
+                  eyebrow="AUDIT"
+                  title="Manual Adjustment History"
+                />
+
+                <div style={auditList}>
+                  {adjustments.map((adjustment) => (
+                    <article key={adjustment.id} style={auditCard}>
+                      <div style={auditHeader}>
+                        <strong style={{ color: "#ffcc66" }}>
+                          {new Date(
+                            adjustment.adjusted_at
+                          ).toLocaleString()}
+                        </strong>
+
+                        <span style={{ color: "#888", fontSize: 12 }}>
+                          {adjustment.adjusted_by_email || "Admin"}
+                        </span>
+                      </div>
+
+                      <p style={auditReason}>
+                        {adjustment.reason}
+                      </p>
+
+                      <div style={auditMetrics}>
+                        <span>
+                          Merchandise{" "}
+                          {money(adjustment.merchandise_revenue_before)}
+                          {" → "}
+                          {money(adjustment.merchandise_revenue_after)}
+                        </span>
+
+                        <span>
+                          Total{" "}
+                          {money(adjustment.customer_total_before)}
+                          {" → "}
+                          {money(adjustment.customer_total_after)}
+                        </span>
+
+                        <span>
+                          Profit{" "}
+                          {money(adjustment.profit_before)}
+                          {" → "}
+                          {money(adjustment.profit_after)}
+                        </span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
           </section>
 
           <aside className="order-actions" style={stack}>
@@ -445,7 +1047,7 @@ export default function OrderDetailsPage() {
               <div style={projectedProfit}>
                 <span>Projected Profit</span>
                 <strong>
-                  ${(netRevenue - productCostTotal - shippingCost - packagingCost).toFixed(2)}
+                  ${(netRevenue - productCostTotal - shippingCost - packagingCost - Number(order.other_direct_cost || 0) - Number(order.commission_amount || 0)).toFixed(2)}
                 </strong>
               </div>
 
@@ -553,6 +1155,15 @@ export default function OrderDetailsPage() {
                 <Info label="Order Row ID" value={order.id} />
                 <Info label="Payment Status" value={order.status || "-"} />
                 <Info label="Delivery Status" value={shippingStatus} />
+                <Info
+                  label="Manual Adjustments"
+                  value={String(Number(order.manual_adjustment_count || 0))}
+                  accent={
+                    Number(order.manual_adjustment_count || 0) > 0
+                      ? "#ffcc66"
+                      : undefined
+                  }
+                />
               </InfoGrid>
             </section>
           </aside>
@@ -641,6 +1252,48 @@ function Info({
         {value}
       </strong>
     </div>
+  );
+}
+
+function EditNumberField({
+  label: fieldLabel,
+  value,
+  onChange,
+  min = 0,
+  max,
+  step = 0.01,
+  disabled = false,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  disabled?: boolean;
+}) {
+  return (
+    <label style={editFieldWrap}>
+      <span style={editLabel}>
+        {fieldLabel}
+      </span>
+
+      <input
+        type="number"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+        onChange={(event) =>
+          onChange(safeNumber(event.target.value))
+        }
+        style={{
+          ...input,
+          opacity: disabled ? 0.45 : 1,
+        }}
+      />
+    </label>
   );
 }
 
@@ -890,6 +1543,203 @@ const presaleBadge = {
   border: "1px solid rgba(255,191,0,.42)",
   fontSize: 10,
   fontWeight: 900,
+};
+
+const adjustedBadge = {
+  padding: "7px 10px",
+  border: "1px solid rgba(255,204,102,.65)",
+  borderRadius: 999,
+  background: "rgba(255,204,102,.08)",
+  color: "#ffcc66",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const manualAdjustmentBanner = {
+  marginTop: 18,
+  padding: "14px 16px",
+  border: "1px solid rgba(255,204,102,.42)",
+  borderRadius: 13,
+  background: "rgba(255,204,102,.07)",
+  color: "#ffcc66",
+};
+
+const contentsHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 14,
+  flexWrap: "wrap" as const,
+};
+
+const editOrderButton = {
+  minHeight: 42,
+  padding: "0 14px",
+  border: "1px solid rgba(255,204,102,.65)",
+  borderRadius: 9,
+  background: "rgba(255,204,102,.08)",
+  color: "#ffcc66",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const editingBadge = {
+  padding: "7px 10px",
+  border: "1px solid rgba(255,204,102,.55)",
+  borderRadius: 999,
+  background: "rgba(255,204,102,.08)",
+  color: "#ffcc66",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const editableItemCard = {
+  ...itemCard,
+  border: "1px solid rgba(255,204,102,.34)",
+  background:
+    "linear-gradient(145deg, rgba(20,16,5,.65), rgba(0,0,0,.3))",
+};
+
+const editGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit, minmax(160px, 1fr))",
+  gap: 11,
+};
+
+const editFieldWrap = {
+  display: "grid",
+  gap: 6,
+};
+
+const editLabel = {
+  color: "#aaa",
+  fontSize: 11,
+  fontWeight: 900,
+  textTransform: "uppercase" as const,
+};
+
+const checkboxRow = {
+  minHeight: 45,
+  padding: "0 11px",
+  display: "flex",
+  alignItems: "center",
+  gap: 9,
+  border: "1px solid rgba(0,217,255,.22)",
+  borderRadius: 9,
+  background: "#050505",
+  color: "#ddd",
+};
+
+const calculatedStrip = {
+  marginTop: 12,
+  padding: "10px 12px",
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap" as const,
+  border: "1px solid rgba(255,255,255,.10)",
+  borderRadius: 9,
+  background: "rgba(0,0,0,.35)",
+  color: "#ccc",
+  fontSize: 13,
+};
+
+const adjustmentPanel = {
+  marginTop: 4,
+  padding: 16,
+  border: "1px solid rgba(255,204,102,.42)",
+  borderRadius: 12,
+  background: "rgba(255,204,102,.055)",
+};
+
+const textarea = {
+  width: "100%",
+  boxSizing: "border-box" as const,
+  padding: 12,
+  background: "#050505",
+  color: "#fff",
+  border: "1px solid rgba(255,204,102,.32)",
+  borderRadius: 9,
+  resize: "vertical" as const,
+};
+
+const adjustmentHelp = {
+  margin: "9px 0 0",
+  color: "#999",
+  fontSize: 12,
+  lineHeight: 1.55,
+};
+
+const correctionActions = {
+  marginTop: 14,
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 10,
+  flexWrap: "wrap" as const,
+};
+
+const cancelButton = {
+  minHeight: 44,
+  padding: "0 15px",
+  border: "1px solid rgba(255,255,255,.20)",
+  borderRadius: 9,
+  background: "rgba(255,255,255,.04)",
+  color: "#ddd",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const saveCorrectionButton = {
+  minHeight: 44,
+  padding: "0 16px",
+  border: "1px solid #ffcc66",
+  borderRadius: 9,
+  background: "linear-gradient(180deg, #e1a93e, #a66b11)",
+  color: "#fff",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const adjustmentNoticeStyle = {
+  margin: "12px 0 0",
+  color: "#ffcc66",
+  fontWeight: 800,
+  lineHeight: 1.55,
+};
+
+const auditList = {
+  display: "grid",
+  gap: 10,
+};
+
+const auditCard = {
+  padding: 13,
+  border: "1px solid rgba(255,204,102,.20)",
+  borderRadius: 10,
+  background: "rgba(255,204,102,.035)",
+};
+
+const auditHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 10,
+  flexWrap: "wrap" as const,
+};
+
+const auditReason = {
+  margin: "8px 0 0",
+  color: "#ddd",
+  lineHeight: 1.55,
+};
+
+const auditMetrics = {
+  marginTop: 9,
+  display: "flex",
+  gap: 14,
+  flexWrap: "wrap" as const,
+  color: "#999",
+  fontSize: 12,
 };
 
 const grandTotal = {
