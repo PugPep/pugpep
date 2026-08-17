@@ -738,6 +738,16 @@ export async function calculatePricing(
     shipping,
     tax,
 
+    /*
+     * IMPORTANT:
+     * Bundle savings are already reflected in
+     * campaign.campaignMerchandiseRevenue, but they still need to be
+     * carried into DiscountBreakdown so the order snapshot, admin view,
+     * checkout display, and ledger all preserve the correct amount.
+     */
+    bundleDiscount:
+      campaign.bundleDiscount,
+
     generalPromoDiscount:
       promo.generalPromoDiscount,
 
@@ -752,6 +762,14 @@ export async function calculatePricing(
 
     vipDiscount:
       vip.vipDiscount,
+
+    /*
+     * Hero Appreciation stacks on top of eligible sale, bundle, promo,
+     * referral, VIP, and other discounts. The provisional accounting pass
+     * already included it; the final accounting pass must include it too.
+     */
+    heroDiscount:
+      hero.heroDiscount,
 
     manualDiscount:
       cappedManualDiscount,
