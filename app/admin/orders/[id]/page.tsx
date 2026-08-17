@@ -13,6 +13,8 @@ const SHIPPING_TEMPLATE_ID = "template_piq2u0f";
 
 type EditableOrderItem = {
   id: string;
+  product_option_id?: string | null;
+  product_slug?: string | null;
   product_name: string;
   dosage: string;
   purchase_type: string;
@@ -22,6 +24,20 @@ type EditableOrderItem = {
   unit_cost: number;
   was_on_sale: boolean;
   sale_percent: number;
+  is_new?: boolean;
+};
+
+type CatalogOption = {
+  id: string;
+  product_slug: string;
+  product_name: string;
+  dosage: string;
+  purchase_type: string;
+  price: number;
+  cost: number;
+  sale_active: boolean;
+  sale_percent: number;
+  status: string | null;
 };
 
 function safeNumber(value: unknown, fallback = 0) {
@@ -74,6 +90,8 @@ function toEditableOrderItem(item: any): EditableOrderItem {
 
   return {
     id: String(item.id),
+    product_option_id: item.product_option_id ? String(item.product_option_id) : null,
+    product_slug: item.product_slug ? String(item.product_slug) : null,
     product_name: String(item.product_name || "Product"),
     dosage: String(item.dosage || ""),
     purchase_type: String(item.purchase_type || ""),
@@ -130,6 +148,10 @@ export default function OrderDetailsPage() {
   const [adjustmentNotice, setAdjustmentNotice] = useState("");
   const [adjustments, setAdjustments] = useState<any[]>([]);
   const [customerProfile, setCustomerProfile] = useState<any>(null);
+  const [catalogOptions, setCatalogOptions] = useState<CatalogOption[]>([]);
+  const [selectedCatalogOptionId, setSelectedCatalogOptionId] = useState("");
+  const [addQuantity, setAddQuantity] = useState(1);
+  const [netRevenueManuallyEdited, setNetRevenueManuallyEdited] = useState(false);
 
   useEffect(() => {
     if (id) loadOrder();
@@ -179,6 +201,51 @@ export default function OrderDetailsPage() {
       } else {
         profileData = loadedProfile;
       }
+    }
+
+    const { data: productRows, error: productError } = await supabase
+      .from("products")
+      .select("slug,name")
+      .is("deleted_at", null);
+
+    if (productError) {
+      console.error("Unable to load product catalog:", productError);
+    }
+
+    const productNameBySlug = new Map(
+      (productRows || []).map((product: any) => [
+        String(product.slug),
+        String(product.name || product.slug),
+      ])
+    );
+
+    const { data: optionRows, error: optionError } = await supabase
+      .from("product_options")
+      .select("id,product_slug,dosage,purchase_type,price,cost,sale_active,sale_percent,status,is_active,archived_at")
+      .eq("is_active", true)
+      .is("archived_at", null)
+      .order("product_slug", { ascending: true })
+      .order("dosage", { ascending: true });
+
+    if (optionError) {
+      console.error("Unable to load product options:", optionError);
+    } else {
+      setCatalogOptions(
+        (optionRows || []).map((option: any) => ({
+          id: String(option.id),
+          product_slug: String(option.product_slug || ""),
+          product_name:
+            productNameBySlug.get(String(option.product_slug || "")) ||
+            String(option.product_slug || "Product"),
+          dosage: String(option.dosage || ""),
+          purchase_type: String(option.purchase_type || ""),
+          price: Math.max(0, safeNumber(option.price)),
+          cost: Math.max(0, safeNumber(option.cost)),
+          sale_active: Boolean(option.sale_active),
+          sale_percent: Math.min(100, Math.max(0, safeNumber(option.sale_percent))),
+          status: option.status ? String(option.status) : null,
+        }))
+      );
     }
 
     setOrder(orderData);
@@ -253,6 +320,9 @@ export default function OrderDetailsPage() {
       Number(order?.net_revenue ?? order?.total ?? 0).toFixed(2)
     );
     setAdjustmentNotice("");
+    setSelectedCatalogOptionId("");
+    setAddQuantity(1);
+    setNetRevenueManuallyEdited(false);
     setEditingOrder(true);
   }
 
@@ -261,7 +331,81 @@ export default function OrderDetailsPage() {
     setAdjustmentReason("");
     setNetRevenueOverride("");
     setAdjustmentNotice("");
+    setSelectedCatalogOptionId("");
+    setAddQuantity(1);
+    setNetRevenueManuallyEdited(false);
     setEditingOrder(false);
+  }
+
+  function removeDraftItem(itemId: string) {
+    setDraftItems((current) => current.filter((item) => item.id !== itemId));
+  }
+
+  function addSelectedProductToDraft() {
+    const option = catalogOptions.find(
+      (catalogOption) => catalogOption.id === selectedCatalogOptionId
+    );
+
+    if (!option) {
+      setAdjustmentNotice("Select a product option to add.");
+      return;
+    }
+
+    const quantity = Math.max(1, Math.floor(addQuantity || 1));
+    const existing = draftItems.find(
+      (item) => item.product_option_id === option.id
+    );
+
+    if (existing) {
+      updateDraftItem(existing.id, {
+        quantity: existing.quantity + quantity,
+      });
+      setAdjustmentNotice(
+        `${option.product_name} ${option.dosage} was already on the order, so its quantity was increased.`
+      );
+      setSelectedCatalogOptionId("");
+      setAddQuantity(1);
+      return;
+    }
+
+    const manualSale =
+      option.sale_active && option.sale_percent > 0;
+
+    const actualPrice = manualSale
+      ? Number(
+          (
+            option.price *
+            (1 - option.sale_percent / 100)
+          ).toFixed(2)
+        )
+      : option.price;
+
+    const tempId = `new-${option.id}-${Date.now()}`;
+
+    setDraftItems((current) => [
+      ...current,
+      {
+        id: tempId,
+        product_option_id: option.id,
+        product_slug: option.product_slug,
+        product_name: option.product_name,
+        dosage: option.dosage,
+        purchase_type: option.purchase_type,
+        quantity,
+        regular_unit_price: option.price,
+        actual_unit_price: actualPrice,
+        unit_cost: option.cost,
+        was_on_sale: manualSale,
+        sale_percent: manualSale ? option.sale_percent : 0,
+        is_new: true,
+      },
+    ]);
+
+    setSelectedCatalogOptionId("");
+    setAddQuantity(1);
+    setAdjustmentNotice(
+      `${option.product_name} ${option.dosage} added to the draft. Review the price before saving.`
+    );
   }
 
   function updateDraftItem(
@@ -313,6 +457,11 @@ export default function OrderDetailsPage() {
       return;
     }
 
+    if (draftItems.length === 0) {
+      setAdjustmentNotice("An order must contain at least one product.");
+      return;
+    }
+
     for (const item of draftItems) {
       if (
         item.quantity < 1 ||
@@ -351,7 +500,8 @@ export default function OrderDetailsPage() {
 
     try {
       const payload = draftItems.map((item) => ({
-        id: item.id,
+        id: item.is_new ? null : item.id,
+        product_option_id: item.product_option_id || null,
         quantity: Math.max(1, Math.floor(item.quantity)),
         regular_unit_price: Math.max(0, item.regular_unit_price),
         actual_unit_price: Math.max(0, item.actual_unit_price),
@@ -369,9 +519,9 @@ export default function OrderDetailsPage() {
           p_reason: reason,
           p_items: payload,
           p_net_revenue_override:
-            netRevenueOverride.trim() === ""
-              ? null
-              : Math.max(0, safeNumber(netRevenueOverride)),
+            netRevenueManuallyEdited && netRevenueOverride.trim() !== ""
+              ? Math.max(0, safeNumber(netRevenueOverride))
+              : null,
         }
       );
 
@@ -404,6 +554,7 @@ export default function OrderDetailsPage() {
 
       setAdjustmentReason("");
       setNetRevenueOverride("");
+      setNetRevenueManuallyEdited(false);
       setEditingOrder(false);
       await loadOrder();
     } catch (error) {
@@ -689,10 +840,36 @@ export default function OrderDetailsPage() {
                       0
                     );
 
+                    const originalMerchandise = items.reduce(
+                      (sum, item) =>
+                        sum +
+                        Number(
+                          item.line_revenue ??
+                            item.price ??
+                            0
+                        ),
+                      0
+                    );
+
+                    const draftMerchandise = draftItems.reduce(
+                      (sum, item) =>
+                        sum +
+                        item.actual_unit_price *
+                          item.quantity,
+                      0
+                    );
+
+                    const automaticNetRevenue = Math.max(
+                      0,
+                      Number(order.net_revenue ?? order.total ?? 0) +
+                        (draftMerchandise - originalMerchandise)
+                    );
+
                     const overrideNetRevenue =
-                      netRevenueOverride.trim() === ""
-                        ? Number(order.net_revenue ?? order.total ?? 0)
-                        : Math.max(0, safeNumber(netRevenueOverride));
+                      netRevenueManuallyEdited &&
+                      netRevenueOverride.trim() !== ""
+                        ? Math.max(0, safeNumber(netRevenueOverride))
+                        : automaticNetRevenue;
 
                     const taxAmount = Number(order.sales_tax_amount || 0);
                     const shippingCollected = Number(
@@ -783,9 +960,10 @@ export default function OrderDetailsPage() {
                           </span>
 
                           <p style={adjustmentHelp}>
-                            Enter the corrected merchant revenue for this
-                            historical order. Sales tax is excluded from net
-                            revenue.
+                            This automatically follows products you add,
+                            remove, or reprice. Type a different amount only
+                            when you intentionally want to override the
+                            calculated Net Revenue. Sales tax is excluded.
                           </p>
                         </div>
 
@@ -793,10 +971,15 @@ export default function OrderDetailsPage() {
                           type="number"
                           min="0"
                           step="0.01"
-                          value={netRevenueOverride}
-                          onChange={(event) =>
-                            setNetRevenueOverride(event.target.value)
+                          value={
+                            netRevenueManuallyEdited
+                              ? netRevenueOverride
+                              : overrideNetRevenue.toFixed(2)
                           }
+                          onChange={(event) => {
+                            setNetRevenueManuallyEdited(true);
+                            setNetRevenueOverride(event.target.value);
+                          }}
                           style={input}
                         />
 
@@ -924,6 +1107,59 @@ export default function OrderDetailsPage() {
                       </div>
                     );
                   })()}
+                  <div style={addProductPanel}>
+                    <div>
+                      <span style={editLabel}>Add Product to Existing Order</span>
+                      <p style={adjustmentHelp}>
+                        Current catalog pricing is prefilled. You can change the
+                        historical unit price after adding it. Today&apos;s campaigns
+                        are not automatically rerun against the old order.
+                      </p>
+                    </div>
+
+                    <div style={addProductGrid}>
+                      <label style={editFieldWrap}>
+                        <span style={editLabel}>Product / Dosage / Type</span>
+                        <select
+                          value={selectedCatalogOptionId}
+                          onChange={(event) =>
+                            setSelectedCatalogOptionId(event.target.value)
+                          }
+                          style={input}
+                        >
+                          <option value="">Select a product...</option>
+                          {catalogOptions.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.product_name} · {option.dosage} ·{" "}
+                              {option.purchase_type === "kit"
+                                ? "Kit of 10"
+                                : "Single"}{" "}
+                              · {money(option.price)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <EditNumberField
+                        label="Quantity"
+                        value={addQuantity}
+                        min={1}
+                        step={1}
+                        onChange={(value) =>
+                          setAddQuantity(Math.max(1, Math.floor(value)))
+                        }
+                      />
+
+                      <button
+                        type="button"
+                        onClick={addSelectedProductToDraft}
+                        style={addProductButton}
+                      >
+                        + Add to Order
+                      </button>
+                    </div>
+                  </div>
+
                   {draftItems.map((item) => {
                     const lineRevenue =
                       item.actual_unit_price * item.quantity;
@@ -949,11 +1185,25 @@ export default function OrderDetailsPage() {
                             </p>
                           </div>
 
-                          {item.was_on_sale && (
-                            <span style={saleBadge}>
-                              SALE {Number(item.sale_percent || 0)}% OFF
-                            </span>
-                          )}
+                          <div style={badgeRow}>
+                            {item.is_new && (
+                              <span style={newItemBadge}>NEW ITEM</span>
+                            )}
+
+                            {item.was_on_sale && (
+                              <span style={saleBadge}>
+                                SALE {Number(item.sale_percent || 0)}% OFF
+                              </span>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => removeDraftItem(item.id)}
+                              style={removeItemButton}
+                            >
+                              Remove
+                            </button>
+                          </div>
                         </div>
 
                         <div style={editGrid}>
@@ -1563,6 +1813,12 @@ export default function OrderDetailsPage() {
               grid-template-columns: minmax(0, 1fr) !important;
             }
           }
+
+          @media (max-width: 720px) {
+            select {
+              max-width: 100%;
+            }
+          }
         `}</style>
       </div>
     </main>
@@ -2080,6 +2336,55 @@ const previewMetric = {
   border: "1px solid rgba(255,255,255,.10)",
   borderRadius: 9,
   background: "rgba(0,0,0,.28)",
+};
+
+const addProductPanel = {
+  padding: 16,
+  border: "1px solid rgba(0,255,153,.34)",
+  borderRadius: 12,
+  background:
+    "linear-gradient(145deg, rgba(0,255,153,.06), rgba(0,0,0,.28))",
+};
+
+const addProductGrid = {
+  marginTop: 12,
+  display: "grid",
+  gridTemplateColumns: "minmax(260px, 1fr) 120px auto",
+  gap: 10,
+  alignItems: "end",
+};
+
+const addProductButton = {
+  minHeight: 45,
+  padding: "0 16px",
+  border: "1px solid #45d97a",
+  borderRadius: 9,
+  background: "rgba(46,234,111,.10)",
+  color: "#7dffa7",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const removeItemButton = {
+  minHeight: 30,
+  padding: "0 10px",
+  border: "1px solid rgba(255,111,111,.48)",
+  borderRadius: 999,
+  background: "rgba(255,111,111,.08)",
+  color: "#ff8c8c",
+  fontSize: 10,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const newItemBadge = {
+  padding: "5px 8px",
+  borderRadius: 999,
+  background: "rgba(0,217,255,.10)",
+  color: "#7df9ff",
+  border: "1px solid rgba(0,217,255,.42)",
+  fontSize: 10,
+  fontWeight: 900,
 };
 
 const adjustmentPanel = {
