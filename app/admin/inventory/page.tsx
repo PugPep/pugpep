@@ -321,6 +321,7 @@ export default function InventoryManagerPage() {
   image: selectedProduct.image,
   short_description: selectedProduct.short_description,
   description: selectedProduct.description,
+  storage: selectedProduct.storage || "",
 })
       .eq("id", selectedProduct.id);
 
@@ -1952,6 +1953,20 @@ export default function InventoryManagerPage() {
                           event.target.value
                         )
                       }
+                      style={bigTextarea}
+                    />
+                  </Field>
+
+                  <Field label="Storage Instructions" wide>
+                    <textarea
+                      value={selectedProduct.storage || ""}
+                      onChange={(event) =>
+                        updateProductField(
+                          "storage",
+                          event.target.value
+                        )
+                      }
+                      placeholder="Example: Store refrigerated at 2–8°C. Protect from light."
                       style={bigTextarea}
                     />
                   </Field>
