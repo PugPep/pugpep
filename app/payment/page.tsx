@@ -489,6 +489,27 @@ export default function PaymentPage() {
       }
 
       if (existingOrder) {
+        const {
+          count: existingItemCount,
+          error: existingItemsError,
+        } = await supabase
+          .from("order_items")
+          .select("id", {
+            count: "exact",
+            head: true,
+          })
+          .eq("order_id", order.id);
+
+        if (existingItemsError) {
+          throw existingItemsError;
+        }
+
+        if (!existingItemCount || existingItemCount <= 0) {
+          throw new Error(
+            "This order record exists, but its product items are missing. The order was not confirmed. Please contact support before retrying."
+          );
+        }
+
         const confirmedOrder = {
           ...order,
           confirmed: true,
@@ -574,6 +595,15 @@ export default function PaymentPage() {
 
       const pricing =
         authoritativePricing;
+
+      if (
+        !pricing.campaign.items ||
+        pricing.campaign.items.length === 0
+      ) {
+        throw new Error(
+          "Order confirmation stopped because no priced items were generated. Your cart has not been cleared."
+        );
+      }
 
       const accounting =
         pricing.accounting;
@@ -1104,6 +1134,12 @@ export default function PaymentPage() {
           }
         );
 
+      if (orderItems.length === 0) {
+        throw new Error(
+          "Order confirmation stopped because no order items were generated."
+        );
+      }
+
       const {
         data: insertedItems,
         error: itemsError,
@@ -1116,6 +1152,15 @@ export default function PaymentPage() {
 
       if (itemsError) {
         throw itemsError;
+      }
+
+      if (
+        !insertedItems ||
+        insertedItems.length !== orderItems.length
+      ) {
+        throw new Error(
+          `Order item verification failed. Expected ${orderItems.length} item row(s) but saved ${insertedItems?.length ?? 0}.`
+        );
       }
 
       const insertedItemMap =
