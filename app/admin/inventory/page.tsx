@@ -77,6 +77,9 @@ export default function InventoryManagerPage() {
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
   const [imageUploading, setImageUploading] = useState(false);
+  const [globalKitDiscount, setGlobalKitDiscount] = useState("15");
+  const [updatingAllKits, setUpdatingAllKits] = useState(false);
+
 
 
   const emptyNewOption = {
@@ -384,6 +387,134 @@ export default function InventoryManagerPage() {
     await loadDeletedProducts();
   }
 
+  function findMatchingSingleOption(option: Option) {
+    if (option.purchase_type !== "kit") {
+      return null;
+    }
+
+    return (
+      options.find(
+        (candidate) =>
+          candidate.purchase_type === "single" &&
+          candidate.product_slug === option.product_slug &&
+          candidate.dosage === option.dosage &&
+          !candidate.archived_at
+      ) || null
+    );
+  }
+
+  function getKitSavings(option: Option) {
+    if (option.purchase_type !== "kit") {
+      return null;
+    }
+
+    const single = findMatchingSingleOption(option);
+
+    if (!single) {
+      return null;
+    }
+
+    const singlePrice = Math.max(
+      0,
+      Number(
+        pricingDrafts[single.id]?.price ??
+          single.price ??
+          0
+      )
+    );
+
+    const kitPrice = Math.max(
+      0,
+      Number(
+        pricingDrafts[option.id]?.price ??
+          option.price ??
+          0
+      )
+    );
+
+    const tenSingleValue = singlePrice * 10;
+
+    if (tenSingleValue <= 0) {
+      return null;
+    }
+
+    const savingsAmount = Math.max(
+      0,
+      tenSingleValue - kitPrice
+    );
+
+    const savingsPercent =
+      (savingsAmount / tenSingleValue) * 100;
+
+    return {
+      singlePrice,
+      tenSingleValue,
+      kitPrice,
+      savingsAmount,
+      savingsPercent,
+    };
+  }
+
+  async function applyGlobalKitDiscount() {
+    if (updatingAllKits) return;
+
+    const discountPercent = Math.min(
+      100,
+      Math.max(
+        0,
+        Number(globalKitDiscount || 0)
+      )
+    );
+
+    const confirmed = window.confirm(
+      `Apply a ${discountPercent}% kit discount to every active kit?\n\n` +
+        "Each kit will be repriced from the matching dosage single-vial price × 10. " +
+        "Kit bundle discounts will also remain disabled."
+    );
+
+    if (!confirmed) return;
+
+    setUpdatingAllKits(true);
+    setNotice("");
+
+    try {
+      const { data, error } = await supabase.rpc(
+        "admin_apply_global_kit_discount",
+        {
+          p_discount_percent: discountPercent,
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+
+      const result =
+        data && typeof data === "object"
+          ? (data as Record<string, unknown>)
+          : null;
+
+      setNotice(
+        `Global kit pricing updated to ${discountPercent}% savings.` +
+          (result?.updated_count != null
+            ? ` ${String(result.updated_count)} kit option(s) updated.`
+            : "")
+      );
+
+      if (selectedSlug) {
+        await loadOptions(selectedSlug);
+      }
+    } catch (error) {
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Global kit pricing could not be updated."
+      );
+    } finally {
+      setUpdatingAllKits(false);
+    }
+  }
+
   function updatePricingDraft(
     optionId: string,
     patch: Partial<PricingDraft>
@@ -629,6 +760,14 @@ export default function InventoryManagerPage() {
       sale_percent: 0,
       is_active: true,
       archived_at: null,
+      bundle_discount_enabled:
+        newOption.purchase_type === "single",
+      bundle_qty_1: 3,
+      bundle_discount_1: 2,
+      bundle_qty_2: 5,
+      bundle_discount_2: 4,
+      bundle_qty_3: 8,
+      bundle_discount_3: 7,
     });
 
     if (optionError) {
@@ -803,6 +942,54 @@ export default function InventoryManagerPage() {
             value={String(saleOptions)}
             accent="#ff75df"
           />
+        </section>
+
+        <section style={globalKitPanel}>
+          <div style={globalKitHeader}>
+            <div>
+              <p style={sectionEyebrow}>GLOBAL KIT PRICING</p>
+              <h2 style={sectionTitle}>10-Vial Kit Discount</h2>
+
+              <p style={globalKitHelp}>
+                Kit prices are calculated from 10 × the matching single-vial price.
+                This updates every active kit at once. Single-vial bundle savings remain
+                separate at 3+ = 2%, 5+ = 4%, and 8+ = 7%.
+              </p>
+            </div>
+
+            <div style={globalKitControls}>
+              <label style={globalKitInputWrap}>
+                <span style={globalKitLabel}>Kit Discount %</span>
+
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={globalKitDiscount}
+                  onChange={(event) =>
+                    setGlobalKitDiscount(event.target.value)
+                  }
+                  style={globalKitInput}
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => void applyGlobalKitDiscount()}
+                disabled={updatingAllKits}
+                style={{
+                  ...primaryButton,
+                  minWidth: 220,
+                  opacity: updatingAllKits ? 0.65 : 1,
+                }}
+              >
+                {updatingAllKits
+                  ? "Updating All Kits..."
+                  : "Apply to All Active Kits"}
+              </button>
+            </div>
+          </div>
         </section>
 
         <div className="inventory-layout" style={workspace}>
@@ -1269,6 +1456,11 @@ export default function InventoryManagerPage() {
                             ? (profit / previewPrice) * 100
                             : 0;
 
+                        const kitSavings =
+                          option.purchase_type === "kit"
+                            ? getKitSavings(option)
+                            : null;
+
                         return (
                           <article
                             key={option.id}
@@ -1351,6 +1543,58 @@ export default function InventoryManagerPage() {
                                 accent="#ffcc00"
                               />
                             </div>
+
+                            {kitSavings && (
+                              <div style={kitSavingsAdminCard}>
+                                <div>
+                                  <span style={kitSavingsAdminEyebrow}>
+                                    BUILT-IN KIT SAVINGS
+                                  </span>
+
+                                  <strong style={kitSavingsAdminTitle}>
+                                    {kitSavings.savingsPercent.toFixed(2)}% OFF
+                                  </strong>
+                                </div>
+
+                                <div style={kitSavingsAdminMetrics}>
+                                  <span>
+                                    Single vial{" "}
+                                    <strong>
+                                      ${kitSavings.singlePrice.toFixed(2)}
+                                    </strong>
+                                  </span>
+
+                                  <span>
+                                    10 singles{" "}
+                                    <strong>
+                                      ${kitSavings.tenSingleValue.toFixed(2)}
+                                    </strong>
+                                  </span>
+
+                                  <span>
+                                    Kit{" "}
+                                    <strong>
+                                      ${kitSavings.kitPrice.toFixed(2)}
+                                    </strong>
+                                  </span>
+
+                                  <span style={{ color: "#00ff99" }}>
+                                    Saves{" "}
+                                    <strong>
+                                      ${kitSavings.savingsAmount.toFixed(2)}
+                                    </strong>
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            {option.purchase_type === "kit" &&
+                              !kitSavings && (
+                                <div style={kitSavingsMissing}>
+                                  Add an active matching single-vial option for this
+                                  dosage to calculate the kit discount.
+                                </div>
+                              )}
 
                             <div style={optionEditorGrid}>
                               <Field label="Price">
@@ -1489,25 +1733,35 @@ export default function InventoryManagerPage() {
                                   Active Product
                                 </label>
 
-                                <label style={saleToggle}>
-                                  <input
-                                    type="checkbox"
-                                    checked={option.bundle_discount_enabled !== false}
-                                    onChange={(event) => {
-                                      const checked = event.target.checked;
-                                      updateOptionLocal(option.id, {
-                                        bundle_discount_enabled: checked,
-                                      });
-                                      void updateOption(
-                                        option.id,
-                                        "bundle_discount_enabled",
-                                        checked
-                                      );
-                                    }}
-                                  />
+                                {option.purchase_type === "single" ? (
+                                  <label style={saleToggle}>
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        option.bundle_discount_enabled !== false
+                                      }
+                                      onChange={(event) => {
+                                        const checked = event.target.checked;
 
-                                  Bundle Savings
-                                </label>
+                                        updateOptionLocal(option.id, {
+                                          bundle_discount_enabled: checked,
+                                        });
+
+                                        void updateOption(
+                                          option.id,
+                                          "bundle_discount_enabled",
+                                          checked
+                                        );
+                                      }}
+                                    />
+
+                                    Bundle Savings
+                                  </label>
+                                ) : (
+                                  <span style={kitPricingBadge}>
+                                    KIT PRICING · NO BUNDLE TIERS
+                                  </span>
+                                )}
 
                                 {isArchived && (
                                   <span
@@ -1523,86 +1777,124 @@ export default function InventoryManagerPage() {
                               </div>
                             </div>
 
-                            <div style={bundleEditor}>
-                              <div style={bundleEditorHeader}>
-                                <div>
-                                  <strong style={{ color: "#00d9ff" }}>
-                                    Bundle Quantity Discounts
-                                  </strong>
-                                  <p style={bundleEditorHelp}>
-                                    These tiers apply only when this option has no active manual or campaign sale.
-                                  </p>
+                            {option.purchase_type === "single" && (
+                              <div style={bundleEditor}>
+                                <div style={bundleEditorHeader}>
+                                  <div>
+                                    <strong style={{ color: "#00d9ff" }}>
+                                      Single-Vial Bundle Savings
+                                    </strong>
+
+                                    <p style={bundleEditorHelp}>
+                                      Standard structure: 3+ vials = 2% off,
+                                      5+ vials = 4% off, and 8+ vials = 7% off.
+                                      Bundle savings pause whenever a manual or
+                                      campaign sale is active. At 10 vials,
+                                      customers should choose the 10-vial kit.
+                                    </p>
+                                  </div>
                                 </div>
-                              </div>
 
-                              <div style={bundleEditorGrid}>
-                                {[
-                                  ["Tier 1", "bundle_qty_1", "bundle_discount_1"],
-                                  ["Tier 2", "bundle_qty_2", "bundle_discount_2"],
-                                  ["Tier 3", "bundle_qty_3", "bundle_discount_3"],
-                                ].map(([label, qtyField, discountField]) => (
-                                  <div key={label} style={bundleTierAdminCard}>
-                                    <strong>{label}</strong>
+                                <div style={bundleEditorGrid}>
+                                  {[
+                                    ["Tier 1", "bundle_qty_1", "bundle_discount_1"],
+                                    ["Tier 2", "bundle_qty_2", "bundle_discount_2"],
+                                    ["Tier 3", "bundle_qty_3", "bundle_discount_3"],
+                                  ].map(([label, qtyField, discountField]) => (
+                                    <div key={label} style={bundleTierAdminCard}>
+                                      <strong>{label}</strong>
 
-                                    <Field label="Quantity">
-                                      <input
-                                        type="number"
-                                        min="1"
-                                        value={Number(option[qtyField as keyof Option] || 0)}
-                                        onChange={(event) =>
-                                          updateOptionLocal(option.id, {
-                                            [qtyField]: Math.max(1, Number(event.target.value || 1)),
-                                          } as Partial<Option>)
-                                        }
-                                        onBlur={() =>
-                                          void updateOption(
-                                            option.id,
-                                            qtyField,
-                                            Math.max(
-                                              1,
-                                              Number(option[qtyField as keyof Option] || 1)
-                                            )
-                                          )
-                                        }
-                                        style={input}
-                                      />
-                                    </Field>
-
-                                    <Field label="Discount %">
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        max="100"
-                                        step="0.1"
-                                        value={Number(option[discountField as keyof Option] || 0)}
-                                        onChange={(event) =>
-                                          updateOptionLocal(option.id, {
-                                            [discountField]: Math.min(
-                                              100,
-                                              Math.max(0, Number(event.target.value || 0))
-                                            ),
-                                          } as Partial<Option>)
-                                        }
-                                        onBlur={() =>
-                                          void updateOption(
-                                            option.id,
-                                            discountField,
-                                            Math.min(
-                                              100,
-                                              Math.max(
-                                                0,
-                                                Number(option[discountField as keyof Option] || 0)
+                                      <Field label="Quantity">
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          max="9"
+                                          value={Number(
+                                            option[qtyField as keyof Option] || 0
+                                          )}
+                                          onChange={(event) =>
+                                            updateOptionLocal(option.id, {
+                                              [qtyField]: Math.min(
+                                                9,
+                                                Math.max(
+                                                  1,
+                                                  Number(
+                                                    event.target.value || 1
+                                                  )
+                                                )
+                                              ),
+                                            } as Partial<Option>)
+                                          }
+                                          onBlur={() =>
+                                            void updateOption(
+                                              option.id,
+                                              qtyField,
+                                              Math.min(
+                                                9,
+                                                Math.max(
+                                                  1,
+                                                  Number(
+                                                    option[
+                                                      qtyField as keyof Option
+                                                    ] || 1
+                                                  )
+                                                )
                                               )
                                             )
-                                          )
-                                        }
-                                        style={input}
-                                      />
-                                    </Field>
-                                  </div>
-                                ))}
+                                          }
+                                          style={input}
+                                        />
+                                      </Field>
+
+                                      <Field label="Discount %">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          max="100"
+                                          step="0.1"
+                                          value={Number(
+                                            option[
+                                              discountField as keyof Option
+                                            ] || 0
+                                          )}
+                                          onChange={(event) =>
+                                            updateOptionLocal(option.id, {
+                                              [discountField]: Math.min(
+                                                100,
+                                                Math.max(
+                                                  0,
+                                                  Number(
+                                                    event.target.value || 0
+                                                  )
+                                                )
+                                              ),
+                                            } as Partial<Option>)
+                                          }
+                                          onBlur={() =>
+                                            void updateOption(
+                                              option.id,
+                                              discountField,
+                                              Math.min(
+                                                100,
+                                                Math.max(
+                                                  0,
+                                                  Number(
+                                                    option[
+                                                      discountField as keyof Option
+                                                    ] || 0
+                                                  )
+                                                )
+                                              )
+                                            )
+                                          }
+                                          style={input}
+                                        />
+                                      </Field>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
+                            )}
 
                             {inv ? (
                               <div style={inventoryEditor}>
@@ -2215,6 +2507,119 @@ const statLabel = {
 
 const statValue = {
   fontSize: 34,
+};
+
+const globalKitPanel = {
+  marginTop: 18,
+  padding: "clamp(18px, 3vw, 24px)",
+  border: "1px solid rgba(0,255,153,.32)",
+  borderRadius: 16,
+  background:
+    "linear-gradient(145deg, rgba(0,255,153,.055), rgba(0,0,0,.35))",
+};
+
+const globalKitHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-end",
+  gap: 20,
+  flexWrap: "wrap" as const,
+};
+
+const globalKitHelp = {
+  maxWidth: 760,
+  margin: "8px 0 0",
+  color: "#9c9ca6",
+  lineHeight: 1.6,
+};
+
+const globalKitControls = {
+  display: "flex",
+  alignItems: "flex-end",
+  gap: 10,
+  flexWrap: "wrap" as const,
+};
+
+const globalKitInputWrap = {
+  display: "grid",
+  gap: 6,
+};
+
+const globalKitLabel = {
+  color: "#a7a7af",
+  fontSize: 11,
+  fontWeight: 900,
+  textTransform: "uppercase" as const,
+};
+
+const globalKitInput = {
+  width: 130,
+  minHeight: 46,
+  boxSizing: "border-box" as const,
+  padding: "0 12px",
+  border: "1px solid rgba(0,255,153,.35)",
+  borderRadius: 9,
+  background: "#050505",
+  color: "#fff",
+  fontSize: 16,
+  fontWeight: 900,
+};
+
+const kitSavingsAdminCard = {
+  marginTop: 12,
+  padding: 14,
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  flexWrap: "wrap" as const,
+  border: "1px solid rgba(0,255,153,.32)",
+  borderRadius: 11,
+  background: "rgba(0,255,153,.055)",
+};
+
+const kitSavingsAdminEyebrow = {
+  display: "block",
+  color: "#8d8d96",
+  fontSize: 9,
+  fontWeight: 900,
+  letterSpacing: ".12em",
+};
+
+const kitSavingsAdminTitle = {
+  display: "block",
+  marginTop: 4,
+  color: "#00ff99",
+  fontSize: 22,
+};
+
+const kitSavingsAdminMetrics = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-end",
+  gap: 14,
+  flexWrap: "wrap" as const,
+  color: "#c6c6cd",
+  fontSize: 12,
+};
+
+const kitSavingsMissing = {
+  marginTop: 12,
+  padding: "10px 12px",
+  border: "1px solid rgba(255,204,0,.30)",
+  borderRadius: 9,
+  background: "rgba(255,204,0,.05)",
+  color: "#ffcc66",
+  fontSize: 12,
+};
+
+const kitPricingBadge = {
+  padding: "5px 8px",
+  borderRadius: 999,
+  border: "1px solid rgba(0,255,153,.30)",
+  background: "rgba(0,255,153,.05)",
+  color: "#00ff99",
+  fontSize: 10,
+  fontWeight: 900,
 };
 
 const workspace = {

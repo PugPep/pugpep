@@ -579,6 +579,70 @@ export default function ProductDetailPage() {
       : "Single Vial";
   }
 
+  function getMatchingSingleOption(
+    option: ProductOption
+  ) {
+    if (option.purchase_type !== "kit") {
+      return null;
+    }
+
+    return (
+      options.find(
+        (candidate) =>
+          candidate.purchase_type === "single" &&
+          candidate.dosage === option.dosage &&
+          candidate.is_active !== false &&
+          !candidate.archived_at
+      ) || null
+    );
+  }
+
+  function getKitSavings(option: ProductOption) {
+    if (option.purchase_type !== "kit") {
+      return null;
+    }
+
+    const single =
+      getMatchingSingleOption(option);
+
+    if (!single) {
+      return null;
+    }
+
+    const singlePrice =
+      Number(single.price || 0);
+
+    const kitPrice =
+      Number(option.price || 0);
+
+    const tenSingleValue =
+      singlePrice * 10;
+
+    if (tenSingleValue <= 0) {
+      return null;
+    }
+
+    const savingsAmount =
+      Math.max(
+        0,
+        tenSingleValue -
+          kitPrice
+      );
+
+    const savingsPercent =
+      (savingsAmount /
+        tenSingleValue) *
+      100;
+
+    return {
+      singlePrice,
+      tenSingleValue,
+      kitPrice,
+      savingsAmount,
+      savingsPercent,
+    };
+  }
+
   function getSalePrice(option: ProductOption) {
     const regularPrice = Number(option.price);
     const salePercent = Number(
@@ -596,6 +660,13 @@ export default function ProductDetailPage() {
   }
 
   function getBundleTier(option: ProductOption, requestedQuantity: number) {
+    if (
+      option.purchase_type !== "single" ||
+      requestedQuantity >= 10
+    ) {
+      return null;
+    }
+
     const saleActive =
       Boolean(
         option.sale_active &&
@@ -1005,6 +1076,11 @@ export default function ProductDetailPage() {
                   const isSelected =
                     selectedOption?.id === option.id;
 
+                  const kitSavings =
+                    option.purchase_type === "kit"
+                      ? getKitSavings(option)
+                      : null;
+
                   return (
                     <button
                       key={option.id}
@@ -1087,6 +1163,18 @@ export default function ProductDetailPage() {
                         )}
                       </div>
 
+                      {kitSavings && (
+                        <div style={kitOptionSavings}>
+                          <strong>
+                            KIT SAVINGS {kitSavings.savingsPercent.toFixed(2)}% OFF
+                          </strong>
+
+                          <span>
+                            Save ${kitSavings.savingsAmount.toFixed(2)} vs. 10 single vials
+                          </span>
+                        </div>
+                      )}
+
                       <span
                         style={{
                           ...stockLabel,
@@ -1156,66 +1244,155 @@ export default function ProductDetailPage() {
                   </div>
                 </div>
 
-                <div style={bundleSavingsCard}>
-                  <div style={bundleSavingsHeader}>
-                    <strong>Bundle Savings</strong>
+                {selectedOption.purchase_type === "single" ? (
+                  <div style={bundleSavingsCard}>
+                    <div style={bundleSavingsHeader}>
+                      <strong>Bundle Savings</strong>
+
+                      {hasActiveSaleForOption(selectedOption) ? (
+                        <span style={bundlePausedBadge}>
+                          PAUSED DURING SALE
+                        </span>
+                      ) : quantity >= 10 ? (
+                        <span style={bundlePausedBadge}>
+                          CHOOSE THE 10-VIAL KIT
+                        </span>
+                      ) : getBundleTier(selectedOption, quantity) ? (
+                        <span style={bundleActiveBadge}>
+                          {getBundleTier(selectedOption, quantity)?.discount}% APPLIED
+                        </span>
+                      ) : null}
+                    </div>
 
                     {hasActiveSaleForOption(selectedOption) ? (
-                      <span style={bundlePausedBadge}>
-                        PAUSED DURING SALE
-                      </span>
-                    ) : getBundleTier(selectedOption, quantity) ? (
-                      <span style={bundleActiveBadge}>
-                        {getBundleTier(selectedOption, quantity)?.discount}% APPLIED
-                      </span>
-                    ) : null}
+                      <p style={bundleHelpText}>
+                        Bundle pricing does not stack with an active product
+                        or campaign sale. Your sale pricing is being used instead.
+                      </p>
+                    ) : quantity >= 10 ? (
+                      <p style={bundleHelpText}>
+                        For 10 vials, choose the Full Kit of 10 instead.
+                        Kit pricing has its own built-in savings compared with
+                        purchasing 10 single vials.
+                      </p>
+                    ) : selectedOption.bundle_discount_enabled === false ? (
+                      <p style={bundleHelpText}>
+                        Bundle savings are not enabled for this option.
+                      </p>
+                    ) : (
+                      <>
+                        <div style={bundleTierGrid}>
+                          {[
+                            {
+                              quantity: Number(
+                                selectedOption.bundle_qty_1 || 3
+                              ),
+                              discount: Number(
+                                selectedOption.bundle_discount_1 || 2
+                              ),
+                            },
+                            {
+                              quantity: Number(
+                                selectedOption.bundle_qty_2 || 5
+                              ),
+                              discount: Number(
+                                selectedOption.bundle_discount_2 || 4
+                              ),
+                            },
+                            {
+                              quantity: Number(
+                                selectedOption.bundle_qty_3 || 8
+                              ),
+                              discount: Number(
+                                selectedOption.bundle_discount_3 || 7
+                              ),
+                            },
+                          ]
+                            .filter(
+                              (tier) =>
+                                tier.quantity > 0 &&
+                                tier.quantity < 10 &&
+                                tier.discount > 0
+                            )
+                            .map((tier) => {
+                              const active =
+                                quantity >= tier.quantity;
+
+                              return (
+                                <div
+                                  key={`${tier.quantity}-${tier.discount}`}
+                                  style={{
+                                    ...bundleTier,
+                                    ...(active
+                                      ? bundleTierActive
+                                      : {}),
+                                  }}
+                                >
+                                  <strong>{tier.quantity}+ vials</strong>
+                                  <span>{tier.discount}% off</span>
+                                </div>
+                              );
+                            })}
+                        </div>
+
+                        <p style={bundleHelpText}>
+                          Buying 10 vials? Select the Full Kit of 10 for
+                          dedicated kit savings.
+                        </p>
+                      </>
+                    )}
                   </div>
+                ) : (
+                  (() => {
+                    const savings =
+                      getKitSavings(selectedOption);
 
-                  {hasActiveSaleForOption(selectedOption) ? (
-                    <p style={bundleHelpText}>
-                      Bundle pricing does not stack with an active product or campaign sale.
-                      Your active sale pricing is being used instead.
-                    </p>
-                  ) : selectedOption.bundle_discount_enabled === false ? (
-                    <p style={bundleHelpText}>
-                      Bundle savings are not enabled for this option.
-                    </p>
-                  ) : (
-                    <div style={bundleTierGrid}>
-                      {[
-                        {
-                          quantity: Number(selectedOption.bundle_qty_1 || 0),
-                          discount: Number(selectedOption.bundle_discount_1 || 0),
-                        },
-                        {
-                          quantity: Number(selectedOption.bundle_qty_2 || 0),
-                          discount: Number(selectedOption.bundle_discount_2 || 0),
-                        },
-                        {
-                          quantity: Number(selectedOption.bundle_qty_3 || 0),
-                          discount: Number(selectedOption.bundle_discount_3 || 0),
-                        },
-                      ]
-                        .filter((tier) => tier.quantity > 0 && tier.discount > 0)
-                        .map((tier) => {
-                          const active = quantity >= tier.quantity;
+                    if (!savings) {
+                      return null;
+                    }
 
-                          return (
-                            <div
-                              key={`${tier.quantity}-${tier.discount}`}
-                              style={{
-                                ...bundleTier,
-                                ...(active ? bundleTierActive : {}),
-                              }}
-                            >
-                              <strong>{tier.quantity}+ units</strong>
-                              <span>{tier.discount}% off</span>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )}
-                </div>
+                    return (
+                      <div style={kitSavingsCard}>
+                        <div style={kitSavingsHeader}>
+                          <div>
+                            <span style={kitSavingsEyebrow}>
+                              BUILT-IN 10-VIAL KIT SAVINGS
+                            </span>
+
+                            <strong style={kitSavingsTitle}>
+                              {savings.savingsPercent.toFixed(2)}% OFF
+                            </strong>
+                          </div>
+
+                          <span style={kitSavingsAmount}>
+                            SAVE ${savings.savingsAmount.toFixed(2)}
+                          </span>
+                        </div>
+
+                        <div style={kitSavingsComparison}>
+                          <span>
+                            10 single vials{" "}
+                            <strong>
+                              ${savings.tenSingleValue.toFixed(2)}
+                            </strong>
+                          </span>
+
+                          <span>
+                            Kit price{" "}
+                            <strong>
+                              ${savings.kitPrice.toFixed(2)}
+                            </strong>
+                          </span>
+                        </div>
+
+                        <p style={bundleHelpText}>
+                          Kit savings are built into the regular kit price
+                          and are separate from temporary sales or checkout discounts.
+                        </p>
+                      </div>
+                    );
+                  })()
+                )}
 
                 <div style={availabilityBox}>
                   {selectedOption.purchase_type ===
@@ -1732,6 +1909,67 @@ const qtyButton = {
   cursor: "pointer",
   fontWeight: 800,
   fontSize: 18,
+};
+
+const kitOptionSavings = {
+  marginTop: 7,
+  display: "grid",
+  gap: 2,
+  color: "#00ff99",
+  fontSize: 11,
+  lineHeight: 1.35,
+  textAlign: "left" as const,
+};
+
+const kitSavingsCard = {
+  marginTop: 16,
+  padding: 15,
+  borderRadius: 12,
+  border: "1px solid rgba(0,255,153,.34)",
+  background:
+    "linear-gradient(145deg, rgba(0,255,153,.07), rgba(0,0,0,.35))",
+};
+
+const kitSavingsHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap" as const,
+};
+
+const kitSavingsEyebrow = {
+  display: "block",
+  color: "#888",
+  fontSize: 9,
+  fontWeight: 900,
+  letterSpacing: ".12em",
+};
+
+const kitSavingsTitle = {
+  display: "block",
+  marginTop: 4,
+  color: "#00ff99",
+  fontSize: 23,
+};
+
+const kitSavingsAmount = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  background: "#00ff99",
+  color: "#000",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const kitSavingsComparison = {
+  marginTop: 12,
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap" as const,
+  color: "#c7c7ce",
+  fontSize: 13,
 };
 
 const bundleSavingsCard = {

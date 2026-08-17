@@ -33,6 +33,23 @@ function money(value: unknown) {
   return `$${safeNumber(value).toFixed(2)}`;
 }
 
+function points(value: unknown) {
+  return safeNumber(value).toFixed(2);
+}
+
+function getVipTier(lifetimeSpend: number) {
+  if (lifetimeSpend >= 50000) return "Diamond";
+  if (lifetimeSpend >= 35000) return "Ruby";
+  if (lifetimeSpend >= 20000) return "Sapphire";
+  if (lifetimeSpend >= 10000) return "Emerald";
+  if (lifetimeSpend >= 5000) return "Platinum";
+  if (lifetimeSpend >= 2500) return "Gold";
+  if (lifetimeSpend >= 1000) return "Silver";
+  if (lifetimeSpend >= 500) return "Bronze";
+  if (lifetimeSpend >= 250) return "Iron";
+  return "Stone";
+}
+
 function toEditableOrderItem(item: any): EditableOrderItem {
   const quantity = Math.max(1, Math.floor(safeNumber(item.quantity, 1)));
 
@@ -112,6 +129,7 @@ export default function OrderDetailsPage() {
   const [savingAdjustment, setSavingAdjustment] = useState(false);
   const [adjustmentNotice, setAdjustmentNotice] = useState("");
   const [adjustments, setAdjustments] = useState<any[]>([]);
+  const [customerProfile, setCustomerProfile] = useState<any>(null);
 
   useEffect(() => {
     if (id) loadOrder();
@@ -137,7 +155,7 @@ export default function OrderDetailsPage() {
     const { data: adjustmentData, error: adjustmentError } = await supabase
       .from("order_manual_adjustments")
       .select(
-        "id,adjusted_at,adjusted_by_email,reason,merchandise_revenue_before,merchandise_revenue_after,customer_total_before,customer_total_after,profit_before,profit_after"
+        "id,adjusted_at,adjusted_by_email,reason,merchandise_revenue_before,merchandise_revenue_after,customer_total_before,customer_total_after,profit_before,profit_after,reward_points_earned_before,reward_points_earned_after,reward_balance_adjustment,lifetime_spend_before_adjustment,lifetime_spend_after_adjustment,vip_tier_before,vip_tier_after"
       )
       .eq("order_id", orderData.id)
       .order("adjusted_at", { ascending: false })
@@ -147,9 +165,26 @@ export default function OrderDetailsPage() {
       console.error("Unable to load manual adjustment history:", adjustmentError);
     }
 
+    let profileData: any = null;
+
+    if (orderData.user_id) {
+      const { data: loadedProfile, error: profileError } = await supabase
+        .from("customer_profiles")
+        .select("id,reward_points,lifetime_spend,vip_tier")
+        .eq("id", orderData.user_id)
+        .maybeSingle();
+
+      if (profileError) {
+        console.error("Unable to load customer rewards profile:", profileError);
+      } else {
+        profileData = loadedProfile;
+      }
+    }
+
     setOrder(orderData);
     setItems(itemData || []);
     setAdjustments(adjustmentData || []);
+    setCustomerProfile(profileData);
 
     if (!editingOrder) {
       setDraftItems((itemData || []).map(toEditableOrderItem));
@@ -305,7 +340,8 @@ export default function OrderDetailsPage() {
     const confirmed = window.confirm(
       `Save this manual correction to order ${order.order_number}?\\n\\n` +
         "This will update the historical order-item pricing snapshot, " +
-        "recalculate the order totals and profit, and create an audit record."
+        "recalculate totals, profit, PugPoints, lifetime spend, VIP status, " +
+        "and create an audit record."
     );
 
     if (!confirmed) return;
@@ -350,7 +386,19 @@ export default function OrderDetailsPage() {
         result?.new_total != null
           ? `Order corrected. New total: ${money(
               result.new_total
-            )} · New profit: ${money(result.new_profit)}.`
+            )} · New profit: ${money(
+              result.new_profit
+            )} · PugPoints earned: ${points(
+              result.new_rewards_points_earned
+            )}${
+              safeNumber(result.reward_balance_adjustment) !== 0
+                ? ` · Balance adjustment: ${
+                    safeNumber(result.reward_balance_adjustment) > 0
+                      ? "+"
+                      : ""
+                  }${points(result.reward_balance_adjustment)}`
+                : ""
+            }.`
           : "Order corrected successfully."
       );
 
@@ -569,6 +617,21 @@ export default function OrderDetailsPage() {
                 <Info label="VIP at Purchase" value={order.vip_tier_at_purchase || "-"} />
                 <Info label="Lifetime Spend Before" value={`$${Number(order.lifetime_spend_before || 0).toFixed(2)}`} />
                 <Info label="Lifetime Spend After" value={`$${Number(order.lifetime_spend_after || 0).toFixed(2)}`} />
+                <Info
+                  label="Current PugPoints Balance"
+                  value={points(customerProfile?.reward_points || 0)}
+                  accent="#ff75df"
+                />
+                <Info
+                  label="Current Lifetime Spend"
+                  value={money(customerProfile?.lifetime_spend || 0)}
+                  accent="#7df9ff"
+                />
+                <Info
+                  label="Current VIP Tier"
+                  value={String(customerProfile?.vip_tier || "-")}
+                  accent="#7df9ff"
+                />
               </InfoGrid>
 
               {order.has_lifetime_free_shipping && (
@@ -666,6 +729,52 @@ export default function OrderDetailsPage() {
                         overrideNetRevenue - shippingCollected
                       );
 
+                    const oldRewardPointsEarned =
+                      Number(order.rewards_points_earned || 0);
+
+                    /*
+                     * Exact rewards rule:
+                     * $187.50 corrected Net Revenue = 187.50 PugPoints.
+                     */
+                    const projectedRewardPointsEarned =
+                      overrideNetRevenue;
+
+                    const projectedPointsDelta =
+                      projectedRewardPointsEarned -
+                      oldRewardPointsEarned;
+
+                    const rewardsAlreadyApplied =
+                      Boolean(order.rewards_applied);
+
+                    const currentRewardBalance =
+                      Number(customerProfile?.reward_points || 0);
+
+                    const projectedRewardBalance =
+                      rewardsAlreadyApplied
+                        ? currentRewardBalance + projectedPointsDelta
+                        : currentRewardBalance;
+
+                    const oldOrderTotal =
+                      Number(order.total || 0);
+
+                    const totalDelta =
+                      projectedCustomerTotal -
+                      oldOrderTotal;
+
+                    const currentLifetimeSpend =
+                      Number(customerProfile?.lifetime_spend || 0);
+
+                    const projectedLifetimeSpend =
+                      rewardsAlreadyApplied
+                        ? Math.max(
+                            0,
+                            currentLifetimeSpend + totalDelta
+                          )
+                        : currentLifetimeSpend;
+
+                    const projectedVipTier =
+                      getVipTier(projectedLifetimeSpend);
+
                     return (
                       <div style={netRevenueEditor}>
                         <div>
@@ -690,6 +799,14 @@ export default function OrderDetailsPage() {
                           }
                           style={input}
                         />
+
+                        <div style={rewardsRuleNotice}>
+                          <strong>Exact PugPoints calculation</strong>
+                          <span>
+                            Corrected Net Revenue of $187.50 earns exactly
+                            187.50 PugPoints. No rounding to a whole point.
+                          </span>
+                        </div>
 
                         <div style={netRevenuePreviewGrid}>
                           <PreviewMetric
@@ -720,6 +837,88 @@ export default function OrderDetailsPage() {
                                 ? "#00ff99"
                                 : "#ffcc66"
                             }
+                          />
+
+                          <PreviewMetric
+                            label="PugPoints Earned"
+                            value={`${points(
+                              oldRewardPointsEarned
+                            )} → ${points(
+                              projectedRewardPointsEarned
+                            )}`}
+                            accent="#ff75df"
+                          />
+
+                          <PreviewMetric
+                            label={
+                              rewardsAlreadyApplied
+                                ? "PugPoints Balance"
+                                : "PugPoints Balance"
+                            }
+                            value={
+                              rewardsAlreadyApplied
+                                ? `${points(
+                                    currentRewardBalance
+                                  )} → ${points(
+                                    projectedRewardBalance
+                                  )}`
+                                : `${points(
+                                    currentRewardBalance
+                                  )} (no change yet)`
+                            }
+                            accent={
+                              projectedPointsDelta < 0
+                                ? "#ffcc66"
+                                : "#00ff99"
+                            }
+                          />
+
+                          <PreviewMetric
+                            label="Points Adjustment"
+                            value={
+                              rewardsAlreadyApplied
+                                ? `${
+                                    projectedPointsDelta > 0
+                                      ? "+"
+                                      : ""
+                                  }${points(projectedPointsDelta)}`
+                                : "Pending until paid"
+                            }
+                            accent={
+                              projectedPointsDelta < 0
+                                ? "#ffcc66"
+                                : "#00ff99"
+                            }
+                          />
+
+                          <PreviewMetric
+                            label="Lifetime Spend"
+                            value={
+                              rewardsAlreadyApplied
+                                ? `${money(
+                                    currentLifetimeSpend
+                                  )} → ${money(
+                                    projectedLifetimeSpend
+                                  )}`
+                                : `${money(
+                                    currentLifetimeSpend
+                                  )} (no change yet)`
+                            }
+                            accent="#7df9ff"
+                          />
+
+                          <PreviewMetric
+                            label="Projected VIP"
+                            value={
+                              rewardsAlreadyApplied
+                                ? projectedVipTier
+                                : String(
+                                    customerProfile?.vip_tier ||
+                                      order.vip_tier_at_purchase ||
+                                      "Stone"
+                                  )
+                            }
+                            accent="#7df9ff"
                           />
                         </div>
                       </div>
@@ -1055,7 +1254,7 @@ export default function OrderDetailsPage() {
                 <Info label="Hero Appreciation" value={`-$${Number(order.hero_discount || 0).toFixed(2)}`} accent="#7df9ff" />
                 <Info label="PugPoints Used" value={String(Number(order.reward_points_used || 0))} />
                 <Info label="PugPoints Discount" value={`-$${Number(order.reward_discount || 0).toFixed(2)}`} accent="#00ff99" />
-                <Info label="PugPoints Earned" value={String(Number(order.rewards_points_earned || 0))} accent="#00ff99" />
+                <Info label="PugPoints Earned" value={points(order.rewards_points_earned || 0)} accent="#00ff99" />
                 <Info label="Total Discount" value={`-$${Number(order.total_discount || 0).toFixed(2)}`} accent="#00ff99" />
                 <Info label="Delivery Charged" value={`$${Number(order.shipping || 0).toFixed(2)}`} />
                 <Info label="Sales Tax" value={`$${Number(order.sales_tax_amount || 0).toFixed(2)}`} />
@@ -1115,6 +1314,66 @@ export default function OrderDetailsPage() {
                           {" → "}
                           {money(adjustment.profit_after)}
                         </span>
+
+                        {adjustment.reward_points_earned_before != null && (
+                          <span>
+                            PugPoints{" "}
+                            {points(
+                              adjustment.reward_points_earned_before
+                            )}
+                            {" → "}
+                            {points(
+                              adjustment.reward_points_earned_after
+                            )}
+                          </span>
+                        )}
+
+                        {safeNumber(
+                          adjustment.reward_balance_adjustment
+                        ) !== 0 && (
+                          <span
+                            style={{
+                              color:
+                                safeNumber(
+                                  adjustment.reward_balance_adjustment
+                                ) < 0
+                                  ? "#ffcc66"
+                                  : "#00ff99",
+                            }}
+                          >
+                            Balance{" "}
+                            {safeNumber(
+                              adjustment.reward_balance_adjustment
+                            ) > 0
+                              ? "+"
+                              : ""}
+                            {points(
+                              adjustment.reward_balance_adjustment
+                            )}
+                          </span>
+                        )}
+
+                        {adjustment.lifetime_spend_before_adjustment != null && (
+                          <span>
+                            Lifetime Spend{" "}
+                            {money(
+                              adjustment.lifetime_spend_before_adjustment
+                            )}
+                            {" → "}
+                            {money(
+                              adjustment.lifetime_spend_after_adjustment
+                            )}
+                          </span>
+                        )}
+
+                        {adjustment.vip_tier_before && (
+                          <span>
+                            VIP{" "}
+                            {adjustment.vip_tier_before}
+                            {" → "}
+                            {adjustment.vip_tier_after}
+                          </span>
+                        )}
                       </div>
                     </article>
                   ))}
@@ -1271,6 +1530,11 @@ export default function OrderDetailsPage() {
                 <Info label="Order Row ID" value={order.id} />
                 <Info label="Payment Status" value={order.status || "-"} />
                 <Info label="Delivery Status" value={shippingStatus} />
+                <Info
+                  label="Rewards Applied"
+                  value={order.rewards_applied ? "Yes" : "No"}
+                  accent={order.rewards_applied ? "#00ff99" : "#ffcc66"}
+                />
                 <Info
                   label="Manual Adjustments"
                   value={String(Number(order.manual_adjustment_count || 0))}
@@ -1786,6 +2050,19 @@ const netRevenueEditor = {
   borderRadius: 12,
   background:
     "linear-gradient(145deg, rgba(0,217,255,.07), rgba(0,0,0,.28))",
+};
+
+const rewardsRuleNotice = {
+  marginTop: 10,
+  padding: "10px 12px",
+  display: "grid",
+  gap: 4,
+  border: "1px solid rgba(255,69,216,.30)",
+  borderRadius: 9,
+  background: "rgba(255,69,216,.055)",
+  color: "#d6d6dc",
+  fontSize: 12,
+  lineHeight: 1.5,
 };
 
 const netRevenuePreviewGrid = {

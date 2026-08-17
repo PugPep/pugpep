@@ -602,6 +602,8 @@ function buildPricedLine({
     number | null = null;
 
   if (
+    campaignPrice.purchaseType === "single" &&
+    quantity < 10 &&
     !campaignPrice.hasCampaign &&
     !manualSaleAvailable &&
     optionMetadata.bundle_discount_enabled !==
