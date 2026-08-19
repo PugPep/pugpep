@@ -19,7 +19,7 @@ import type {
 type PaymentMethod =
   | "cashapp"
   | "venmo"
-  | "applecash"
+  | "zelle"
   | "crypto";
 
 type PendingCustomer = {
@@ -1941,7 +1941,7 @@ export default function PaymentPage() {
        * If focus is already on a real interactive control,
        * let the browser activate that control normally.
        *
-       * This means Enter on Cash App, Venmo, Apple Cash,
+       * This means Enter on Cash App, Venmo, Zelle,
        * Crypto, Aurpay, links, etc. does not accidentally
        * confirm the order.
        */
@@ -2185,7 +2185,7 @@ export default function PaymentPage() {
                 {[
                   ["cashapp", "Cash App", "$"],
                   ["venmo", "Venmo", "V"],
-                  ["applecash", "Apple Cash", "A"],
+                  ["zelle", "Zelle", "Z"],
                   ["crypto", "Crypto", "₿"],
                 ].map(
                   ([
@@ -2310,14 +2310,11 @@ export default function PaymentPage() {
               )}
 
               {method ===
-                "applecash" && (
-                <PaymentInstructions
-                  title="Apple Cash"
-                  accent="#d7dbe0"
+                "zelle" && (
+                <ZellePayment
                   amount={
                     displayTotal
                   }
-                  message="Message us through Discord, Telegram, or email to receive Apple Cash instructions."
                 />
               )}
 
@@ -2830,6 +2827,96 @@ function DiscountRow({
   );
 }
 
+function ZellePayment({
+  amount,
+}: {
+  amount: number;
+}) {
+  return (
+    <div style={zelleWrap}>
+      <div style={zelleHeader}>
+        <div>
+          <p style={zelleEyebrow}>
+            ZELLE PAYMENT
+          </p>
+
+          <h2 style={zelleTitle}>
+            Scan to Pay PugPep
+          </h2>
+
+          <p style={paymentMessage}>
+            Use your bank&apos;s Zelle feature to scan the QR code below.
+            Verify that the recipient displays as PUGPEP LLC before sending.
+          </p>
+        </div>
+
+        <div style={zelleAmountBox}>
+          <span style={zelleAmountLabel}>
+            AMOUNT DUE
+          </span>
+
+          <strong style={zelleAmount}>
+            {money(amount)}
+          </strong>
+        </div>
+      </div>
+
+      <div style={zelleQrCard}>
+        <img
+          src="/zelle-pugpep-qr.png"
+          alt="PugPep LLC Zelle payment QR code"
+          style={zelleQrImage}
+        />
+
+        <div style={zelleTagBox}>
+          <span style={zelleTagLabel}>
+            ZELLE TAG
+          </span>
+
+          <strong style={zelleTag}>
+            PugPep
+          </strong>
+        </div>
+      </div>
+
+      <div style={zelleNotice}>
+        <strong style={{ color: "#ffffff" }}>
+          Before sending:
+        </strong>{" "}
+        confirm the recipient name is{" "}
+        <strong style={{ color: "#b86cff" }}>
+          PUGPEP LLC
+        </strong>{" "}
+        and send exactly{" "}
+        <strong style={{ color: "#00ff99" }}>
+          {money(amount)}
+        </strong>.
+      </div>
+
+      <p style={zelleMemoText}>
+        If your bank provides a memo or note field, include only your first
+        and last name. Do not include product names or order details.
+      </p>
+
+      <div style={contactGrid}>
+        {contactLinks.map(
+          (link) => (
+            <a
+              key={link.label}
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={contactButton}
+            >
+              {link.label}
+            </a>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AurpayButton({
   orderNumber,
   total,
@@ -3269,6 +3356,121 @@ const selectedDot = {
   height: 11,
   border: "1px solid",
   borderRadius: 999,
+};
+
+const zelleWrap = {
+  display: "grid",
+  gap: 18,
+};
+
+const zelleHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 18,
+  flexWrap: "wrap" as const,
+};
+
+const zelleEyebrow = {
+  margin: 0,
+  color: "#b86cff",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: ".14em",
+};
+
+const zelleTitle = {
+  margin: "5px 0 0",
+  color: "#ffffff",
+  fontSize: 26,
+};
+
+const zelleAmountBox = {
+  minWidth: 150,
+  padding: "12px 15px",
+  border: "1px solid rgba(0,255,153,.42)",
+  borderRadius: 12,
+  background: "rgba(0,255,153,.06)",
+  display: "grid",
+  gap: 4,
+  textAlign: "right" as const,
+};
+
+const zelleAmountLabel = {
+  color: "#8e8e8e",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: ".1em",
+};
+
+const zelleAmount = {
+  color: "#00ff99",
+  fontSize: 25,
+};
+
+const zelleQrCard = {
+  width: "100%",
+  maxWidth: 430,
+  margin: "0 auto",
+  padding: "clamp(16px, 3vw, 24px)",
+  border: "1px solid rgba(184,108,255,.48)",
+  borderRadius: 18,
+  background:
+    "linear-gradient(145deg, rgba(255,255,255,.98), rgba(247,243,255,.98))",
+  boxShadow:
+    "0 0 28px rgba(123,44,255,.15)",
+  display: "grid",
+  justifyItems: "center",
+  gap: 14,
+};
+
+const zelleQrImage = {
+  display: "block",
+  width: "100%",
+  maxWidth: 320,
+  height: "auto",
+  borderRadius: 12,
+};
+
+const zelleTagBox = {
+  minWidth: 190,
+  padding: "10px 16px",
+  border: "1px solid rgba(102,34,255,.28)",
+  borderRadius: 12,
+  background: "#ffffff",
+  textAlign: "center" as const,
+};
+
+const zelleTagLabel = {
+  display: "block",
+  color: "#6f6f78",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: ".12em",
+};
+
+const zelleTag = {
+  display: "block",
+  marginTop: 3,
+  color: "#6d24e8",
+  fontSize: 24,
+};
+
+const zelleNotice = {
+  padding: "13px 15px",
+  border: "1px solid rgba(184,108,255,.32)",
+  borderRadius: 12,
+  background: "rgba(184,108,255,.07)",
+  color: "#c9c9c9",
+  lineHeight: 1.6,
+};
+
+const zelleMemoText = {
+  margin: 0,
+  color: "#9f9f9f",
+  fontSize: 13,
+  lineHeight: 1.6,
+  textAlign: "center" as const,
 };
 
 const paymentCard = {
