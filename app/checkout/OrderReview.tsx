@@ -1,10 +1,113 @@
 "use client";
 
-import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
 
 import type { CartItem } from "../cartContext";
+import { createClient } from "../../lib/supabaseClient";
 import type { PricingResult } from "../../lib/pricing/types";
 import { money, styles } from "./checkoutTheme";
+
+function CheckoutProductImage({
+  slug,
+  cartImage,
+  name,
+}: {
+  slug: string;
+  cartImage: string;
+  name: string;
+}) {
+  const supabase = useMemo(
+    () => createClient(),
+    []
+  );
+
+  const [currentImage, setCurrentImage] =
+    useState<string>(
+      cartImage || "/pugpep-logo.png"
+    );
+
+  const [imageFailed, setImageFailed] =
+    useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadCurrentImage() {
+      try {
+        const { data, error } =
+          await supabase
+            .from("products")
+            .select("image")
+            .eq("slug", slug)
+            .maybeSingle();
+
+        if (error) {
+          console.warn(
+            `Unable to refresh image for ${slug}:`,
+            error
+          );
+          return;
+        }
+
+        const liveImage =
+          String(
+            data?.image || ""
+          ).trim();
+
+        if (
+          active &&
+          liveImage
+        ) {
+          setCurrentImage(
+            liveImage
+          );
+          setImageFailed(
+            false
+          );
+        }
+      } catch (error) {
+        console.warn(
+          `Unable to refresh image for ${slug}:`,
+          error
+        );
+      }
+    }
+
+    void loadCurrentImage();
+
+    return () => {
+      active = false;
+    };
+  }, [slug, supabase]);
+
+  const resolvedImage =
+    imageFailed
+      ? "/pugpep-logo.png"
+      : currentImage ||
+        cartImage ||
+        "/pugpep-logo.png";
+
+  return (
+    <img
+      className="checkout-cart-image"
+      src={resolvedImage}
+      alt={name}
+      width={88}
+      height={88}
+      style={styles.image}
+      onError={() => {
+        if (
+          resolvedImage !==
+          "/pugpep-logo.png"
+        ) {
+          setImageFailed(
+            true
+          );
+        }
+      }}
+    />
+  );
+}
 
 export function OrderReview({
   cart,
@@ -108,13 +211,10 @@ export function OrderReview({
                 className="checkout-cart-item"
                 style={styles.cartItem}
               >
-                <Image
-                  className="checkout-cart-image"
-                  src={item.image}
-                  alt={item.name}
-                  width={88}
-                  height={88}
-                  style={styles.image}
+                <CheckoutProductImage
+                  slug={item.slug}
+                  cartImage={item.image}
+                  name={item.name}
                 />
 
                 <div
