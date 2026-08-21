@@ -1468,6 +1468,16 @@ export default function ProductDetailPage() {
 
                       {kitSavings && (
                         <div style={kitOptionSavings}>
+                          <div style={kitOptionPriceCompare}>
+                            <span style={regularPrice}>
+                              ${kitSavings.tenSingleValue.toFixed(2)}
+                            </span>
+
+                            <span style={salePrice}>
+                              ${kitSavings.kitPrice.toFixed(2)}
+                            </span>
+                          </div>
+
                           <strong>
                             KIT SAVINGS {kitSavings.savingsPercent.toFixed(2)}% OFF
                           </strong>
@@ -2212,6 +2222,14 @@ const qtyButton = {
   cursor: "pointer",
   fontWeight: 800,
   fontSize: 18,
+};
+
+const kitOptionPriceCompare = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 3,
+  fontSize: 14,
 };
 
 const kitOptionSavings = {
