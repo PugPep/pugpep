@@ -44,6 +44,16 @@ type ProductOption = {
   bundle_discount_3?: number;
 };
 
+type OptionCampaignPrice = {
+  hasCampaign: boolean;
+  campaignId: string | null;
+  campaignName: string | null;
+  campaignType: string | null;
+  regularUnitPrice: number;
+  saleUnitPrice: number;
+  saleDiscountAmount: number;
+};
+
 type InventoryItem = {
   id?: string;
   product_slug: string;
@@ -106,11 +116,11 @@ export default function ProductDetailPage() {
     useState<Record<string, StorefrontSale>>({});
 
   /*
-   * Campaign assignments must be tracked by product OPTION, not only
+   * Campaign pricing must be tracked by product OPTION, not only
    * by product slug. A product can have 20mg on sale while 10mg is not.
    */
-  const [optionCampaignSaleMap, setOptionCampaignSaleMap] =
-    useState<Record<string, boolean>>({});
+  const [optionCampaignPriceMap, setOptionCampaignPriceMap] =
+    useState<Record<string, OptionCampaignPrice>>({});
 
   function readRecentlyViewed() {
     try {
@@ -498,13 +508,19 @@ export default function ProductDetailPage() {
       setOptions(sortedOptions);
 
       /*
-       * Determine campaign-sale status for every individual option.
+       * Load the ACTUAL campaign price for every individual option.
        *
-       * loadStorefrontSales() is intentionally product-level and is
-       * useful for badges/recommendations, but it cannot tell us whether
-       * a specific dosage/purchase option is assigned to the campaign.
+       * Campaign assignments are option-specific. A 20mg single can be
+       * included in a campaign while the 10mg single or kit is not.
        *
-       * Bundle Savings must therefore use this option-level map.
+       * The old version stored only true/false here. That was enough to
+       * pause Bundle Savings, but it meant the product page still rendered
+       * the manual product_options.sale_active price and ignored the
+       * campaign sale price.
+       *
+       * Store the RPC pricing snapshot instead so the customer-facing
+       * product page, cart snapshot, and Bundle Savings state all use the
+       * same campaign assignment.
        */
       const optionCampaignEntries =
         await Promise.all(
@@ -520,11 +536,22 @@ export default function ProductDetailPage() {
 
               if (error) {
                 console.warn(
-                  `Unable to load campaign status for option ${option.id}:`,
+                  `Unable to load campaign pricing for option ${option.id}:`,
                   error
                 );
 
-                return [option.id, false] as const;
+                return [
+                  option.id,
+                  {
+                    hasCampaign: false,
+                    campaignId: null,
+                    campaignName: null,
+                    campaignType: null,
+                    regularUnitPrice: Number(option.price || 0),
+                    saleUnitPrice: Number(option.price || 0),
+                    saleDiscountAmount: 0,
+                  } satisfies OptionCampaignPrice,
+                ] as const;
               }
 
               const campaignData =
@@ -532,24 +559,107 @@ export default function ProductDetailPage() {
                   ? (data as Record<string, unknown>)
                   : null;
 
-              return [
-                option.id,
+              const hasCampaign =
                 Boolean(
                   campaignData?.has_campaign
-                ),
+                );
+
+              const regularUnitPrice =
+                Number(
+                  campaignData?.regular_unit_price ??
+                    option.price ??
+                    0
+                );
+
+              const saleUnitPrice =
+                Number(
+                  campaignData?.sale_unit_price ??
+                    regularUnitPrice
+                );
+
+              const saleDiscountAmount =
+                Number(
+                  campaignData?.sale_discount_amount ??
+                    Math.max(
+                      0,
+                      regularUnitPrice -
+                        saleUnitPrice
+                    )
+                );
+
+              return [
+                option.id,
+                {
+                  hasCampaign,
+                  campaignId:
+                    campaignData?.sale_campaign_id
+                      ? String(
+                          campaignData.sale_campaign_id
+                        )
+                      : null,
+                  campaignName:
+                    campaignData?.sale_campaign_name
+                      ? String(
+                          campaignData.sale_campaign_name
+                        )
+                      : null,
+                  campaignType:
+                    campaignData?.sale_campaign_type
+                      ? String(
+                          campaignData.sale_campaign_type
+                        )
+                      : null,
+                  regularUnitPrice:
+                    Number.isFinite(
+                      regularUnitPrice
+                    )
+                      ? regularUnitPrice
+                      : Number(option.price || 0),
+                  saleUnitPrice:
+                    hasCampaign &&
+                    Number.isFinite(
+                      saleUnitPrice
+                    )
+                      ? Math.max(
+                          0,
+                          saleUnitPrice
+                        )
+                      : Number(option.price || 0),
+                  saleDiscountAmount:
+                    hasCampaign &&
+                    Number.isFinite(
+                      saleDiscountAmount
+                    )
+                      ? Math.max(
+                          0,
+                          saleDiscountAmount
+                        )
+                      : 0,
+                } satisfies OptionCampaignPrice,
               ] as const;
             } catch (campaignError) {
               console.warn(
-                `Unable to load campaign status for option ${option.id}:`,
+                `Unable to load campaign pricing for option ${option.id}:`,
                 campaignError
               );
 
-              return [option.id, false] as const;
+              return [
+                option.id,
+                {
+                  hasCampaign: false,
+                  campaignId: null,
+                  campaignName: null,
+                  campaignType: null,
+                  regularUnitPrice: Number(option.price || 0),
+                  saleUnitPrice: Number(option.price || 0),
+                  saleDiscountAmount: 0,
+                } satisfies OptionCampaignPrice,
+              ] as const;
             }
           })
         );
 
-      setOptionCampaignSaleMap(
+      setOptionCampaignPriceMap(
         Object.fromEntries(
           optionCampaignEntries
         )
@@ -708,20 +818,131 @@ export default function ProductDetailPage() {
     };
   }
 
-  function getSalePrice(option: ProductOption) {
-    const regularPrice = Number(option.price);
-    const salePercent = Number(
-      option.sale_percent || 0
-    );
+  function getManualSalePrice(option: ProductOption) {
+    const regularPrice =
+      Number(option.price || 0);
 
-    if (!option.sale_active || salePercent <= 0) {
+    const salePercent =
+      Number(
+        option.sale_percent || 0
+      );
+
+    if (
+      !option.sale_active ||
+      salePercent <= 0
+    ) {
       return regularPrice;
     }
 
-    return (
+    return Math.max(
+      0,
       regularPrice -
-      regularPrice * (salePercent / 100)
+        regularPrice *
+          (salePercent / 100)
     );
+  }
+
+  function getCampaignPrice(
+    option: ProductOption
+  ) {
+    const campaign =
+      optionCampaignPriceMap[
+        option.id
+      ];
+
+    if (
+      !campaign?.hasCampaign
+    ) {
+      return null;
+    }
+
+    return Math.max(
+      0,
+      Number(
+        campaign.saleUnitPrice
+      )
+    );
+  }
+
+  /*
+   * If both a manual option sale and a campaign are active, show the
+   * lower customer price. This prevents a campaign from making the
+   * storefront appear more expensive than an already-active manual sale.
+   *
+   * Checkout still reruns the authoritative pricing engine by
+   * productOptionId before the order is created.
+   */
+  function getSalePrice(option: ProductOption) {
+    const regularPrice =
+      Number(option.price || 0);
+
+    const prices = [
+      regularPrice,
+    ];
+
+    if (
+      option.sale_active &&
+      Number(
+        option.sale_percent || 0
+      ) > 0
+    ) {
+      prices.push(
+        getManualSalePrice(option)
+      );
+    }
+
+    const campaignPrice =
+      getCampaignPrice(option);
+
+    if (
+      campaignPrice !== null
+    ) {
+      prices.push(
+        campaignPrice
+      );
+    }
+
+    return Math.min(
+      ...prices
+    );
+  }
+
+  function getEffectiveSalePercent(
+    option: ProductOption
+  ) {
+    const regularPrice =
+      Number(option.price || 0);
+
+    const salePrice =
+      getSalePrice(option);
+
+    if (
+      regularPrice <= 0 ||
+      salePrice >= regularPrice
+    ) {
+      return 0;
+    }
+
+    return Number(
+      (
+        ((regularPrice - salePrice) /
+          regularPrice) *
+        100
+      ).toFixed(2)
+    );
+  }
+
+  function getEffectiveCampaign(
+    option: ProductOption
+  ) {
+    const campaign =
+      optionCampaignPriceMap[
+        option.id
+      ];
+
+    return campaign?.hasCampaign
+      ? campaign
+      : null;
   }
 
   function getBundleTier(option: ProductOption, requestedQuantity: number) {
@@ -738,7 +959,7 @@ export default function ProductDetailPage() {
         Number(option.sale_percent || 0) > 0
       ) ||
       Boolean(
-        optionCampaignSaleMap[option.id]
+        optionCampaignPriceMap[option.id]?.hasCampaign
       );
 
     if (
@@ -779,12 +1000,13 @@ export default function ProductDetailPage() {
 
   function hasActiveSaleForOption(option: ProductOption) {
     return (
+      getEffectiveSalePercent(
+        option
+      ) > 0 ||
       Boolean(
-        option.sale_active &&
-        Number(option.sale_percent || 0) > 0
-      ) ||
-      Boolean(
-        optionCampaignSaleMap[option.id]
+        optionCampaignPriceMap[
+          option.id
+        ]?.hasCampaign
       )
     );
   }
@@ -828,14 +1050,15 @@ export default function ProductDetailPage() {
     regularPrice: Number(selectedOption.price || 0),
     salePrice: getSalePrice(selectedOption),
 
-    wasOnSale: Boolean(
-      selectedOption.sale_active &&
-      Number(selectedOption.sale_percent || 0) > 0
-    ),
+    wasOnSale:
+      hasActiveSaleForOption(
+        selectedOption
+      ),
 
-    salePercent: selectedOption.sale_active
-      ? Number(selectedOption.sale_percent || 0)
-      : 0,
+    salePercent:
+      getEffectiveSalePercent(
+        selectedOption
+      ),
 
     cost: Number(selectedOption.cost || 0),
 
@@ -1136,11 +1359,19 @@ export default function ProductDetailPage() {
                     availableQuantity / 10
                   );
 
+                  const effectiveSalePercent =
+                    getEffectiveSalePercent(
+                      option
+                    );
+
                   const isOnSale =
-                    option.sale_active &&
-                    Number(
-                      option.sale_percent || 0
-                    ) > 0;
+                    effectiveSalePercent >
+                    0;
+
+                  const activeCampaign =
+                    getEffectiveCampaign(
+                      option
+                    );
 
                   const isSelected =
                     selectedOption?.id === option.id;
@@ -1187,7 +1418,10 @@ export default function ProductDetailPage() {
                       {isOnSale && (
                         <div style={saleBadge}>
                           SALE{" "}
-                          {option.sale_percent}% OFF
+                          {effectiveSalePercent}% OFF
+                          {activeCampaign?.campaignName
+                            ? ` · ${activeCampaign.campaignName}`
+                            : ""}
                         </div>
                       )}
 
