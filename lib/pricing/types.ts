@@ -69,7 +69,10 @@ export type PricingWarningCode =
 export type PricingWarning = {
   code: PricingWarningCode;
   message: string;
-  severity: "info" | "warning" | "critical";
+  severity:
+    | "info"
+    | "warning"
+    | "critical";
   productOptionId?: string;
 };
 
@@ -104,12 +107,20 @@ export type ProductOptionCampaignPrice = {
   productOptionId: string;
   productSlug: string;
   dosage: string;
-  purchaseType: "single" | "kit";
+  purchaseType:
+    | "single"
+    | "kit";
 
   hasCampaign: boolean;
-  saleCampaignId: string | null;
-  saleCampaignName: string | null;
-  saleCampaignType: CampaignType | null;
+  saleCampaignId:
+    | string
+    | null;
+  saleCampaignName:
+    | string
+    | null;
+  saleCampaignType:
+    | CampaignType
+    | null;
 
   regularUnitPrice: number;
   saleUnitPrice: number;
@@ -120,16 +131,23 @@ export type ProductOptionCampaignPrice = {
   profitBeforeShipping: number;
   marginBeforeShipping: number;
 
-  buyQuantity: number | null;
-  getQuantity: number | null;
+  buyQuantity:
+    | number
+    | null;
+  getQuantity:
+    | number
+    | null;
 
   allowRewardPoints: boolean;
   allowGeneralPromos: boolean;
   allowSalesRepDiscount: boolean;
   allowReferralDiscount: boolean;
 
-  taxOffsetMode: TaxOffsetMode;
-  taxOffsetReason: string | null;
+  taxOffsetMode:
+    TaxOffsetMode;
+  taxOffsetReason:
+    | string
+    | null;
 };
 
 export type PricedCartLine = {
@@ -137,7 +155,9 @@ export type PricedCartLine = {
   productSlug: string;
   productName: string;
   dosage: string;
-  purchaseType: "single" | "kit";
+  purchaseType:
+    | "single"
+    | "kit";
   quantity: number;
 
   regularUnitPrice: number;
@@ -154,15 +174,23 @@ export type PricedCartLine = {
   bundleDiscountApplied: boolean;
   bundleDiscountPercent: number;
   bundleDiscountAmount: number;
-  bundleTierQuantity: number | null;
+  bundleTierQuantity:
+    | number
+    | null;
 
   paidQuantity: number;
   freeQuantity: number;
 
   hasCampaign: boolean;
-  saleCampaignId: string | null;
-  saleCampaignName: string | null;
-  saleCampaignType: CampaignType | null;
+  saleCampaignId:
+    | string
+    | null;
+  saleCampaignName:
+    | string
+    | null;
+  saleCampaignType:
+    | CampaignType
+    | null;
 
   allowRewardPoints: boolean;
   allowGeneralPromos: boolean;
@@ -170,7 +198,9 @@ export type PricedCartLine = {
   allowReferralDiscount: boolean;
 
   isTaxable: boolean;
-  taxCode: string | null;
+  taxCode:
+    | string
+    | null;
 
   lineCost: number;
   lineProfitBeforeOrderCosts: number;
@@ -179,82 +209,210 @@ export type PricedCartLine = {
 
 export type CampaignPricingResult = {
   items: PricedCartLine[];
-  regularMerchandiseValue: number;
-  campaignMerchandiseRevenue: number;
+
+  regularMerchandiseValue:
+    number;
+
+  campaignMerchandiseRevenue:
+    number;
+
+  /*
+   * Promotional sale savings.
+   *
+   * This value participates in the
+   * highest-promotional-discount comparison
+   * against general promo and sales-rep promo
+   * discounts.
+   */
   saleDiscount: number;
+
+  /*
+   * Bundle savings remain independent from the
+   * sale-vs-promo winner comparison.
+   */
   bundleDiscount: number;
 
-  primaryCampaignId: string | null;
-  primaryCampaignName: string | null;
-  primaryCampaignType: CampaignType | null;
+  primaryCampaignId:
+    | string
+    | null;
+
+  primaryCampaignName:
+    | string
+    | null;
+
+  primaryCampaignType:
+    | CampaignType
+    | null;
 
   hasSaleItems: boolean;
-  taxOffsetMode: TaxOffsetMode;
-  taxOffsetSourceType: "campaign" | null;
-  taxOffsetSourceId: string | null;
-  taxOffsetSourceCode: string | null;
-  taxOffsetReason: string | null;
 
-  warnings: PricingWarning[];
+  taxOffsetMode:
+    TaxOffsetMode;
+
+  taxOffsetSourceType:
+    | "campaign"
+    | null;
+
+  taxOffsetSourceId:
+    | string
+    | null;
+
+  taxOffsetSourceCode:
+    | string
+    | null;
+
+  taxOffsetReason:
+    | string
+    | null;
+
+  warnings:
+    PricingWarning[];
 };
 
 export type PromoValidationResult = {
   valid: boolean;
-  source: PromoSource;
-  code: string | null;
-  discountType: "percent" | "fixed" | null;
-  discountValue: number;
+
+  source:
+    PromoSource;
+
+  code:
+    | string
+    | null;
+
+  discountType:
+    | "percent"
+    | "fixed"
+    | null;
+
+  discountValue:
+    number;
 
   /*
    * General promo restrictions.
    *
-   * minimumSpend is checked against merchandise revenue after
-   * campaign/manual/bundle pricing but before promo discounts.
-   *
-   * excludeSaleItems means the promo discount base contains only
-   * full-price lines. Campaign-sale, manual-sale, and bundle-discounted
-   * lines are excluded from the promo calculation.
+   * Minimum spend remains evaluated against
+   * merchandise after campaign/manual/bundle
+   * pricing but before the promo discount.
    */
   minimumSpend: number;
-  excludeSaleItems: boolean;
 
-  salesRepId: string | null;
-  salesRepName: string | null;
-  firstOrderOnly: boolean;
-  discountAllowed: boolean;
-  message: string;
+  /*
+   * When true, discounted merchandise is excluded
+   * from this particular promo's eligible base.
+   *
+   * When false, a promo may be evaluated against
+   * sale merchandise as an ALTERNATIVE to the sale.
+   *
+   * The pricing engine then keeps whichever
+   * promotional savings amount is greater.
+   */
+  excludeSaleItems:
+    boolean;
 
-  taxOffsetMode: TaxOffsetMode;
-  taxOffsetReason: string | null;
+  salesRepId:
+    | string
+    | null;
+
+  salesRepName:
+    | string
+    | null;
+
+  firstOrderOnly:
+    boolean;
+
+  discountAllowed:
+    boolean;
+
+  message:
+    string;
+
+  taxOffsetMode:
+    TaxOffsetMode;
+
+  taxOffsetReason:
+    | string
+    | null;
 };
 
 export type PromoPricingResult = {
-  validation: PromoValidationResult | null;
+  validation:
+    | PromoValidationResult
+    | null;
 
-  generalPromoDiscount: number;
-  salesRepDiscount: number;
+  /*
+   * These are candidate/resolved customer discounts.
+   *
+   * pricingEngine.ts compares these against
+   * CampaignPricingResult.saleDiscount.
+   *
+   * Only the winning promotional discount survives.
+   */
+  generalPromoDiscount:
+    number;
 
-  appliedPromoCode: string | null;
-  appliedPromoSource: PromoSource;
+  salesRepDiscount:
+    number;
 
-  salesRepId: string | null;
-  salesRepName: string | null;
+  /*
+   * Promo metadata remains attached even if the
+   * active sale provides the larger customer savings.
+   *
+   * This allows QR-code persistence and sales-rep
+   * attribution without stacking the smaller discount.
+   */
+  appliedPromoCode:
+    | string
+    | null;
 
-  taxOffsetMode: TaxOffsetMode;
-  taxOffsetSourceType: "promo_code" | null;
-  taxOffsetSourceId: string | null;
-  taxOffsetSourceCode: string | null;
-  taxOffsetReason: string | null;
+  appliedPromoSource:
+    PromoSource;
 
-  warnings: PricingWarning[];
+  salesRepId:
+    | string
+    | null;
+
+  salesRepName:
+    | string
+    | null;
+
+  taxOffsetMode:
+    TaxOffsetMode;
+
+  taxOffsetSourceType:
+    | "promo_code"
+    | null;
+
+  taxOffsetSourceId:
+    | string
+    | null;
+
+  taxOffsetSourceCode:
+    | string
+    | null;
+
+  taxOffsetReason:
+    | string
+    | null;
+
+  warnings:
+    PricingWarning[];
 };
 
 export type ReferralPricingResult = {
-  qualifiedReferralCount: number;
-  referralDiscountPercent: number;
-  referralDiscount: number;
-  referralDiscountAllowed: boolean;
-  warnings: PricingWarning[];
+  qualifiedReferralCount:
+    number;
+
+  referralDiscountPercent:
+    number;
+
+  referralDiscount:
+    number;
+
+  referralDiscountAllowed:
+    boolean;
+
+  warnings:
+    PricingWarning[];
 };
 
 export type RewardsPricingResult = {
@@ -265,142 +423,311 @@ export type RewardsPricingResult = {
   rewardDiscount: number;
   rewardsAllowed: boolean;
   pointsEarned: number;
-  warnings: PricingWarning[];
+
+  warnings:
+    PricingWarning[];
 };
 
 export type VipPricingResult = {
   vipTier: string;
-  vipDiscountPercent: number;
+  vipDiscountPercent:
+    number;
   vipDiscount: number;
 };
 
 export type HeroPricingResult = {
-  isHeroAccount: boolean;
-  heroDiscountPercent: number;
-  heroDiscount: number;
+  isHeroAccount:
+    boolean;
+
+  heroDiscountPercent:
+    number;
+
+  heroDiscount:
+    number;
 };
 
 export type ShippingPricingResult = {
-  shippingMethod: ShippingMethod;
-  shippingMethodLabel: string;
-  estimatedDelivery: string;
+  shippingMethod:
+    ShippingMethod;
 
-  standardShippingPrice: number;
-  expressShippingPrice: number;
-  selectedShippingPrice: number;
+  shippingMethodLabel:
+    string;
 
-  shippingCollected: number;
-  shippingDiscountAmount: number;
-  shippingDiscountReason: ShippingDiscountReason;
+  estimatedDelivery:
+    string;
 
-  estimatedShippingCost: number;
-  estimatedPackagingCost: number;
+  standardShippingPrice:
+    number;
 
-  hasLifetimeFreeShipping: boolean;
-  freeShippingThreshold: number;
+  expressShippingPrice:
+    number;
 
-  merchantPaidShippingAmount: number;
-  freeStandardShippingApplied: boolean;
-  expressUpgradeApplied: boolean;
+  selectedShippingPrice:
+    number;
+
+  shippingCollected:
+    number;
+
+  shippingDiscountAmount:
+    number;
+
+  shippingDiscountReason:
+    ShippingDiscountReason;
+
+  estimatedShippingCost:
+    number;
+
+  estimatedPackagingCost:
+    number;
+
+  hasLifetimeFreeShipping:
+    boolean;
+
+  freeShippingThreshold:
+    number;
+
+  merchantPaidShippingAmount:
+    number;
+
+  freeStandardShippingApplied:
+    boolean;
+
+  expressUpgradeApplied:
+    boolean;
 };
 
 export type TaxRateResult = {
   enabled: boolean;
   rate: number;
   taxShipping: boolean;
-  jurisdiction: string | null;
-  rateId: string | null;
 
-  countryCode: string | null;
-  stateCode: string | null;
-  countyName: string | null;
-  cityName: string | null;
-  postalCode: string | null;
-  productTaxCode: string | null;
+  jurisdiction:
+    | string
+    | null;
+
+  rateId:
+    | string
+    | null;
+
+  countryCode:
+    | string
+    | null;
+
+  stateCode:
+    | string
+    | null;
+
+  countyName:
+    | string
+    | null;
+
+  cityName:
+    | string
+    | null;
+
+  postalCode:
+    | string
+    | null;
+
+  productTaxCode:
+    | string
+    | null;
 };
 
 export type TaxPricingResult = {
   enabled: boolean;
-  calculationMode: TaxCalculationMode;
-  provider: TaxProvider;
 
-  taxableSubtotal: number;
-  salesTaxRate: number;
-  salesTaxAmount: number;
+  calculationMode:
+    TaxCalculationMode;
 
-  salesTaxState: string | null;
-  salesTaxCounty: string | null;
-  salesTaxCity: string | null;
-  salesTaxPostalCode: string | null;
-  salesTaxJurisdiction: string | null;
+  provider:
+    TaxProvider;
 
-  taxCalculationId: string | null;
+  taxableSubtotal:
+    number;
 
-  taxExempt: boolean;
-  taxExemptionReason: string | null;
+  salesTaxRate:
+    number;
 
-  merchantTaxOffsetDiscount: number;
-  merchantTaxOffsetMode: TaxOffsetMode;
+  salesTaxAmount:
+    number;
+
+  salesTaxState:
+    | string
+    | null;
+
+  salesTaxCounty:
+    | string
+    | null;
+
+  salesTaxCity:
+    | string
+    | null;
+
+  salesTaxPostalCode:
+    | string
+    | null;
+
+  salesTaxJurisdiction:
+    | string
+    | null;
+
+  taxCalculationId:
+    | string
+    | null;
+
+  taxExempt:
+    boolean;
+
+  taxExemptionReason:
+    | string
+    | null;
+
+  merchantTaxOffsetDiscount:
+    number;
+
+  merchantTaxOffsetMode:
+    TaxOffsetMode;
+
   merchantTaxOffsetSourceType:
     | "campaign"
     | "promo_code"
     | null;
-  merchantTaxOffsetSourceId: string | null;
-  merchantTaxOffsetSourceCode: string | null;
-  merchantTaxOffsetReason: string | null;
 
-  warnings: PricingWarning[];
+  merchantTaxOffsetSourceId:
+    | string
+    | null;
+
+  merchantTaxOffsetSourceCode:
+    | string
+    | null;
+
+  merchantTaxOffsetReason:
+    | string
+    | null;
+
+  warnings:
+    PricingWarning[];
 };
 
 export type DiscountBreakdown = {
-  saleDiscount: number;
-  bundleDiscount: number;
-  generalPromoDiscount: number;
-  salesRepDiscount: number;
-  referralDiscount: number;
-  rewardsDiscount: number;
-  vipDiscount: number;
-  heroDiscount: number;
-  manualDiscount: number;
-  merchantTaxOffsetDiscount: number;
-  totalDiscount: number;
+  /*
+   * Only the winning promotional discount should
+   * remain non-zero among:
+   *
+   * - saleDiscount
+   * - generalPromoDiscount
+   * - salesRepDiscount
+   *
+   * Bundle, referral, rewards, VIP, hero and
+   * administrator discounts remain separate.
+   */
+  saleDiscount:
+    number;
+
+  bundleDiscount:
+    number;
+
+  generalPromoDiscount:
+    number;
+
+  salesRepDiscount:
+    number;
+
+  referralDiscount:
+    number;
+
+  rewardsDiscount:
+    number;
+
+  vipDiscount:
+    number;
+
+  heroDiscount:
+    number;
+
+  manualDiscount:
+    number;
+
+  merchantTaxOffsetDiscount:
+    number;
+
+  totalDiscount:
+    number;
 };
 
 export type AccountingResult = {
-  regularMerchandiseValue: number;
-  merchandiseRevenueAfterDiscounts: number;
+  regularMerchandiseValue:
+    number;
 
-  shippingCollected: number;
-  salesTaxCollected: number;
+  merchandiseRevenueAfterDiscounts:
+    number;
 
-  customerTotal: number;
+  shippingCollected:
+    number;
 
-  grossRevenue: number;
-  netRevenue: number;
+  salesTaxCollected:
+    number;
 
-  productCostTotal: number;
-  shippingCost: number;
-  packagingCost: number;
-  otherDirectCost: number;
+  customerTotal:
+    number;
 
-  profitBeforeCommission: number;
-  profitAfterCommission: number;
-  profitMarginPercent: number;
+  grossRevenue:
+    number;
+
+  netRevenue:
+    number;
+
+  productCostTotal:
+    number;
+
+  shippingCost:
+    number;
+
+  packagingCost:
+    number;
+
+  otherDirectCost:
+    number;
+
+  profitBeforeCommission:
+    number;
+
+  profitAfterCommission:
+    number;
+
+  profitMarginPercent:
+    number;
 };
 
 export type CommissionResult = {
-  salesRepId: string | null;
-  salesRepName: string | null;
-  commissionRate: number;
-  commissionBasis: number;
-  commissionAmount: number;
-  commissionStatus: "none" | "pending";
+  salesRepId:
+    | string
+    | null;
+
+  salesRepName:
+    | string
+    | null;
+
+  commissionRate:
+    number;
+
+  commissionBasis:
+    number;
+
+  commissionAmount:
+    number;
+
+  commissionStatus:
+    | "none"
+    | "pending";
 };
 
 export type PricingStep = {
   label: string;
   amount?: number;
   message: string;
+
   category:
     | "revenue"
     | "discount"
@@ -413,114 +740,280 @@ export type PricingStep = {
 };
 
 export type PricingSnapshot = {
-  snapshotVersion: number;
-  pricingEngineVersion: number;
-  createdAt: string;
+  snapshotVersion:
+    number;
 
-  customerId: string;
+  pricingEngineVersion:
+    number;
 
-  primarySaleCampaignId: string | null;
-  primarySaleCampaignName: string | null;
+  createdAt:
+    string;
 
-  appliedPromoCode: string | null;
-  appliedPromoSource: PromoSource;
+  customerId:
+    string;
 
-  vipTierAtPurchase: string;
+  primarySaleCampaignId:
+    | string
+    | null;
 
-  heroAccountAtPurchase: boolean;
-  heroDiscountPercent: number;
+  primarySaleCampaignName:
+    | string
+    | null;
 
-  qualifiedReferralCount: number;
-  referralDiscountPercent: number;
+  appliedPromoCode:
+    | string
+    | null;
 
-  rewardPointsUsed: number;
-  rewardsPointsEarned: number;
+  appliedPromoSource:
+    PromoSource;
 
-  shippingMethod: ShippingMethod;
-  shippingMethodLabel: string;
-  shippingDiscountReason: ShippingDiscountReason;
-  merchantPaidShippingAmount: number;
+  vipTierAtPurchase:
+    string;
 
-  taxableSubtotal: number;
-  salesTaxRate: number;
-  salesTaxAmount: number;
-  taxProvider: TaxProvider;
-  taxJurisdiction: string | null;
+  heroAccountAtPurchase:
+    boolean;
 
-  merchantTaxOffsetDiscount: number;
-  merchantTaxOffsetMode: TaxOffsetMode;
+  heroDiscountPercent:
+    number;
+
+  qualifiedReferralCount:
+    number;
+
+  referralDiscountPercent:
+    number;
+
+  rewardPointsUsed:
+    number;
+
+  rewardsPointsEarned:
+    number;
+
+  shippingMethod:
+    ShippingMethod;
+
+  shippingMethodLabel:
+    string;
+
+  shippingDiscountReason:
+    ShippingDiscountReason;
+
+  merchantPaidShippingAmount:
+    number;
+
+  taxableSubtotal:
+    number;
+
+  salesTaxRate:
+    number;
+
+  salesTaxAmount:
+    number;
+
+  taxProvider:
+    TaxProvider;
+
+  taxJurisdiction:
+    | string
+    | null;
+
+  merchantTaxOffsetDiscount:
+    number;
+
+  merchantTaxOffsetMode:
+    TaxOffsetMode;
+
   merchantTaxOffsetSourceType:
     | "campaign"
     | "promo_code"
     | null;
-  merchantTaxOffsetSourceId: string | null;
-  merchantTaxOffsetSourceCode: string | null;
-  merchantTaxOffsetReason: string | null;
 
-  discounts: DiscountBreakdown;
-  accounting: AccountingResult;
-  commission: CommissionResult;
+  merchantTaxOffsetSourceId:
+    | string
+    | null;
 
-  steps: PricingStep[];
-  warnings: PricingWarning[];
+  merchantTaxOffsetSourceCode:
+    | string
+    | null;
+
+  merchantTaxOffsetReason:
+    | string
+    | null;
+
+  discounts:
+    DiscountBreakdown;
+
+  accounting:
+    AccountingResult;
+
+  commission:
+    CommissionResult;
+
+  steps:
+    PricingStep[];
+
+  warnings:
+    PricingWarning[];
 };
 
 export type PricingResult = {
-  campaign: CampaignPricingResult;
-  promo: PromoPricingResult;
-  referral: ReferralPricingResult;
-  rewards: RewardsPricingResult;
-  vip: VipPricingResult;
-  hero: HeroPricingResult;
-  shipping: ShippingPricingResult;
-  tax: TaxPricingResult;
-  discounts: DiscountBreakdown;
-  accounting: AccountingResult;
-  commission: CommissionResult;
-  snapshot: PricingSnapshot;
-  warnings: PricingWarning[];
+  campaign:
+    CampaignPricingResult;
+
+  promo:
+    PromoPricingResult;
+
+  referral:
+    ReferralPricingResult;
+
+  rewards:
+    RewardsPricingResult;
+
+  vip:
+    VipPricingResult;
+
+  hero:
+    HeroPricingResult;
+
+  shipping:
+    ShippingPricingResult;
+
+  tax:
+    TaxPricingResult;
+
+  discounts:
+    DiscountBreakdown;
+
+  accounting:
+    AccountingResult;
+
+  commission:
+    CommissionResult;
+
+  snapshot:
+    PricingSnapshot;
+
+  warnings:
+    PricingWarning[];
 };
 
 export type MarketingRulesRecord = {
-  rewards_enabled: boolean;
-  allow_rewards_on_sale_items: boolean;
-  earn_rewards_on_sale_orders: boolean;
+  rewards_enabled:
+    boolean;
 
-  general_promos_enabled: boolean;
-  allow_general_promos_on_sale_items: boolean;
+  allow_rewards_on_sale_items:
+    boolean;
 
-  sales_rep_codes_enabled: boolean;
-  sales_rep_discount_first_order_only: boolean;
-  allow_sales_rep_discount_on_sale_items: boolean;
-  preserve_sales_rep_attribution_when_discount_blocked: boolean;
-  default_sales_rep_commission_percent: number;
+  earn_rewards_on_sale_orders:
+    boolean;
 
-  referral_program_enabled: boolean;
-  allow_referral_discount_on_sale_items: boolean;
-  maximum_referral_discount_percent: number;
+  general_promos_enabled:
+    boolean;
 
-  free_shipping_threshold: number;
-  lifetime_free_shipping_enabled: boolean;
-  default_shipping_cost: number;
-  default_express_shipping_cost: number;
-  default_packaging_cost: number;
+  /*
+   * Legacy stacking-era control.
+   *
+   * Current promoEngine/pricingEngine logic uses
+   * highest-promotional-discount-wins rather than
+   * stacking a promo on an active sale.
+   *
+   * Keep this property because existing database and
+   * admin code may still read/write it.
+   */
+  allow_general_promos_on_sale_items:
+    boolean;
 
-  minimum_margin_warning_percent: number;
-  critical_margin_percent: number;
+  sales_rep_codes_enabled:
+    boolean;
+
+  sales_rep_discount_first_order_only:
+    boolean;
+
+  /*
+   * Also retained for compatibility with the existing
+   * marketing_rules table/admin interface.
+   *
+   * Sales-rep promos now compete with sale pricing
+   * instead of stacking on top of it.
+   */
+  allow_sales_rep_discount_on_sale_items:
+    boolean;
+
+  preserve_sales_rep_attribution_when_discount_blocked:
+    boolean;
+
+  default_sales_rep_commission_percent:
+    number;
+
+  referral_program_enabled:
+    boolean;
+
+  allow_referral_discount_on_sale_items:
+    boolean;
+
+  maximum_referral_discount_percent:
+    number;
+
+  free_shipping_threshold:
+    number;
+
+  lifetime_free_shipping_enabled:
+    boolean;
+
+  default_shipping_cost:
+    number;
+
+  default_express_shipping_cost:
+    number;
+
+  default_packaging_cost:
+    number;
+
+  minimum_margin_warning_percent:
+    number;
+
+  critical_margin_percent:
+    number;
 };
 
 export type CustomerPricingProfile = {
   id: string;
-  rewardPoints: number;
-  lifetimeSpend: number;
-  vipTier: string;
-  hasLifetimeFreeShipping: boolean;
-  isHeroAccount: boolean;
-  heroDiscountPercent: number;
-  qualifiedReferralCount: number;
-  referralLifetimeDiscountPercent: number;
-  isTaxExempt: boolean;
-  taxExemptionType: string | null;
-  taxExemptionNumber: string | null;
-  taxExemptionExpiresAt: string | null;
+
+  rewardPoints:
+    number;
+
+  lifetimeSpend:
+    number;
+
+  vipTier:
+    string;
+
+  hasLifetimeFreeShipping:
+    boolean;
+
+  isHeroAccount:
+    boolean;
+
+  heroDiscountPercent:
+    number;
+
+  qualifiedReferralCount:
+    number;
+
+  referralLifetimeDiscountPercent:
+    number;
+
+  isTaxExempt:
+    boolean;
+
+  taxExemptionType:
+    | string
+    | null;
+
+  taxExemptionNumber:
+    | string
+    | null;
+
+  taxExemptionExpiresAt:
+    | string
+    | null;
 };

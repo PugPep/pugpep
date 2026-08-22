@@ -83,7 +83,10 @@ export async function confirmOrderTransaction({
           count: "exact",
           head: true,
         })
-        .eq("order_id", order.id);
+        .eq(
+          "order_id",
+          order.id
+        );
 
       if (existingItemsError) {
         throw existingItemsError;
@@ -100,11 +103,14 @@ export async function confirmOrderTransaction({
 
       return {
         alreadyExisted: true,
+
         confirmedOrder: {
           ...order,
+
           paymentMethod:
             order.paymentMethod ||
             method,
+
           confirmed: true,
         },
       };
@@ -112,7 +118,17 @@ export async function confirmOrderTransaction({
 
     /*
      * Re-run the entire pricing engine immediately before
-     * creating the order. Browser pricing is display-only.
+     * creating the order.
+     *
+     * The pricing engine is authoritative and now resolves:
+     *
+     * - active sale pricing
+     * - general promo pricing
+     * - sales-rep promo pricing
+     *
+     * using the highest-promotional-discount-wins rule.
+     *
+     * Browser pricing remains display-only.
      */
     const pricing =
       await calculatePricing(
@@ -142,7 +158,10 @@ export async function confirmOrderTransaction({
       .select(
         "reward_points,lifetime_spend"
       )
-      .eq("id", order.userId)
+      .eq(
+        "id",
+        order.userId
+      )
       .maybeSingle();
 
     if (profileError) {
@@ -180,8 +199,10 @@ export async function confirmOrderTransaction({
       supabase,
       order,
       pricing,
+
       paymentMethod:
         method,
+
       lifetimeSpendBefore,
     });
 
@@ -201,6 +222,17 @@ export async function confirmOrderTransaction({
       insertedItems,
     });
 
+    /*
+     * Always run sales-rep attribution finalization.
+     *
+     * A sales-rep code may legitimately have a $0 customer
+     * discount when a larger sale wins.
+     *
+     * Passing the resolved salesRepDiscount allows the
+     * database function to preserve attribution without
+     * pretending the customer received a sales-rep discount
+     * that did not actually win.
+     */
     const {
       error:
         attributionError,
@@ -232,14 +264,31 @@ export async function confirmOrderTransaction({
     }
 
     /*
-     * Record a GENERAL promo redemption only after the order and its
-     * product/ledger rows exist. The database RPC re-checks the usage
-     * rule under a row lock so one-time codes cannot be double-used by
-     * two nearly-simultaneous confirmations.
+     * GENERAL PROMO REDEMPTION
      *
-     * Blocked promos and zero-dollar promo results are not consumed.
-     * Sales-rep promo codes continue to use their existing redemption
-     * flow above.
+     * A general promo is consumed only when it actually
+     * produced a customer discount on this order.
+     *
+     * Example:
+     *
+     * Store sale = 20%
+     * QR promo    = 15%
+     *
+     * The store sale wins.
+     * generalPromoDiscount becomes $0.
+     * The QR promo is NOT redeemed or consumed.
+     *
+     * Example:
+     *
+     * Store sale = 10%
+     * QR promo    = 15%
+     *
+     * The promo wins.
+     * generalPromoDiscount is greater than $0.
+     * The promo redemption is recorded.
+     *
+     * The database RPC performs its own usage-rule check
+     * under a row lock to protect against duplicate use.
      */
     if (
       pricing.promo
@@ -283,16 +332,20 @@ export async function confirmOrderTransaction({
     deductedRewardPoints =
       await deductRewardPoints({
         supabase,
+
         customerId:
           order.userId,
+
         rewardPointsBefore,
+
         pointsUsed:
           pricing.rewards
             .pointsUsed,
       });
 
     rewardsDeducted =
-      deductedRewardPoints > 0;
+      deductedRewardPoints >
+      0;
 
     const {
       error: lockError,
@@ -333,6 +386,22 @@ export async function confirmOrderTransaction({
           pricing.promo
             .appliedPromoCode,
 
+        promoSource:
+          pricing.promo
+            .appliedPromoSource,
+
+        generalPromoDiscount:
+          pricing.discounts
+            .generalPromoDiscount,
+
+        salesRepDiscount:
+          pricing.discounts
+            .salesRepDiscount,
+
+        saleDiscount:
+          pricing.discounts
+            .saleDiscount,
+
         paymentMethod:
           method,
 
@@ -360,6 +429,20 @@ export async function confirmOrderTransaction({
 
         paymentMethod:
           method,
+
+        promoCode:
+          pricing.promo
+            .appliedPromoCode,
+
+        promoDiscount:
+          pricing.discounts
+            .generalPromoDiscount +
+          pricing.discounts
+            .salesRepDiscount,
+
+        saleDiscount:
+          pricing.discounts
+            .saleDiscount,
       },
     });
 
@@ -433,20 +516,25 @@ export async function confirmOrderTransaction({
       };
 
     return {
-      alreadyExisted: false,
+      alreadyExisted:
+        false,
+
       confirmedOrder,
     };
   } catch (error) {
     if (
       rewardsDeducted &&
       order.userId &&
-      deductedRewardPoints > 0
+      deductedRewardPoints >
+        0
     ) {
       try {
         await restoreRewardPoints({
           supabase,
+
           customerId:
             order.userId,
+
           points:
             deductedRewardPoints,
         });
@@ -460,7 +548,9 @@ export async function confirmOrderTransaction({
       }
     }
 
-    if (orderInserted) {
+    if (
+      orderInserted
+    ) {
       await rollbackOrder(
         supabase,
         order.id

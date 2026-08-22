@@ -645,7 +645,7 @@ export default function PromoManagerPage() {
 
     try {
       const promoUrl =
-        `https://pugpep.com/promo/${encodeURIComponent(
+        `https://pugpep.com/?promo=${encodeURIComponent(
           promo.code
         )}`;
 
@@ -882,7 +882,7 @@ export default function PromoManagerPage() {
             </h1>
 
             <p style={subtitle}>
-              Create, activate, deactivate, search, and remove promotional codes.
+              Create, manage, and generate QR promo codes. When a promo competes with an active sale, the customer automatically receives whichever promotional discount saves them more.
             </p>
           </div>
         </header>
@@ -1159,7 +1159,7 @@ export default function PromoManagerPage() {
                 </strong>
 
                 <span style={toggleHelper}>
-                  Promo applies only to full-price merchandise.
+                  When enabled, this promo applies only to full-price merchandise. When disabled, it may replace a smaller sale discount but will not stack with the sale.
                 </span>
               </span>
 
@@ -1859,7 +1859,7 @@ export default function PromoManagerPage() {
                   </strong>
 
                   <span style={toggleHelper}>
-                    Campaign-sale, manual-sale, and bundle-discounted lines will not receive this promo.
+                    Campaign-sale, manual-sale, and bundle-discounted lines will not receive this promo. Leave this off when you want the promo to compete with an active sale under the highest-discount-wins rule.
                   </span>
                 </span>
 
@@ -2003,7 +2003,7 @@ export default function PromoManagerPage() {
               <strong style={{ color: "#ff75df" }}>
                 {qrPromo.code}
               </strong>
-              , and automatically applies it when they reach checkout.
+              , and automatically applies it at checkout. If an active sale saves more, the sale wins; if this promo saves more, the promo wins.
             </p>
 
             <div style={qrPreview}>
@@ -2025,7 +2025,7 @@ export default function PromoManagerPage() {
             </div>
 
             <div style={qrLinkBox}>
-              https://pugpep.com/promo/{qrPromo.code}
+              https://pugpep.com/?promo={qrPromo.code}
             </div>
 
             <div style={modalActions}>

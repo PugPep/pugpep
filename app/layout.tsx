@@ -7,10 +7,14 @@ import {
   useState,
 } from "react";
 
-import { CartProvider, useCart } from "./cartContext";
+import {
+  CartProvider,
+  useCart,
+} from "./cartContext";
 import CartIcon from "./CartIcon";
 import AuthNav from "./AuthNav";
 import AdminMenu from "./AdminMenu";
+import PromoCapture from "./PromoCapture";
 
 export default function RootLayout({
   children,
@@ -28,32 +32,45 @@ export default function RootLayout({
   ] = useState(false);
 
   const desktopHeaderCloseTimer =
-    useRef<ReturnType<typeof setTimeout> | null>(null);
+    useRef<
+      ReturnType<typeof setTimeout> | null
+    >(null);
 
   function cancelDesktopHeaderClose() {
-    if (desktopHeaderCloseTimer.current) {
-      clearTimeout(desktopHeaderCloseTimer.current);
-      desktopHeaderCloseTimer.current = null;
+    if (
+      desktopHeaderCloseTimer.current
+    ) {
+      clearTimeout(
+        desktopHeaderCloseTimer.current
+      );
+
+      desktopHeaderCloseTimer.current =
+        null;
     }
   }
 
   function openDesktopHeader() {
     cancelDesktopHeaderClose();
+
     setDesktopHeaderOpen(true);
   }
 
   function closeDesktopHeaderImmediately() {
     cancelDesktopHeaderClose();
+
     setDesktopHeaderOpen(false);
   }
 
   function scheduleDesktopHeaderClose() {
     cancelDesktopHeaderClose();
 
-    desktopHeaderCloseTimer.current = setTimeout(() => {
-      setDesktopHeaderOpen(false);
-      desktopHeaderCloseTimer.current = null;
-    }, 1200);
+    desktopHeaderCloseTimer.current =
+      setTimeout(() => {
+        setDesktopHeaderOpen(false);
+
+        desktopHeaderCloseTimer.current =
+          null;
+      }, 1200);
   }
 
   useEffect(() => {
@@ -65,6 +82,7 @@ export default function RootLayout({
         "Escape"
       ) {
         setMenuOpen(false);
+
         closeDesktopHeaderImmediately();
       }
     }
@@ -189,13 +207,19 @@ export default function RootLayout({
         `}</style>
 
         <CartProvider>
+          <PromoCapture />
+
           <div
             className="topActivationStrip"
             style={activationStrip}
-            onMouseEnter={openDesktopHeader}
+            onMouseEnter={
+              openDesktopHeader
+            }
             aria-hidden="true"
           >
-            <span style={activationGlow} />
+            <span
+              style={activationGlow}
+            />
           </div>
 
           <header
@@ -205,8 +229,12 @@ export default function RootLayout({
                 : ""
             }`}
             style={headerShell}
-            onMouseEnter={openDesktopHeader}
-            onMouseLeave={scheduleDesktopHeaderClose}
+            onMouseEnter={
+              openDesktopHeader
+            }
+            onMouseLeave={
+              scheduleDesktopHeaderClose
+            }
           >
             <div style={topTicker}>
               <div
@@ -264,6 +292,7 @@ export default function RootLayout({
                   style={logoText}
                   onClick={() => {
                     setMenuOpen(false);
+
                     closeDesktopHeaderImmediately();
                   }}
                 >
@@ -287,43 +316,58 @@ export default function RootLayout({
                 <NavLink
                   href="/"
                   label="HOME"
-                  closeHeader={closeDesktopHeaderImmediately}
+                  closeHeader={
+                    closeDesktopHeaderImmediately
+                  }
                 />
 
                 <NavLink
                   href="/about"
                   label="ABOUT"
-                  closeHeader={closeDesktopHeaderImmediately}
+                  closeHeader={
+                    closeDesktopHeaderImmediately
+                  }
                 />
 
                 <NavLink
                   href="/quality"
                   label="QUALITY"
-                  closeHeader={closeDesktopHeaderImmediately}
+                  closeHeader={
+                    closeDesktopHeaderImmediately
+                  }
                 />
 
                 <NavLink
                   href="/contact"
                   label="CONTACT"
-                  closeHeader={closeDesktopHeaderImmediately}
+                  closeHeader={
+                    closeDesktopHeaderImmediately
+                  }
                 />
 
                 <NavLink
                   href="/account"
                   label="MY ACCOUNT"
-                  closeHeader={closeDesktopHeaderImmediately}
+                  closeHeader={
+                    closeDesktopHeaderImmediately
+                  }
                 />
               </div>
 
               <div style={rightNav}>
                 <AdminMenu />
+
                 <AuthNav />
 
-                <div className="desktopHeaderCart">
+                <div
+                  className="desktopHeaderCart"
+                >
                   <CartIcon />
                 </div>
 
-                <div className="mobileCart">
+                <div
+                  className="mobileCart"
+                >
                   <CartIcon />
                 </div>
 
@@ -339,7 +383,9 @@ export default function RootLayout({
                     )
                   }
                   style={mobileMenuButton}
-                  aria-expanded={menuOpen}
+                  aria-expanded={
+                    menuOpen
+                  }
                   aria-controls="mobile-site-menu"
                   aria-label={
                     menuOpen
@@ -404,7 +450,9 @@ export default function RootLayout({
           </header>
 
           <FloatingCart
-            headerOpen={desktopHeaderOpen}
+            headerOpen={
+              desktopHeaderOpen
+            }
           />
 
           {children}
@@ -492,7 +540,8 @@ const bodyStyle = {
 };
 
 const activationStrip = {
-  position: "fixed" as const,
+  position:
+    "fixed" as const,
   zIndex: 100000,
   top: 0,
   left: 0,
@@ -504,7 +553,8 @@ const activationStrip = {
 };
 
 const activationGlow = {
-  position: "absolute" as const,
+  position:
+    "absolute" as const,
   top: 0,
   left: "50%",
   width: 180,
@@ -519,7 +569,8 @@ const activationGlow = {
 };
 
 const headerShell = {
-  position: "fixed" as const,
+  position:
+    "fixed" as const,
   zIndex: 99999,
   top: 0,
   left: 0,
@@ -572,7 +623,8 @@ const navLinks = {
   display: "flex",
   gap: 22,
   alignItems: "center",
-  justifyContent: "center",
+  justifyContent:
+    "center",
 };
 
 const navLink = {
@@ -593,7 +645,8 @@ const rightNav = {
 };
 
 const floatingCart = {
-  position: "fixed" as const,
+  position:
+    "fixed" as const,
   zIndex: 100001,
   top: 18,
   right: 18,
@@ -666,14 +719,16 @@ const tickerTrack = {
   padding: "8px 0",
   animation:
     "tickerScroll 20s linear infinite",
-  willChange: "transform",
+  willChange:
+    "transform",
 };
 
 const logoArea = {
   display: "flex",
   flexDirection:
     "column" as const,
-  alignItems: "flex-start",
+  alignItems:
+    "flex-start",
   gap: 2,
 };
 

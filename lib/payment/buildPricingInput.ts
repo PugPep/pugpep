@@ -33,6 +33,28 @@ export function buildPricingInput(
     );
   }
 
+  /*
+   * Prefer the promo code captured in the authoritative
+   * checkout pricing input.
+   *
+   * Fall back to the legacy order-level promoCode field
+   * for older pending orders.
+   */
+  const rawPromoCode =
+    order.pricingInput
+      ?.promoCode ??
+    order.promoCode ??
+    null;
+
+  const promoCode =
+    typeof rawPromoCode ===
+      "string" &&
+    rawPromoCode.trim()
+      ? rawPromoCode
+          .trim()
+          .toUpperCase()
+      : null;
+
   return {
     supabase,
 
@@ -46,24 +68,39 @@ export function buildPricingInput(
             item.productOptionId as string,
 
           quantity:
-            Number(
-              item.quantity || 1
+            Math.max(
+              1,
+              Math.floor(
+                Number(
+                  item.quantity ||
+                    1
+                )
+              )
             ),
         })
       ),
 
-    promoCode:
-      order.pricingInput
-        ?.promoCode ??
-      order.promoCode ??
-      null,
+    /*
+     * This code is sent back through calculatePricing()
+     * during final confirmation.
+     *
+     * That means the pricing engine re-evaluates the
+     * sale-vs-promo comparison immediately before the
+     * order is written to the database.
+     */
+    promoCode,
 
     rewardPointsRequested:
-      Number(
-        order.pricingInput
-          ?.rewardPointsRequested ??
-        order.rewardPointsUsed ??
-        0
+      Math.max(
+        0,
+        Math.floor(
+          Number(
+            order.pricingInput
+              ?.rewardPointsRequested ??
+            order.rewardPointsUsed ??
+            0
+          )
+        )
       ),
 
     shippingMethod:
@@ -78,16 +115,19 @@ export function buildPricingInput(
     shippingAddress:
       order.pricingInput
         ?.shippingAddress || {
-        countryCode: "US",
+        countryCode:
+          "US",
 
         stateCode:
-          order.customer.state,
+          order.customer.state
+            .trim()
+            .toUpperCase(),
 
         postalCode:
-          order.customer.zip,
+          order.customer.zip.trim(),
 
         city:
-          order.customer.city,
+          order.customer.city.trim(),
       },
   };
 }

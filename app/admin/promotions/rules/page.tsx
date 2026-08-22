@@ -460,8 +460,11 @@ export default function MarketingRulesPage() {
       </header>
 
       <section style={styles.notice}>
-        These settings are stored in the database. The unified pricing
-        engine will use them as its default rules in a later phase.
+        These settings are stored in the database and are used by the
+        unified pricing engine. Campaign sales, general promo codes, and
+        sales-rep discounts do not stack with one another; the pricing engine
+        keeps the promotional option that gives the customer the greatest
+        dollar savings.
       </section>
 
       <section style={styles.section}>
@@ -489,6 +492,54 @@ export default function MarketingRulesPage() {
             style={styles.input}
           />
         </label>
+      </section>
+
+      <section style={styles.section}>
+        <h2 style={styles.heading}>Promotional Discount Priority</h2>
+
+        <div style={styles.ruleSummary}>
+          <div style={styles.ruleSummaryItem}>
+            <strong style={styles.ruleSummaryTitle}>
+              Campaign Sale
+            </strong>
+            <span style={styles.ruleSummaryText}>
+              Competes against general promo and sales-rep savings.
+            </span>
+          </div>
+
+          <div style={styles.ruleSummaryItem}>
+            <strong style={styles.ruleSummaryTitle}>
+              General Promo
+            </strong>
+            <span style={styles.ruleSummaryText}>
+              Competes against campaign-sale and sales-rep savings.
+            </span>
+          </div>
+
+          <div style={styles.ruleSummaryItem}>
+            <strong style={styles.ruleSummaryTitle}>
+              Sales-Rep Promo
+            </strong>
+            <span style={styles.ruleSummaryText}>
+              Competes against campaign-sale and general-promo savings.
+            </span>
+          </div>
+
+          <div style={styles.ruleSummaryItem}>
+            <strong style={styles.ruleSummaryTitle}>
+              Bundle Savings
+            </strong>
+            <span style={styles.ruleSummaryText}>
+              Remain a separate discount category from the promotional winner.
+            </span>
+          </div>
+        </div>
+
+        <p style={styles.helpTextBlock}>
+          The checkout and final order-confirmation pricing runs use the same
+          authoritative pricing engine, so the winning promotional discount is
+          recalculated before the order is committed.
+        </p>
       </section>
 
       <section style={styles.section}>
@@ -537,25 +588,16 @@ export default function MarketingRulesPage() {
             }
           />
 
-          <Toggle
-            label="Allow promo codes on sale items"
-            description="Allow standard promo codes to stack with campaign pricing."
-            checked={form.allowGeneralPromosOnSaleItems}
-            onChange={(checked) =>
-              updateForm(
-                "allowGeneralPromosOnSaleItems",
-                checked
-              )
-            }
+          <InfoCard
+            title="Highest promotional discount wins"
+            description="General promo codes do not stack with campaign-sale pricing. When a valid promo can apply, checkout compares the promo savings with the active sale savings and keeps whichever gives the customer the larger discount."
+            accent="#00d9ff"
           />
 
-          <Toggle
-            label="Allow multiple promo codes"
-            description="Permit more than one general promo code on the same order."
-            checked={form.allowMultipleGeneralPromos}
-            onChange={(checked) =>
-              updateForm("allowMultipleGeneralPromos", checked)
-            }
+          <InfoCard
+            title="Sale-item eligibility is controlled per promo"
+            description="Use Exclude Sale Items on the individual promo-code record when a code should apply only to full-price merchandise. Otherwise the promo can compete against an active sale instead of stacking on top of it."
+            accent="#ff75df"
           />
         </div>
       </section>
@@ -585,16 +627,10 @@ export default function MarketingRulesPage() {
             }
           />
 
-          <Toggle
-            label="Allow rep discount on sale items"
-            description="Allow the first-order rep discount to stack with campaigns."
-            checked={form.allowSalesRepDiscountOnSaleItems}
-            onChange={(checked) =>
-              updateForm(
-                "allowSalesRepDiscountOnSaleItems",
-                checked
-              )
-            }
+          <InfoCard
+            title="Rep discount competes with sale pricing"
+            description="Sales-rep discounts do not stack with campaign-sale pricing. The pricing engine compares the rep discount with the active sale and keeps the larger customer savings while preserving rep attribution when configured."
+            accent="#ff75df"
           />
 
           <Toggle
@@ -885,6 +921,38 @@ export default function MarketingRulesPage() {
   );
 }
 
+function InfoCard({
+  title,
+  description,
+  accent,
+}: {
+  title: string;
+  description: string;
+  accent: string;
+}) {
+  return (
+    <div
+      style={{
+        ...styles.infoCard,
+        borderColor: `${accent}66`,
+      }}
+    >
+      <strong
+        style={{
+          ...styles.infoCardTitle,
+          color: accent,
+        }}
+      >
+        {title}
+      </strong>
+
+      <span style={styles.infoCardDescription}>
+        {description}
+      </span>
+    </div>
+  );
+}
+
 function Toggle({
   label,
   description,
@@ -1093,6 +1161,66 @@ const styles = {
   toggleDescription: {
     display: "block",
     marginTop: "5px",
+    color: "#aaaaaa",
+    fontSize: "14px",
+    lineHeight: 1.55,
+  },
+
+  ruleSummary: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+    gap: "12px",
+  },
+
+  ruleSummaryItem: {
+    minHeight: "92px",
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "7px",
+    padding: "15px",
+    border: "1px solid #333333",
+    borderRadius: "12px",
+    background: "#080808",
+  },
+
+  ruleSummaryTitle: {
+    color: "#00ff99",
+    fontSize: "16px",
+  },
+
+  ruleSummaryText: {
+    color: "#aaaaaa",
+    fontSize: "14px",
+    lineHeight: 1.55,
+  },
+
+  helpTextBlock: {
+    margin: "15px 0 0",
+    color: "#aaaaaa",
+    fontSize: "14px",
+    lineHeight: 1.65,
+  },
+
+  infoCard: {
+    minHeight: "92px",
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "7px",
+    padding: "15px",
+    border: "1px solid",
+    borderRadius: "12px",
+    background: "#080808",
+  },
+
+  infoCardTitle: {
+    display: "block",
+    fontSize: "16px",
+    lineHeight: 1.35,
+  },
+
+  infoCardDescription: {
+    display: "block",
     color: "#aaaaaa",
     fontSize: "14px",
     lineHeight: 1.55,

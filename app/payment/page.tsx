@@ -39,6 +39,12 @@ import {
   title,
 } from "../../components/payment/paymentTheme";
 
+const SAVED_PROMO_KEY =
+  "pugpep_saved_promo_code";
+
+const LEGACY_PENDING_PROMO_KEY =
+  "pugpep_pending_promo";
+
 export default function PaymentPage() {
   const router = useRouter();
 
@@ -104,6 +110,7 @@ export default function PaymentPage() {
           order.orderNumber
         )}`
       );
+
       return;
     }
 
@@ -126,6 +133,32 @@ export default function PaymentPage() {
         )
       );
 
+      /*
+       * The promo belongs to the order that was just confirmed.
+       *
+       * Clear both the new persistent QR promo key and the
+       * older shared-promo key so an old campaign or QR code
+       * does not silently carry into the customer's next order.
+       *
+       * Promo redemption itself is handled by
+       * confirmOrderTransaction. This cleanup only removes
+       * browser persistence after confirmation succeeds.
+       */
+      try {
+        localStorage.removeItem(
+          SAVED_PROMO_KEY
+        );
+
+        localStorage.removeItem(
+          LEGACY_PENDING_PROMO_KEY
+        );
+      } catch (promoStorageError) {
+        console.warn(
+          "Order confirmed, but saved promo cleanup failed:",
+          promoStorageError
+        );
+      }
+
       setOrder(
         confirmedOrder
       );
@@ -134,7 +167,7 @@ export default function PaymentPage() {
 
       router.replace(
         `/order-confirmed?order=${encodeURIComponent(
-          order.orderNumber
+          confirmedOrder.orderNumber
         )}`
       );
     } catch (error: unknown) {
@@ -260,7 +293,10 @@ export default function PaymentPage() {
   const displayTotal =
     displayPricing?.accounting
       .customerTotal ??
-    Number(order.total || 0);
+    Number(
+      order.total ||
+        0
+    );
 
   const deliveryLabel =
     displayPricing
@@ -273,7 +309,10 @@ export default function PaymentPage() {
     displayPricing
       ?.shipping
       .shippingCollected ??
-    Number(order.shipping || 0);
+    Number(
+      order.shipping ||
+        0
+    );
 
   const taxEnabled =
     Boolean(

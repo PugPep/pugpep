@@ -62,15 +62,24 @@ function getErrorMessage(
   error: unknown,
   fallback = "An unexpected error occurred."
 ) {
-  if (error instanceof Error && error.message) {
+  if (
+    error instanceof Error &&
+    error.message
+  ) {
     return error.message;
   }
 
-  if (typeof error === "string" && error.trim()) {
+  if (
+    typeof error === "string" &&
+    error.trim()
+  ) {
     return error;
   }
 
-  if (error && typeof error === "object") {
+  if (
+    error &&
+    typeof error === "object"
+  ) {
     const databaseError =
       error as SupabaseErrorDetails;
 
@@ -82,18 +91,33 @@ function getErrorMessage(
         ? `Error code: ${databaseError.code}`
         : null,
     ].filter(
-      (value): value is string =>
-        typeof value === "string" &&
-        value.trim().length > 0
+      (
+        value
+      ): value is string =>
+        typeof value ===
+          "string" &&
+        value.trim().length >
+          0
     );
 
-    if (parts.length > 0) {
-      return parts.join(" | ");
+    if (
+      parts.length >
+      0
+    ) {
+      return parts.join(
+        " | "
+      );
     }
   }
 
   return fallback;
 }
+
+const SAVED_PROMO_KEY =
+  "pugpep_saved_promo_code";
+
+const LEGACY_PENDING_PROMO_KEY =
+  "pugpep_pending_promo";
 
 export default function CheckoutPage() {
   const {
@@ -102,61 +126,115 @@ export default function CheckoutPage() {
     updateQuantity,
   } = useCart();
 
-  const router = useRouter();
+  const router =
+    useRouter();
 
-  const supabase = useMemo(
-    () => createClient(),
-    []
-  );
+  const supabase =
+    useMemo(
+      () =>
+        createClient(),
+      []
+    );
 
-  const [userId, setUserId] =
-    useState<string | null>(null);
+  const [
+    userId,
+    setUserId,
+  ] =
+    useState<
+      string | null
+    >(null);
 
-  const [initializing, setInitializing] =
+  const [
+    initializing,
+    setInitializing,
+  ] =
     useState(true);
 
-  const [proceeding, setProceeding] =
+  const [
+    proceeding,
+    setProceeding,
+  ] =
     useState(false);
 
-  const [pricingLoading, setPricingLoading] =
+  const [
+    pricingLoading,
+    setPricingLoading,
+  ] =
     useState(false);
 
-  const [pricingError, setPricingError] =
-    useState<string | null>(null);
+  const [
+    pricingError,
+    setPricingError,
+  ] =
+    useState<
+      string | null
+    >(null);
 
-  const [pricing, setPricing] =
-    useState<PricingResult | null>(null);
+  const [
+    pricing,
+    setPricing,
+  ] =
+    useState<
+      PricingResult | null
+    >(null);
 
-  const [promoInput, setPromoInput] =
+  const [
+    promoInput,
+    setPromoInput,
+  ] =
     useState("");
 
-  const [appliedPromoCode, setAppliedPromoCode] =
-    useState<string | null>(null);
+  const [
+    appliedPromoCode,
+    setAppliedPromoCode,
+  ] =
+    useState<
+      string | null
+    >(null);
 
-  const [promoLoading, setPromoLoading] =
+  const [
+    promoLoading,
+    setPromoLoading,
+  ] =
     useState(false);
 
   const [
     pendingSharedPromo,
     setPendingSharedPromo,
-  ] = useState<string | null>(
-    null
-  );
+  ] =
+    useState<
+      string | null
+    >(null);
 
-  const [rewardPoints, setRewardPoints] =
+  const [
+    rewardPoints,
+    setRewardPoints,
+  ] =
     useState(0);
 
-  const [pointsToUse, setPointsToUse] =
+  const [
+    pointsToUse,
+    setPointsToUse,
+  ] =
     useState(0);
 
   /*
    * "standard" remains the internal enum value.
-   * It now represents the only available method: Priority Shipping.
+   * It now represents the only available method:
+   * Priority Shipping.
    */
-  const [shippingMethod, setShippingMethod] =
-    useState<ShippingMethod>("standard");
+  const [
+    shippingMethod,
+    setShippingMethod,
+  ] =
+    useState<ShippingMethod>(
+      "standard"
+    );
 
-  const [customer, setCustomer] =
+  const [
+    customer,
+    setCustomer,
+  ] =
     useState<CustomerForm>({
       organization: "",
       name: "",
@@ -169,20 +247,57 @@ export default function CheckoutPage() {
     });
 
   useEffect(() => {
-    try {
-      const storedPromo =
-        localStorage.getItem(
-          "pugpep_pending_promo"
+    function normalizeStoredPromo(
+      value:
+        string | null
+    ) {
+      return (
+        value
+          ?.trim()
+          .toUpperCase() ||
+        ""
+      );
+    }
+
+    function loadStoredPromo() {
+      try {
+        const savedPromo =
+          normalizeStoredPromo(
+            localStorage.getItem(
+              SAVED_PROMO_KEY
+            )
+          );
+
+        const legacyPromo =
+          normalizeStoredPromo(
+            localStorage.getItem(
+              LEGACY_PENDING_PROMO_KEY
+            )
+          );
+
+        const normalized =
+          savedPromo ||
+          legacyPromo;
+
+        if (
+          !normalized
+        ) {
+          return;
+        }
+
+        /*
+         * Keep older shared promo links working,
+         * while moving promo persistence to the
+         * permanent QR/promo storage key.
+         */
+        localStorage.setItem(
+          SAVED_PROMO_KEY,
+          normalized
         );
 
-      if (
-        storedPromo &&
-        storedPromo.trim()
-      ) {
-        const normalized =
-          storedPromo
-            .trim()
-            .toUpperCase();
+        localStorage.removeItem(
+          LEGACY_PENDING_PROMO_KEY
+        );
 
         setPendingSharedPromo(
           normalized
@@ -191,19 +306,76 @@ export default function CheckoutPage() {
         setPromoInput(
           normalized
         );
-      }
-    } catch (error) {
-      console.warn(
-        "Unable to load shared promo code:",
+      } catch (
         error
+      ) {
+        console.warn(
+          "Unable to load saved promo code:",
+          error
+        );
+      }
+    }
+
+    function handleCapturedPromo(
+      event: Event
+    ) {
+      const customEvent =
+        event as CustomEvent<{
+          code?: string;
+        }>;
+
+      const normalized =
+        customEvent
+          .detail?.code
+          ?.trim()
+          .toUpperCase() ||
+        "";
+
+      if (
+        !normalized
+      ) {
+        return;
+      }
+
+      /*
+       * If another QR promo is captured,
+       * clear the currently applied promo
+       * so the newly scanned code can
+       * auto-validate.
+       */
+      setAppliedPromoCode(
+        null
+      );
+
+      setPendingSharedPromo(
+        normalized
+      );
+
+      setPromoInput(
+        normalized
       );
     }
+
+    loadStoredPromo();
+
+    window.addEventListener(
+      "pugpep:promo-captured",
+      handleCapturedPromo
+    );
+
+    return () => {
+      window.removeEventListener(
+        "pugpep:promo-captured",
+        handleCapturedPromo
+      );
+    };
   }, []);
 
   const hasPreSaleItems =
     cart.some(
       (item) =>
-        item.status === "pre-sale"
+        item.status ===
+        "pre-sale"
     );
 
   const hasMissingOptionIds =
@@ -213,113 +385,161 @@ export default function CheckoutPage() {
     );
 
   const addressReady =
-    customer.state.trim().length === 2 &&
-    customer.zip.trim().length >= 5;
-
+    customer.state
+      .trim().length ===
+      2 &&
+    customer.zip
+      .trim().length >=
+      5;
 
   const canRequestPricing =
     Boolean(userId) &&
-    cart.length > 0 &&
+    cart.length >
+      0 &&
     !hasMissingOptionIds &&
     addressReady;
 
   const requestPricing =
     useCallback(
       async ({
-        promoCode = appliedPromoCode,
-        rewardPointsRequested = pointsToUse,
-        showErrors = true,
+        promoCode =
+          appliedPromoCode,
+
+        rewardPointsRequested =
+          pointsToUse,
+
+        showErrors =
+          true,
       }: {
-        promoCode?: string | null;
-        rewardPointsRequested?: number;
-        showErrors?: boolean;
+        promoCode?:
+          | string
+          | null;
+
+        rewardPointsRequested?:
+          number;
+
+        showErrors?:
+          boolean;
       } = {}) => {
         if (
           !userId ||
-          cart.length === 0 ||
+          cart.length ===
+            0 ||
           hasMissingOptionIds ||
           !addressReady
         ) {
-          setPricing(null);
+          setPricing(
+            null
+          );
+
           return null;
         }
 
-        setPricingLoading(true);
-        setPricingError(null);
+        setPricingLoading(
+          true
+        );
+
+        setPricingError(
+          null
+        );
 
         try {
           const result =
-            await calculatePricing({
-              supabase,
+            await calculatePricing(
+              {
+                supabase,
 
-              customerId: userId,
+                customerId:
+                  userId,
 
-              items: cart.map(
-                (item) => ({
-                  productOptionId:
-                    item.productOptionId as string,
+                items:
+                  cart.map(
+                    (
+                      item
+                    ) => ({
+                      productOptionId:
+                        item.productOptionId as string,
 
-                  quantity:
-                    Number(
-                      item.quantity || 1
-                    ),
-                })
-              ),
+                      quantity:
+                        Number(
+                          item.quantity ||
+                            1
+                        ),
+                    })
+                  ),
 
-              shippingAddress: {
-                countryCode: "US",
+                shippingAddress:
+                  {
+                    countryCode:
+                      "US",
 
-                stateCode:
-                  customer.state
-                    .trim()
-                    .toUpperCase(),
+                    stateCode:
+                      customer.state
+                        .trim()
+                        .toUpperCase(),
 
-                postalCode:
-                  customer.zip.trim(),
+                    postalCode:
+                      customer.zip.trim(),
 
-                city:
-                  customer.city.trim() ||
-                  undefined,
-              },
+                    city:
+                      customer.city.trim() ||
+                      undefined,
+                  },
 
-              promoCode:
-                promoCode?.trim() ||
-                null,
+                promoCode:
+                  promoCode?.trim() ||
+                  null,
 
-              rewardPointsRequested:
-                Math.max(
-                  0,
-                  Math.floor(
-                    Number(
-                      rewardPointsRequested ||
-                        0
+                rewardPointsRequested:
+                  Math.max(
+                    0,
+                    Math.floor(
+                      Number(
+                        rewardPointsRequested ||
+                          0
+                      )
                     )
-                  )
-                ),
+                  ),
 
-              shippingMethod,
-            });
+                shippingMethod,
+              }
+            );
 
-          setPricing(result);
+          setPricing(
+            result
+          );
 
           return result;
-        } catch (error: unknown) {
+        } catch (
+          error: unknown
+        ) {
           const message =
             getErrorMessage(
               error,
               "Unable to calculate checkout pricing."
             );
 
-          setPricing(null);
-          setPricingError(message);
+          setPricing(
+            null
+          );
 
-          if (showErrors) {
-            alert(message);
+          setPricingError(
+            message
+          );
+
+          if (
+            showErrors
+          ) {
+            alert(
+              message
+            );
           }
 
           return null;
         } finally {
-          setPricingLoading(false);
+          setPricingLoading(
+            false
+          );
         }
       },
       [
@@ -347,56 +567,84 @@ export default function CheckoutPage() {
     });
 
     async function loadCustomer() {
-      setInitializing(true);
+      setInitializing(
+        true
+      );
 
       try {
         const {
-          data: { user },
-          error: userError,
+          data: {
+            user,
+          },
+          error:
+            userError,
         } =
           await supabase.auth.getUser();
 
-        if (userError) {
+        if (
+          userError
+        ) {
           throw userError;
         }
 
-        if (!user) {
+        if (
+          !user
+        ) {
           alert(
             "You must create an account or log in before checkout."
           );
 
-          router.push("/login");
+          router.push(
+            "/login"
+          );
+
           return;
         }
 
-        setUserId(user.id);
+        setUserId(
+          user.id
+        );
 
         const {
           data,
-          error: profileError,
-        } = await supabase
-          .from("customer_profiles")
-          .select(
-            [
-              "organization",
-              "full_name",
-              "phone",
-              "address",
-              "city",
-              "state",
-              "zip",
-              "reward_points",
-            ].join(",")
-          )
-          .eq("id", user.id)
-          .maybeSingle();
+          error:
+            profileError,
+        } =
+          await supabase
+            .from(
+              "customer_profiles"
+            )
+            .select(
+              [
+                "organization",
+                "full_name",
+                "phone",
+                "address",
+                "city",
+                "state",
+                "zip",
+                "reward_points",
+              ].join(
+                ","
+              )
+            )
+            .eq(
+              "id",
+              user.id
+            )
+            .maybeSingle();
 
-        if (profileError) {
+        if (
+          profileError
+        ) {
           throw profileError;
         }
 
         const profile =
-          (data || {}) as unknown as CustomerProfile;
+          (
+            data ||
+            {}
+          ) as unknown as CustomerProfile;
 
         setRewardPoints(
           Math.max(
@@ -412,32 +660,42 @@ export default function CheckoutPage() {
 
         setCustomer({
           organization:
-            profile.organization || "",
+            profile.organization ||
+            "",
 
           name:
-            profile.full_name || "",
+            profile.full_name ||
+            "",
 
           email:
-            user.email || "",
+            user.email ||
+            "",
 
           phone:
-            profile.phone || "",
+            profile.phone ||
+            "",
 
           address:
-            profile.address || "",
+            profile.address ||
+            "",
 
           city:
-            profile.city || "",
+            profile.city ||
+            "",
 
           state:
             (
-              profile.state || ""
+              profile.state ||
+              ""
             ).toUpperCase(),
 
           zip:
-            profile.zip || "",
+            profile.zip ||
+            "",
         });
-      } catch (error: unknown) {
+      } catch (
+        error: unknown
+      ) {
         const message =
           getErrorMessage(
             error,
@@ -449,33 +707,50 @@ export default function CheckoutPage() {
           error
         );
 
-        alert(message);
+        alert(
+          message
+        );
       } finally {
-        setInitializing(false);
+        setInitializing(
+          false
+        );
       }
     }
 
     void loadCustomer();
-  }, [router, supabase]);
+  }, [
+    router,
+    supabase,
+  ]);
 
   useEffect(() => {
-    if (!canRequestPricing) {
-      setPricing(null);
+    if (
+      !canRequestPricing
+    ) {
+      setPricing(
+        null
+      );
+
       return;
     }
 
     const timer =
       window.setTimeout(
         () => {
-          void requestPricing({
-            showErrors: false,
-          });
+          void requestPricing(
+            {
+              showErrors:
+                false,
+            }
+          );
         },
         350
       );
 
     return () => {
-      window.clearTimeout(timer);
+      window.clearTimeout(
+        timer
+      );
     };
   }, [
     canRequestPricing,
@@ -483,13 +758,17 @@ export default function CheckoutPage() {
   ]);
 
   function updateField(
-    field: keyof CustomerForm,
+    field:
+      keyof CustomerForm,
     value: string
   ) {
     setCustomer(
-      (current) => ({
+      (
+        current
+      ) => ({
         ...current,
-        [field]: value,
+        [field]:
+          value,
       })
     );
   }
@@ -502,7 +781,9 @@ export default function CheckoutPage() {
       return;
     }
 
-    setPromoLoading(true);
+    setPromoLoading(
+      true
+    );
 
     try {
       const normalizedCode =
@@ -511,47 +792,110 @@ export default function CheckoutPage() {
           .toUpperCase();
 
       const result =
-        await requestPricing({
-          promoCode:
-            normalizedCode,
+        await requestPricing(
+          {
+            promoCode:
+              normalizedCode,
 
-          showErrors: true,
-        });
+            showErrors:
+              true,
+          }
+        );
 
-      if (!result) {
+      if (
+        !result
+      ) {
         return;
       }
 
       const validation =
-        result.promo.validation;
+        result.promo
+          .validation;
 
-      if (!validation?.valid) {
-        setAppliedPromoCode(null);
+      if (
+        !validation
+          ?.valid
+      ) {
+        setAppliedPromoCode(
+          null
+        );
+
+        setPendingSharedPromo(
+          null
+        );
+
+        try {
+          localStorage.removeItem(
+            SAVED_PROMO_KEY
+          );
+
+          localStorage.removeItem(
+            LEGACY_PENDING_PROMO_KEY
+          );
+        } catch (
+          error
+        ) {
+          console.warn(
+            "Unable to clear invalid promo code:",
+            error
+          );
+        }
 
         alert(
-          validation?.message ||
+          validation
+            ?.message ||
             "Invalid or inactive promo code."
         );
 
         return;
       }
 
-      setAppliedPromoCode(
-        validation.code ||
+      const appliedCode =
+        (
+          validation.code ||
           normalizedCode
+        )
+          .trim()
+          .toUpperCase();
+
+      setAppliedPromoCode(
+        appliedCode
+      );
+
+      setPendingSharedPromo(
+        null
       );
 
       setPromoInput(
-        validation.code ||
-          normalizedCode
+        appliedCode
       );
+
+      try {
+        localStorage.setItem(
+          SAVED_PROMO_KEY,
+          appliedCode
+        );
+
+        localStorage.removeItem(
+          LEGACY_PENDING_PROMO_KEY
+        );
+      } catch (
+        error
+      ) {
+        console.warn(
+          "Unable to save promo code:",
+          error
+        );
+      }
 
       alert(
         validation.message ||
           "Promo code applied."
       );
     } finally {
-      setPromoLoading(false);
+      setPromoLoading(
+        false
+      );
     }
   }
 
@@ -566,19 +910,25 @@ export default function CheckoutPage() {
       return;
     }
 
-    let cancelled = false;
+    let cancelled =
+      false;
 
     async function applySharedPromo() {
-      setPromoLoading(true);
+      setPromoLoading(
+        true
+      );
 
       try {
         const result =
-          await requestPricing({
-            promoCode:
-              pendingSharedPromo,
+          await requestPricing(
+            {
+              promoCode:
+                pendingSharedPromo,
 
-            showErrors: false,
-          });
+              showErrors:
+                false,
+            }
+          );
 
         if (
           cancelled ||
@@ -588,11 +938,19 @@ export default function CheckoutPage() {
         }
 
         const validation =
-          result.promo.validation;
+          result.promo
+            .validation;
 
+        /*
+         * A valid promo remains attached even if
+         * the pricing engine later determines that
+         * an active store sale gives the larger
+         * discount. The pricing engine—not this
+         * page—decides which discount wins.
+         */
         if (
-          validation?.valid &&
-          validation.discountAllowed
+          validation
+            ?.valid
         ) {
           const appliedCode =
             (
@@ -603,7 +961,9 @@ export default function CheckoutPage() {
               .trim()
               .toUpperCase();
 
-          if (appliedCode) {
+          if (
+            appliedCode
+          ) {
             setAppliedPromoCode(
               appliedCode
             );
@@ -611,32 +971,57 @@ export default function CheckoutPage() {
             setPromoInput(
               appliedCode
             );
+
+            localStorage.setItem(
+              SAVED_PROMO_KEY,
+              appliedCode
+            );
           }
+        } else {
+          localStorage.removeItem(
+            SAVED_PROMO_KEY
+          );
+
+          setPromoInput(
+            ""
+          );
         }
 
         localStorage.removeItem(
-          "pugpep_pending_promo"
+          LEGACY_PENDING_PROMO_KEY
         );
 
         setPendingSharedPromo(
           null
         );
-      } catch (error) {
+      } catch (
+        error
+      ) {
         console.warn(
           "Shared promo could not be auto-applied:",
           error
         );
 
+        /*
+         * Do not erase the new persistent QR promo
+         * merely because pricing temporarily failed.
+         * A network/database failure should not
+         * destroy a customer's scanned promo.
+         */
         localStorage.removeItem(
-          "pugpep_pending_promo"
+          LEGACY_PENDING_PROMO_KEY
         );
 
         setPendingSharedPromo(
           null
         );
       } finally {
-        if (!cancelled) {
-          setPromoLoading(false);
+        if (
+          !cancelled
+        ) {
+          setPromoLoading(
+            false
+          );
         }
       }
     }
@@ -644,7 +1029,8 @@ export default function CheckoutPage() {
     void applySharedPromo();
 
     return () => {
-      cancelled = true;
+      cancelled =
+        true;
     };
   }, [
     pendingSharedPromo,
@@ -656,31 +1042,69 @@ export default function CheckoutPage() {
   ]);
 
   async function removePromoCode() {
-    setAppliedPromoCode(null);
-    setPromoInput("");
+    setAppliedPromoCode(
+      null
+    );
+
+    setPendingSharedPromo(
+      null
+    );
+
+    setPromoInput(
+      ""
+    );
+
+    try {
+      localStorage.removeItem(
+        SAVED_PROMO_KEY
+      );
+
+      localStorage.removeItem(
+        LEGACY_PENDING_PROMO_KEY
+      );
+    } catch (
+      error
+    ) {
+      console.warn(
+        "Unable to clear saved promo code:",
+        error
+      );
+    }
 
     await requestPricing({
-      promoCode: null,
-      showErrors: false,
+      promoCode:
+        null,
+
+      showErrors:
+        false,
     });
   }
 
   async function proceedToPayment() {
-    if (proceeding) {
+    if (
+      proceeding
+    ) {
       return;
     }
 
-    if (cart.length === 0) {
+    if (
+      cart.length ===
+      0
+    ) {
       alert(
         "Your cart is empty."
       );
+
       return;
     }
 
-    if (hasMissingOptionIds) {
+    if (
+      hasMissingOptionIds
+    ) {
       alert(
         "One or more cart items were added before the pricing update. Remove those items and add them to the cart again."
       );
+
       return;
     }
 
@@ -691,8 +1115,12 @@ export default function CheckoutPage() {
       !customer.phone.trim() ||
       !customer.address.trim() ||
       !customer.city.trim() ||
-      customer.state.trim().length !== 2 ||
-      customer.zip.trim().length < 5
+      customer.state
+        .trim().length !==
+        2 ||
+      customer.zip
+        .trim().length <
+        5
     ) {
       alert(
         "Please fill out all required checkout fields."
@@ -701,25 +1129,35 @@ export default function CheckoutPage() {
       return;
     }
 
-    setProceeding(true);
+    setProceeding(
+      true
+    );
 
     try {
       const {
-        data: { user },
-        error: userError,
+        data: {
+          user,
+        },
+        error:
+          userError,
       } =
         await supabase.auth.getUser();
 
-      if (userError) {
+      if (
+        userError
+      ) {
         throw userError;
       }
 
       if (
         !user ||
         !userId ||
-        user.id !== userId
+        user.id !==
+          userId
       ) {
-        router.push("/login");
+        router.push(
+          "/login"
+        );
 
         throw new Error(
           "You must be signed in to the same account used for checkout."
@@ -727,57 +1165,72 @@ export default function CheckoutPage() {
       }
 
       /*
-       * Recalculate immediately before saving the pending order.
-       * No totals from the browser display are trusted.
+       * Recalculate immediately before saving
+       * the pending order. No totals from the
+       * browser display are trusted.
        */
       const finalPricing =
-        await requestPricing({
-          promoCode:
-            appliedPromoCode,
+        await requestPricing(
+          {
+            promoCode:
+              appliedPromoCode,
 
-          rewardPointsRequested:
-            pointsToUse,
+            rewardPointsRequested:
+              pointsToUse,
 
-          showErrors: true,
-        });
+            showErrors:
+              true,
+          }
+        );
 
-      if (!finalPricing) {
+      if (
+        !finalPricing
+      ) {
         throw new Error(
           "Checkout pricing could not be verified."
         );
       }
 
       const {
-        error: profileError,
-      } = await supabase
-        .from("customer_profiles")
-        .update({
-          organization:
-            customer.organization.trim(),
+        error:
+          profileError,
+      } =
+        await supabase
+          .from(
+            "customer_profiles"
+          )
+          .update({
+            organization:
+              customer.organization.trim(),
 
-          full_name:
-            customer.name.trim(),
+            full_name:
+              customer.name.trim(),
 
-          phone:
-            customer.phone.trim(),
+            phone:
+              customer.phone.trim(),
 
-          address:
-            customer.address.trim(),
+            address:
+              customer.address.trim(),
 
-          city:
-            customer.city.trim(),
+            city:
+              customer.city.trim(),
 
-          state:
-            customer.state
-              .trim()
-              .toUpperCase(),
+            state:
+              customer.state
+                .trim()
+                .toUpperCase(),
 
-          zip:
-            customer.zip.trim(),
-        })
-        .eq("id", user.id);
+            zip:
+              customer.zip.trim(),
+          })
+          .eq(
+            "id",
+            user.id
+          );
 
-      if (profileError) {
+      if (
+        profileError
+      ) {
         throw profileError;
       }
 
@@ -788,174 +1241,206 @@ export default function CheckoutPage() {
         `PUG-${Date.now()}`;
 
       /*
-       * Legacy summary fields remain temporarily so the current
-       * payment page can still open this pending order. The complete
-       * authoritative pricing result is stored alongside them.
+       * Legacy summary fields remain temporarily
+       * so the current payment page can still open
+       * this pending order. The complete authoritative
+       * pricing result is stored alongside them.
        */
-      const pendingOrder = {
-        id: orderId,
+      const pendingOrder =
+        {
+          id:
+            orderId,
 
-        userId:
-          user.id,
+          userId:
+            user.id,
 
-        orderNumber,
+          orderNumber,
 
-        customer: {
-          organization:
-            customer.organization.trim(),
+          customer:
+            {
+              organization:
+                customer.organization.trim(),
 
-          name:
-            customer.name.trim(),
+              name:
+                customer.name.trim(),
 
-          email:
-            customer.email.trim(),
+              email:
+                customer.email.trim(),
 
-          phone:
-            customer.phone.trim(),
+              phone:
+                customer.phone.trim(),
 
-          address:
-            customer.address.trim(),
+              address:
+                customer.address.trim(),
 
-          city:
-            customer.city.trim(),
+              city:
+                customer.city.trim(),
 
-          state:
-            customer.state
-              .trim()
-              .toUpperCase(),
+              state:
+                customer.state
+                  .trim()
+                  .toUpperCase(),
 
-          zip:
-            customer.zip.trim(),
-        },
+              zip:
+                customer.zip.trim(),
+            },
 
-        items: cart,
+          items:
+            cart,
 
-        pricingInput: {
-          items: cart.map(
-            (item) => ({
-              productOptionId:
-                item.productOptionId,
+          pricingInput:
+            {
+              items:
+                cart.map(
+                  (
+                    item
+                  ) => ({
+                    productOptionId:
+                      item.productOptionId,
 
-              quantity:
-                Number(
-                  item.quantity || 1
+                    quantity:
+                      Number(
+                        item.quantity ||
+                          1
+                      ),
+                  })
                 ),
-            })
-          ),
 
-          promoCode:
-            appliedPromoCode,
+              promoCode:
+                appliedPromoCode,
 
-          rewardPointsRequested:
-            finalPricing.rewards
-              .pointsUsed,
+              rewardPointsRequested:
+                finalPricing
+                  .rewards
+                  .pointsUsed,
+
+              shippingMethod:
+                finalPricing
+                  .shipping
+                  .shippingMethod,
+
+              shippingAddress:
+                {
+                  countryCode:
+                    "US",
+
+                  stateCode:
+                    customer.state
+                      .trim()
+                      .toUpperCase(),
+
+                  postalCode:
+                    customer.zip.trim(),
+
+                  city:
+                    customer.city.trim(),
+                },
+            },
+
+          pricing:
+            finalPricing,
+
+          pricingSnapshot:
+            finalPricing.snapshot,
+
+          subtotal:
+            finalPricing
+              .accounting
+              .regularMerchandiseValue,
+
+          shipping:
+            finalPricing
+              .shipping
+              .shippingCollected,
 
           shippingMethod:
-            finalPricing.shipping
+            finalPricing
+              .shipping
               .shippingMethod,
 
-          shippingAddress: {
-            countryCode: "US",
+          shippingMethodLabel:
+            finalPricing
+              .shipping
+              .shippingMethodLabel,
 
-            stateCode:
-              customer.state
-                .trim()
-                .toUpperCase(),
+          salesTax:
+            finalPricing
+              .tax
+              .salesTaxAmount,
 
-            postalCode:
-              customer.zip.trim(),
+          rewardPointsUsed:
+            finalPricing
+              .rewards
+              .pointsUsed,
 
-            city:
-              customer.city.trim(),
-          },
-        },
+          rewardDiscount:
+            finalPricing
+              .discounts
+              .rewardsDiscount,
 
-        pricing:
-          finalPricing,
+          promoCode:
+            finalPricing
+              .promo
+              .appliedPromoCode,
 
-        pricingSnapshot:
-          finalPricing.snapshot,
+          promoSource:
+            finalPricing
+              .promo
+              .appliedPromoSource,
 
-        subtotal:
-          finalPricing.accounting
-            .regularMerchandiseValue,
+          promoDiscountAllowed:
+            Boolean(
+              finalPricing
+                .promo
+                .validation
+                ?.discountAllowed
+            ),
 
-        shipping:
-          finalPricing.shipping
-            .shippingCollected,
-
-        shippingMethod:
-          finalPricing.shipping
-            .shippingMethod,
-
-        shippingMethodLabel:
-          finalPricing.shipping
-            .shippingMethodLabel,
-
-        salesTax:
-          finalPricing.tax
-            .salesTaxAmount,
-
-        rewardPointsUsed:
-          finalPricing.rewards
-            .pointsUsed,
-
-        rewardDiscount:
-          finalPricing.discounts
-            .rewardsDiscount,
-
-        promoCode:
-          finalPricing.promo
-            .appliedPromoCode,
-
-        promoSource:
-          finalPricing.promo
-            .appliedPromoSource,
-
-        promoDiscountAllowed:
-          Boolean(
-            finalPricing.promo
+          promoDiscountType:
+            finalPricing
+              .promo
               .validation
-              ?.discountAllowed
-          ),
+              ?.discountType ||
+            null,
 
-        promoDiscountType:
-          finalPricing.promo
-            .validation
-            ?.discountType ||
-          null,
+          promoDiscountValue:
+            Number(
+              finalPricing
+                .promo
+                .validation
+                ?.discountValue ||
+                0
+            ),
 
-        promoDiscountValue:
-          Number(
-            finalPricing.promo
-              .validation
-              ?.discountValue ||
-              0
-          ),
+          promoDiscount:
+            finalPricing
+              .discounts
+              .generalPromoDiscount +
+            finalPricing
+              .discounts
+              .salesRepDiscount,
 
-        promoDiscount:
-          finalPricing.discounts
-            .generalPromoDiscount +
-          finalPricing.discounts
-            .salesRepDiscount,
+          totalDiscount:
+            finalPricing
+              .discounts
+              .totalDiscount,
 
-        totalDiscount:
-          finalPricing.discounts
-            .totalDiscount,
+          total:
+            finalPricing
+              .accounting
+              .customerTotal,
 
-        total:
-          finalPricing.accounting
-            .customerTotal,
+          hasLifetimeFreeShipping:
+            finalPricing
+              .shipping
+              .hasLifetimeFreeShipping,
 
-        hasLifetimeFreeShipping:
-          finalPricing.shipping
-            .hasLifetimeFreeShipping,
+          createdAt:
+            new Date().toISOString(),
 
-        createdAt:
-          new Date().toISOString(),
-
-        confirmed: false,
-      };
+          confirmed:
+            false,
+        };
 
       localStorage.setItem(
         "pugpep_order",
@@ -964,8 +1449,12 @@ export default function CheckoutPage() {
         )
       );
 
-      router.push("/payment");
-    } catch (error: unknown) {
+      router.push(
+        "/payment"
+      );
+    } catch (
+      error: unknown
+    ) {
       const message =
         getErrorMessage(
           error,
@@ -977,32 +1466,42 @@ export default function CheckoutPage() {
         error
       );
 
-      alert(message);
+      alert(
+        message
+      );
     } finally {
-      setProceeding(false);
+      setProceeding(
+        false
+      );
     }
   }
 
-
   function handleCheckoutEnter(
-    event: ReactKeyboardEvent<HTMLElement>
+    event:
+      ReactKeyboardEvent<HTMLElement>
   ) {
     if (
-      event.key !== "Enter" ||
+      event.key !==
+        "Enter" ||
       event.defaultPrevented
     ) {
       return;
     }
 
     const target =
-      event.target as HTMLElement | null;
+      event.target as
+        | HTMLElement
+        | null;
 
-    if (!target) {
+    if (
+      !target
+    ) {
       return;
     }
 
     /*
-     * Let buttons and links use their normal Enter behavior.
+     * Let buttons and links use
+     * their normal Enter behavior.
      */
     if (
       target.closest(
@@ -1013,14 +1512,15 @@ export default function CheckoutPage() {
     }
 
     if (
-      target.tagName === "TEXTAREA"
+      target.tagName ===
+      "TEXTAREA"
     ) {
       return;
     }
 
     /*
-     * Enter in the promo-code area means Apply Promo,
-     * not Proceed to Payment.
+     * Enter in the promo-code area means
+     * Apply Promo, not Proceed to Payment.
      */
     if (
       target.closest(
@@ -1040,8 +1540,8 @@ export default function CheckoutPage() {
     }
 
     /*
-     * Enter from the customer/shipping form behaves
-     * like the Proceed to Payment button.
+     * Enter from the customer/shipping form
+     * behaves like the Proceed to Payment button.
      */
     if (
       target.closest(
@@ -1059,16 +1559,34 @@ export default function CheckoutPage() {
     }
   }
 
-
-  if (initializing) {
+  if (
+    initializing
+  ) {
     return (
-      <main style={styles.page}>
-        <div style={styles.content}>
-          <h1 style={styles.title}>
+      <main
+        style={
+          styles.page
+        }
+      >
+        <div
+          style={
+            styles.content
+          }
+        >
+          <h1
+            style={
+              styles.title
+            }
+          >
             Research Preparation
           </h1>
 
-          <p style={{ color: "#999" }}>
+          <p
+            style={{
+              color:
+                "#999",
+            }}
+          >
             Loading your laboratory profile...
           </p>
         </div>
@@ -1078,32 +1596,60 @@ export default function CheckoutPage() {
 
   return (
     <main
-      style={styles.page}
-      onKeyDownCapture={handleCheckoutEnter}
+      style={
+        styles.page
+      }
+      onKeyDownCapture={
+        handleCheckoutEnter
+      }
     >
-      <div style={styles.content}>
-        <header style={styles.header}>
+      <div
+        style={
+          styles.content
+        }
+      >
+        <header
+          style={
+            styles.header
+          }
+        >
           <div>
-            <p style={styles.eyebrow}>
+            <p
+              style={
+                styles.eyebrow
+              }
+            >
               SECURE RESEARCH CHECKOUT
             </p>
 
-            <h1 style={styles.title}>
+            <h1
+              style={
+                styles.title
+              }
+            >
               Research Preparation
             </h1>
           </div>
 
-          <div style={styles.freeShipping}>
+          <div
+            style={
+              styles.freeShipping
+            }
+          >
             🚚 Priority Shipping — Free When Eligible
           </div>
         </header>
 
         <p
           style={{
-            color: "#8f8f8f",
-            fontSize: 12,
-            lineHeight: 1.6,
-            marginBottom: 20,
+            color:
+              "#8f8f8f",
+            fontSize:
+              12,
+            lineHeight:
+              1.6,
+            marginBottom:
+              20,
           }}
         >
           By providing your phone number, you agree to receive transactional
@@ -1111,59 +1657,117 @@ export default function CheckoutPage() {
         </p>
 
         {hasPreSaleItems && (
-          <div style={styles.notice}>
+          <div
+            style={
+              styles.notice
+            }
+          >
             ⚠️ One or more research items are on pre-sale. Estimated delivery
             may take up to two weeks.
           </div>
         )}
 
         {hasMissingOptionIds && (
-          <div style={styles.error}>
+          <div
+            style={
+              styles.error
+            }
+          >
             One or more saved cart items are missing their product option ID.
             Remove those items and add them again before continuing.
           </div>
         )}
 
         {pricingError && (
-          <div style={styles.error}>
-            {pricingError}
+          <div
+            style={
+              styles.error
+            }
+          >
+            {
+              pricingError
+            }
           </div>
         )}
 
-        <TierBanner pricing={pricing} />
+        <TierBanner
+          pricing={
+            pricing
+          }
+        />
 
         <div
           className="checkout-balanced-grid"
-          style={styles.balancedGrid}
+          style={
+            styles.balancedGrid
+          }
         >
-          <section style={styles.column}>
+          <section
+            style={
+              styles.column
+            }
+          >
             <ShippingInformationSection
-              customer={customer}
-              updateField={updateField}
+              customer={
+                customer
+              }
+              updateField={
+                updateField
+              }
             />
 
             <ShippingMethodSection
-              shippingMethod={shippingMethod}
-              setShippingMethod={setShippingMethod}
-              pricing={pricing}
+              shippingMethod={
+                shippingMethod
+              }
+              setShippingMethod={
+                setShippingMethod
+              }
+              pricing={
+                pricing
+              }
             />
           </section>
 
-          <section style={styles.column}>
+          <section
+            style={
+              styles.column
+            }
+          >
             <RewardsSection
-              rewardPoints={rewardPoints}
-              pointsToUse={pointsToUse}
-              setPointsToUse={setPointsToUse}
-              pricing={pricing}
+              rewardPoints={
+                rewardPoints
+              }
+              pointsToUse={
+                pointsToUse
+              }
+              setPointsToUse={
+                setPointsToUse
+              }
+              pricing={
+                pricing
+              }
             />
 
             <PromoSection
-              promoInput={promoInput}
-              setPromoInput={setPromoInput}
-              appliedPromoCode={appliedPromoCode}
-              promoLoading={promoLoading}
-              pricingLoading={pricingLoading}
-              pricing={pricing}
+              promoInput={
+                promoInput
+              }
+              setPromoInput={
+                setPromoInput
+              }
+              appliedPromoCode={
+                appliedPromoCode
+              }
+              promoLoading={
+                promoLoading
+              }
+              pricingLoading={
+                pricingLoading
+              }
+              pricing={
+                pricing
+              }
               applyPromoCode={() => {
                 void applyPromoCode();
               }}
@@ -1173,25 +1777,50 @@ export default function CheckoutPage() {
             />
 
             <OrderReview
-              cart={cart}
-              pricing={pricing}
-              updateQuantity={updateQuantity}
-              removeFromCart={removeFromCart}
+              cart={
+                cart
+              }
+              pricing={
+                pricing
+              }
+              updateQuantity={
+                updateQuantity
+              }
+              removeFromCart={
+                removeFromCart
+              }
               routerToProducts={() =>
-                router.push("/")
+                router.push(
+                  "/"
+                )
               }
             />
 
-            <OrderBreakdown pricing={pricing} />
+            <OrderBreakdown
+              pricing={
+                pricing
+              }
+            />
           </section>
         </div>
 
         <FinalReview
-          pricing={pricing}
-          proceeding={proceeding}
-          pricingLoading={pricingLoading}
-          cartIsEmpty={cart.length === 0}
-          hasMissingOptionIds={hasMissingOptionIds}
+          pricing={
+            pricing
+          }
+          proceeding={
+            proceeding
+          }
+          pricingLoading={
+            pricingLoading
+          }
+          cartIsEmpty={
+            cart.length ===
+            0
+          }
+          hasMissingOptionIds={
+            hasMissingOptionIds
+          }
           proceedToPayment={() => {
             void proceedToPayment();
           }}

@@ -26,7 +26,9 @@ export type PendingCartItem = {
   slug: string;
   name: string;
   dosage: string;
-  purchaseType: "single" | "kit";
+  purchaseType:
+    | "single"
+    | "kit";
   price: number;
   regularPrice?: number;
   salePrice?: number;
@@ -41,10 +43,16 @@ export type PendingCartItem = {
 
 export type PendingOrder = {
   id: string;
-  userId: string | null;
+  userId:
+    | string
+    | null;
   orderNumber: string;
-  customer: PendingCustomer;
-  items: PendingCartItem[];
+
+  customer:
+    PendingCustomer;
+
+  items:
+    PendingCartItem[];
 
   pricingInput?: {
     items: {
@@ -52,9 +60,15 @@ export type PendingOrder = {
       quantity: number;
     }[];
 
-    promoCode?: string | null;
-    rewardPointsRequested?: number;
-    shippingMethod?: ShippingMethod;
+    promoCode?:
+      | string
+      | null;
+
+    rewardPointsRequested?:
+      number;
+
+    shippingMethod?:
+      ShippingMethod;
 
     shippingAddress: {
       countryCode: string;
@@ -65,34 +79,73 @@ export type PendingOrder = {
     };
   };
 
-  pricing?: PricingResult;
-  pricingSnapshot?: PricingSnapshot;
+  pricing?:
+    PricingResult;
 
-  shippingMethod?: ShippingMethod;
-  shippingMethodLabel?: string;
-  paymentMethod?: PaymentMethod;
+  pricingSnapshot?:
+    PricingSnapshot;
+
+  shippingMethod?:
+    ShippingMethod;
+
+  shippingMethodLabel?:
+    string;
+
+  paymentMethod?:
+    PaymentMethod;
 
   subtotal: number;
   shipping: number;
+
   salesTax?: number;
-  rewardPointsUsed?: number;
-  rewardDiscount?: number;
-  promoCode?: string | null;
-  promoSource?: string | null;
-  promoDiscountAllowed?: boolean;
-  promoDiscountType?: string | null;
-  promoDiscountValue?: number;
-  promoDiscount?: number;
-  totalDiscount?: number;
+
+  rewardPointsUsed?:
+    number;
+
+  rewardDiscount?:
+    number;
+
+  promoCode?:
+    | string
+    | null;
+
+  promoSource?:
+    | string
+    | null;
+
+  promoDiscountAllowed?:
+    boolean;
+
+  promoDiscountType?:
+    | string
+    | null;
+
+  promoDiscountValue?:
+    number;
+
+  promoDiscount?:
+    number;
+
+  totalDiscount?:
+    number;
+
   total: number;
-  hasLifetimeFreeShipping?: boolean;
+
+  hasLifetimeFreeShipping?:
+    boolean;
+
   createdAt: string;
-  confirmed?: boolean;
+
+  confirmed?:
+    boolean;
 };
 
 export type CustomerProfileRow = {
-  reward_points: number | null;
-  lifetime_spend: number | null;
+  reward_points:
+    number | null;
+
+  lifetime_spend:
+    number | null;
 };
 
 export type SupabaseErrorDetails = {
@@ -104,5 +157,6 @@ export type SupabaseErrorDetails = {
 
 export type InsertedOrderItem = {
   id: string;
-  product_option_id: string;
+  product_option_id:
+    string;
 };

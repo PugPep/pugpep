@@ -13,11 +13,13 @@ import { calculateTaxPricing } from "./taxEngine";
 import { calculateVipPricing } from "./vipEngine";
 
 import type {
+  CampaignPricingResult,
   CustomerPricingProfile,
   MarketingRulesRecord,
   PricingInput,
   PricingResult,
   PricingWarning,
+  PromoPricingResult,
 } from "./types";
 
 import {
@@ -28,7 +30,8 @@ import {
   uniqueWarnings,
 } from "./utils";
 
-const ADMIN_EMAIL = "pugpep99@gmail.com";
+const ADMIN_EMAIL =
+  "pugpep99@gmail.com";
 
 type MarketingRulesRow =
   MarketingRulesRecord & {
@@ -38,20 +41,48 @@ type MarketingRulesRow =
 
 type CustomerProfileRow = {
   id: string;
-  reward_points: number | null;
-  lifetime_spend: number | null;
-  vip_tier: string | null;
-  has_lifetime_free_shipping: boolean | null;
-  is_hero_account: boolean | null;
-  hero_discount_percent: number | null;
-  qualified_referral_count: number | null;
-  referral_lifetime_discount_percent: number | null;
+  reward_points:
+    number | null;
 
-  is_tax_exempt: boolean | null;
-  tax_exemption_type: string | null;
-  tax_exemption_number: string | null;
-  tax_exemption_expires_at: string | null;
+  lifetime_spend:
+    number | null;
+
+  vip_tier:
+    string | null;
+
+  has_lifetime_free_shipping:
+    boolean | null;
+
+  is_hero_account:
+    boolean | null;
+
+  hero_discount_percent:
+    number | null;
+
+  qualified_referral_count:
+    number | null;
+
+  referral_lifetime_discount_percent:
+    number | null;
+
+  is_tax_exempt:
+    boolean | null;
+
+  tax_exemption_type:
+    string | null;
+
+  tax_exemption_number:
+    string | null;
+
+  tax_exemption_expires_at:
+    string | null;
 };
+
+type PromotionalWinner =
+  | "sale"
+  | "general_promo"
+  | "sales_rep"
+  | "none";
 
 async function requireMatchingCustomer({
   supabase,
@@ -61,9 +92,12 @@ async function requireMatchingCustomer({
   customerId: string;
 }) {
   const {
-    data: { user },
+    data: {
+      user,
+    },
     error,
-  } = await supabase.auth.getUser();
+  } =
+    await supabase.auth.getUser();
 
   if (error) {
     throw error;
@@ -103,10 +137,17 @@ async function loadMarketingRules(
   } = await supabase
     .from("marketing_rules")
     .select("*")
-    .eq("is_active", true)
-    .order("created_at", {
-      ascending: false,
-    })
+    .eq(
+      "is_active",
+      true
+    )
+    .order(
+      "created_at",
+      {
+        ascending:
+          false,
+      }
+    )
     .limit(1)
     .maybeSingle();
 
@@ -125,7 +166,9 @@ async function loadMarketingRules(
 
   return {
     rewards_enabled:
-      Boolean(row.rewards_enabled),
+      Boolean(
+        row.rewards_enabled
+      ),
 
     allow_rewards_on_sale_items:
       Boolean(
@@ -198,19 +241,19 @@ async function loadMarketingRules(
       ),
 
     default_shipping_cost:
-  nonNegative(
-    row.default_shipping_cost
-  ),
+      nonNegative(
+        row.default_shipping_cost
+      ),
 
-default_express_shipping_cost:
-  nonNegative(
-    row.default_express_shipping_cost
-  ),
+    default_express_shipping_cost:
+      nonNegative(
+        row.default_express_shipping_cost
+      ),
 
-default_packaging_cost:
-  nonNegative(
-    row.default_packaging_cost
-  ),
+    default_packaging_cost:
+      nonNegative(
+        row.default_packaging_cost
+      ),
 
     minimum_margin_warning_percent:
       nonNegative(
@@ -235,7 +278,9 @@ async function loadCustomerProfile({
     data,
     error,
   } = await supabase
-    .from("customer_profiles")
+    .from(
+      "customer_profiles"
+    )
     .select(
       [
         "id",
@@ -253,7 +298,10 @@ async function loadCustomerProfile({
         "tax_exemption_expires_at",
       ].join(",")
     )
-    .eq("id", customerId)
+    .eq(
+      "id",
+      customerId
+    )
     .maybeSingle();
 
   if (error) {
@@ -270,14 +318,16 @@ async function loadCustomerProfile({
     data as unknown as CustomerProfileRow;
 
   return {
-    id: row.id,
+    id:
+      row.id,
 
     rewardPoints:
       Math.max(
         0,
         Math.floor(
           Number(
-            row.reward_points || 0
+            row.reward_points ||
+              0
           )
         )
       ),
@@ -305,7 +355,8 @@ async function loadCustomerProfile({
       Math.min(
         100,
         nonNegative(
-          row.hero_discount_percent ?? 5
+          row.hero_discount_percent ??
+            5
         )
       ),
 
@@ -354,8 +405,11 @@ function validatePricingInput(
   }
 
   if (
-    !Array.isArray(input.items) ||
-    input.items.length === 0
+    !Array.isArray(
+      input.items
+    ) ||
+    input.items.length ===
+      0
   ) {
     throw new Error(
       "At least one cart item is required."
@@ -363,8 +417,10 @@ function validatePricingInput(
   }
 
   if (
-    !input.shippingAddress?.stateCode ||
-    !input.shippingAddress?.postalCode
+    !input.shippingAddress
+      ?.stateCode ||
+    !input.shippingAddress
+      ?.postalCode
   ) {
     throw new Error(
       "A shipping state and postal code are required."
@@ -394,6 +450,7 @@ function calculateRemainingMerchandise({
   return roundCurrency(
     Math.max(
       0,
+
       campaignRevenue -
         generalPromoDiscount -
         salesRepDiscount -
@@ -406,10 +463,512 @@ function calculateRemainingMerchandise({
   );
 }
 
+/*
+ * Returns the merchandise pricing with the normal
+ * sale portion removed while preserving bundle savings.
+ *
+ * This is used when a promo code gives the customer a
+ * larger discount than the active store/product sale.
+ *
+ * Bundle savings remain intact because bundle discounts
+ * are a separate pricing benefit in the current PugPep
+ * engine.
+ */
+function removeSalePricing(
+  campaign:
+    CampaignPricingResult
+): CampaignPricingResult {
+  const items =
+    campaign.items.map(
+      (line) => {
+        /*
+         * saleDiscountAmount contains ONLY campaign/manual-sale
+         * savings. Bundle savings are reported separately by
+         * campaignPricing.ts.
+         *
+         * Because bundle pricing is mutually exclusive with an
+         * active campaign/manual sale, restoring the sale portion
+         * means returning the affected line to its regular
+         * merchandise value.
+         */
+        const hadSale =
+          nonNegative(
+            line.saleDiscountAmount
+          ) > 0 ||
+          line.hasCampaign ||
+          line.hasManualSale;
+
+        if (!hadSale) {
+          /*
+           * Bundle-only/full-price lines are left exactly as they
+           * were. A winning promo is allowed to remain separate
+           * from bundle pricing under the current pricing model.
+           */
+          return line;
+        }
+
+        const restoredRevenue =
+          roundCurrency(
+            nonNegative(
+              line.regularLineValue
+            )
+          );
+
+        const restoredUnitPrice =
+          line.quantity > 0
+            ? roundCurrency(
+                restoredRevenue /
+                  line.quantity
+              )
+            : roundCurrency(
+                nonNegative(
+                  line.regularUnitPrice
+                )
+              );
+
+        const lineCost =
+          roundCurrency(
+            nonNegative(
+              line.lineCost
+            )
+          );
+
+        const lineProfit =
+          roundCurrency(
+            restoredRevenue -
+              lineCost
+          );
+
+        const lineMargin =
+          restoredRevenue > 0
+            ? (
+                lineProfit /
+                restoredRevenue
+              ) * 100
+            : 0;
+
+        return {
+          ...line,
+
+          /*
+           * Restore normal full-price merchandise revenue.
+           */
+          campaignLineRevenue:
+            restoredRevenue,
+
+          actualUnitPrice:
+            restoredUnitPrice,
+
+          saleDiscountAmount:
+            0,
+
+          /*
+           * If the losing sale was BOGO, restore all units to
+           * paid merchandise. Otherwise stale freeQuantity /
+           * paidQuantity values would survive even though the
+           * campaign price was removed.
+           */
+          paidQuantity:
+            line.quantity,
+
+          freeQuantity:
+            0,
+
+          hasCampaign:
+            false,
+
+          saleCampaignId:
+            null,
+
+          saleCampaignName:
+            null,
+
+          saleCampaignType:
+            null,
+
+          hasManualSale:
+            false,
+
+          manualSalePercent:
+            0,
+
+          /*
+           * Campaign-level stacking restrictions belong to the
+           * campaign that just lost. Once that sale is removed,
+           * downstream referral/rewards logic should evaluate the
+           * line normally instead of inheriting restrictions from
+           * a campaign price that is no longer being used.
+           */
+          allowRewardPoints:
+            true,
+
+          allowGeneralPromos:
+            true,
+
+          allowSalesRepDiscount:
+            true,
+
+          allowReferralDiscount:
+            true,
+
+          lineProfitBeforeOrderCosts:
+            lineProfit,
+
+          lineMarginBeforeOrderCosts:
+            lineMargin,
+        };
+      }
+    );
+
+  const merchandiseRevenue =
+    roundCurrency(
+      items.reduce(
+        (
+          total,
+          line
+        ) =>
+          total +
+          nonNegative(
+            line.campaignLineRevenue
+          ),
+        0
+      )
+    );
+
+  return {
+    ...campaign,
+
+    items,
+
+    campaignMerchandiseRevenue:
+      merchandiseRevenue,
+
+    saleDiscount:
+      0,
+
+    primaryCampaignId:
+      null,
+
+    primaryCampaignName:
+      null,
+
+    primaryCampaignType:
+      null,
+
+    /*
+     * Bundle pricing is tracked separately and is not treated as
+     * a sale item by campaignPricing.ts. Once the competing
+     * campaign/manual sale has been removed, there are no
+     * remaining sale items for downstream sale-item rules.
+     */
+    hasSaleItems:
+      false,
+
+    /*
+     * Any campaign-funded tax offset belongs to the losing sale
+     * and must be removed when the promo replaces that sale.
+     */
+    taxOffsetMode:
+      "none",
+
+    taxOffsetSourceType:
+      null,
+
+    taxOffsetSourceId:
+      null,
+
+    taxOffsetSourceCode:
+      null,
+
+    taxOffsetReason:
+      null,
+  };
+}
+
+function suppressPromoDiscount({
+  promo,
+  message,
+}: {
+  promo:
+    PromoPricingResult;
+
+  message:
+    string;
+}): PromoPricingResult {
+  return {
+    ...promo,
+
+    generalPromoDiscount:
+      0,
+
+    salesRepDiscount:
+      0,
+
+    /*
+     * The promo code itself stays attached.
+     *
+     * This is important for:
+     * - QR promo persistence
+     * - sales-rep attribution
+     * - displaying which code was scanned
+     *
+     * Only the customer discount is suppressed.
+     */
+    validation:
+      promo.validation
+        ? {
+            ...promo.validation,
+
+            message,
+          }
+        : null,
+
+    /*
+     * A promo-funded tax offset should not activate
+     * when that promo did not actually win.
+     */
+    taxOffsetMode:
+      "none",
+
+    taxOffsetSourceType:
+      null,
+
+    taxOffsetSourceId:
+      null,
+
+    taxOffsetSourceCode:
+      null,
+
+    taxOffsetReason:
+      null,
+  };
+}
+
+function resolvePromotionalWinner({
+  campaign,
+  promo,
+}: {
+  campaign:
+    CampaignPricingResult;
+
+  promo:
+    PromoPricingResult;
+}) {
+  const saleSavings =
+    roundCurrency(
+      nonNegative(
+        campaign.saleDiscount
+      )
+    );
+
+  const generalPromoSavings =
+    roundCurrency(
+      nonNegative(
+        promo.generalPromoDiscount
+      )
+    );
+
+  const salesRepSavings =
+    roundCurrency(
+      nonNegative(
+        promo.salesRepDiscount
+      )
+    );
+
+  let winner:
+    PromotionalWinner =
+      "none";
+
+  let winningAmount =
+    0;
+
+  /*
+   * Sale is evaluated first.
+   *
+   * Because later candidates must be GREATER
+   * rather than greater-than-or-equal, the sale
+   * wins ties.
+   */
+  if (
+    saleSavings >
+    0
+  ) {
+    winner =
+      "sale";
+
+    winningAmount =
+      saleSavings;
+  }
+
+  if (
+    generalPromoSavings >
+    winningAmount
+  ) {
+    winner =
+      "general_promo";
+
+    winningAmount =
+      generalPromoSavings;
+  }
+
+  if (
+    salesRepSavings >
+    winningAmount
+  ) {
+    winner =
+      "sales_rep";
+
+    winningAmount =
+      salesRepSavings;
+  }
+
+  /*
+   * No promo or sale.
+   */
+  if (
+    winner ===
+    "none"
+  ) {
+    return {
+      campaign,
+      promo,
+      winner,
+      winningAmount,
+    };
+  }
+
+  /*
+   * SALE WINS
+   *
+   * Keep campaign pricing exactly as calculated.
+   * Promo stays attached but contributes $0.
+   */
+  if (
+    winner ===
+    "sale"
+  ) {
+    const resolvedPromo =
+      suppressPromoDiscount(
+        {
+          promo,
+
+          message:
+            promo.appliedPromoCode
+              ? `Code ${promo.appliedPromoCode} was saved, but the current sale gives you the greater discount. The sale price was applied.`
+              : "",
+        }
+      );
+
+    return {
+      campaign,
+
+      promo:
+        resolvedPromo,
+
+      winner,
+
+      winningAmount,
+    };
+  }
+
+  /*
+   * PROMO WINS
+   *
+   * Remove the competing sale while keeping
+   * bundle savings intact.
+   */
+  const campaignWithoutSale =
+    removeSalePricing(
+      campaign
+    );
+
+  if (
+    winner ===
+    "general_promo"
+  ) {
+    const resolvedPromo:
+      PromoPricingResult =
+      {
+        ...promo,
+
+        generalPromoDiscount:
+          generalPromoSavings,
+
+        salesRepDiscount:
+          0,
+
+        validation:
+          promo.validation
+            ? {
+                ...promo.validation,
+
+                message:
+                  promo.appliedPromoCode
+                    ? `Code ${promo.appliedPromoCode} gives you the greater discount and replaced the current sale price.`
+                    : promo.validation.message,
+              }
+            : null,
+      };
+
+    return {
+      campaign:
+        campaignWithoutSale,
+
+      promo:
+        resolvedPromo,
+
+      winner,
+
+      winningAmount,
+    };
+  }
+
+  /*
+   * SALES REP PROMO WINS
+   */
+  const resolvedPromo:
+    PromoPricingResult =
+    {
+      ...promo,
+
+      generalPromoDiscount:
+        0,
+
+      salesRepDiscount:
+        salesRepSavings,
+
+      validation:
+        promo.validation
+          ? {
+              ...promo.validation,
+
+              message:
+                promo.appliedPromoCode
+                  ? `Code ${promo.appliedPromoCode} gives you the greater discount and replaced the current sale price.`
+                  : promo.validation.message,
+            }
+          : null,
+    };
+
+  return {
+    campaign:
+      campaignWithoutSale,
+
+    promo:
+      resolvedPromo,
+
+    winner,
+
+    winningAmount,
+  };
+}
+
 export async function calculatePricing(
   input: PricingInput
 ): Promise<PricingResult> {
-  validatePricingInput(input);
+  validatePricingInput(
+    input
+  );
 
   const {
     supabase,
@@ -418,97 +977,170 @@ export async function calculatePricing(
 
   const {
     isAdmin,
-  } = await requireMatchingCustomer({
-    supabase,
-    customerId,
-  });
+  } =
+    await requireMatchingCustomer(
+      {
+        supabase,
+        customerId,
+      }
+    );
 
   const [
     marketingRules,
     customerProfile,
-  ] = await Promise.all([
-    loadMarketingRules(
-      supabase
-    ),
+  ] =
+    await Promise.all([
+      loadMarketingRules(
+        supabase
+      ),
 
-    loadCustomerProfile({
-      supabase,
-      customerId,
-    }),
-  ]);
+      loadCustomerProfile({
+        supabase,
+        customerId,
+      }),
+    ]);
 
-  const campaign =
-    await calculateCampaignPricing({
-      supabase,
-      items: input.items,
-    });
+  /*
+   * Calculate normal campaign / product / bundle
+   * pricing first.
+   */
+  const rawCampaign =
+    await calculateCampaignPricing(
+      {
+        supabase,
+
+        items:
+          input.items,
+      }
+    );
 
   if (
-    campaign.items.length === 0
+    rawCampaign.items
+      .length ===
+    0
   ) {
     throw new Error(
       "No valid cart items could be priced."
     );
   }
 
-  const promo =
-    await calculatePromoPricing({
-      supabase,
-      customerId,
-      campaign,
-      promoCode:
-        input.promoCode,
-      marketingRules,
-    });
+  /*
+   * Promo engine calculates the promo as a
+   * candidate discount from regular pricing.
+   */
+  const rawPromo =
+    await calculatePromoPricing(
+      {
+        supabase,
+        customerId,
 
-  const referral =
-    await calculateReferralPricing({
-      supabase,
-      customerId,
-      campaign,
-      marketingRules,
+        campaign:
+          rawCampaign,
 
+        promoCode:
+          input.promoCode,
 
-      generalPromoDiscount:
-        promo.generalPromoDiscount,
-
-      salesRepDiscount:
-        promo.salesRepDiscount,
-    });
-
-  const merchandiseBeforeVip =
-    calculateRemainingMerchandise({
-      campaignRevenue:
-        campaign.campaignMerchandiseRevenue,
-
-
-      generalPromoDiscount:
-        promo.generalPromoDiscount,
-
-      salesRepDiscount:
-        promo.salesRepDiscount,
-
-      referralDiscount:
-        referral.referralDiscount,
-
-      vipDiscount: 0,
-      heroDiscount: 0,
-      rewardsDiscount: 0,
-      manualDiscount: 0,
-    });
-
-  const vip =
-    await calculateVipPricing({
-      supabase,
-      customerId,
-
-      eligibleMerchandiseAmount:
-        merchandiseBeforeVip,
-    });
+        marketingRules,
+      }
+    );
 
   /*
-   * Manual discounts are admin-only. A customer cannot submit
-   * a manual discount from the browser and have it honored.
+   * ---------------------------------------------------------
+   * HIGHEST PROMOTIONAL DISCOUNT WINS
+   * ---------------------------------------------------------
+   *
+   * Competing discounts:
+   *
+   * 1. Active store/product sale
+   * 2. General promo code
+   * 3. Sales-rep promo code
+   *
+   * They do NOT stack with one another.
+   *
+   * Bundle pricing remains separate.
+   * Referral, VIP, Hero, Rewards and permitted admin
+   * adjustments continue through their existing engines.
+   */
+  const promotionResolution =
+    resolvePromotionalWinner(
+      {
+        campaign:
+          rawCampaign,
+
+        promo:
+          rawPromo,
+      }
+    );
+
+  const campaign =
+    promotionResolution
+      .campaign;
+
+  const promo =
+    promotionResolution
+      .promo;
+
+  const referral =
+    await calculateReferralPricing(
+      {
+        supabase,
+        customerId,
+        campaign,
+        marketingRules,
+
+        generalPromoDiscount:
+          promo.generalPromoDiscount,
+
+        salesRepDiscount:
+          promo.salesRepDiscount,
+      }
+    );
+
+  const merchandiseBeforeVip =
+    calculateRemainingMerchandise(
+      {
+        campaignRevenue:
+          campaign.campaignMerchandiseRevenue,
+
+        generalPromoDiscount:
+          promo.generalPromoDiscount,
+
+        salesRepDiscount:
+          promo.salesRepDiscount,
+
+        referralDiscount:
+          referral.referralDiscount,
+
+        vipDiscount:
+          0,
+
+        heroDiscount:
+          0,
+
+        rewardsDiscount:
+          0,
+
+        manualDiscount:
+          0,
+      }
+    );
+
+  const vip =
+    await calculateVipPricing(
+      {
+        supabase,
+        customerId,
+
+        eligibleMerchandiseAmount:
+          merchandiseBeforeVip,
+      }
+    );
+
+  /*
+   * Manual discounts are admin-only.
+   * A customer cannot submit a manual
+   * discount from the browser and have
+   * it honored.
    */
   const requestedManualDiscount =
     isAdmin
@@ -518,37 +1150,42 @@ export async function calculatePricing(
       : 0;
 
   const merchandiseBeforeRewards =
-    calculateRemainingMerchandise({
-      campaignRevenue:
-        campaign.campaignMerchandiseRevenue,
+    calculateRemainingMerchandise(
+      {
+        campaignRevenue:
+          campaign.campaignMerchandiseRevenue,
 
+        generalPromoDiscount:
+          promo.generalPromoDiscount,
 
-      generalPromoDiscount:
-        promo.generalPromoDiscount,
+        salesRepDiscount:
+          promo.salesRepDiscount,
 
-      salesRepDiscount:
-        promo.salesRepDiscount,
+        referralDiscount:
+          referral.referralDiscount,
 
-      referralDiscount:
-        referral.referralDiscount,
+        vipDiscount:
+          vip.vipDiscount,
 
-      vipDiscount:
-        vip.vipDiscount,
+        heroDiscount:
+          0,
 
-      heroDiscount: 0,
+        rewardsDiscount:
+          0,
 
-      rewardsDiscount: 0,
-
-      manualDiscount:
-        requestedManualDiscount,
-    });
+        manualDiscount:
+          requestedManualDiscount,
+      }
+    );
 
   const cappedManualDiscount =
     roundCurrency(
       Math.min(
         requestedManualDiscount,
+
         Math.max(
           0,
+
           merchandiseBeforeRewards +
             requestedManualDiscount
         )
@@ -556,127 +1193,140 @@ export async function calculatePricing(
     );
 
   const merchandiseBeforeHero =
-    calculateRemainingMerchandise({
-      campaignRevenue:
-        campaign.campaignMerchandiseRevenue,
+    calculateRemainingMerchandise(
+      {
+        campaignRevenue:
+          campaign.campaignMerchandiseRevenue,
 
+        generalPromoDiscount:
+          promo.generalPromoDiscount,
 
-      generalPromoDiscount:
-        promo.generalPromoDiscount,
+        salesRepDiscount:
+          promo.salesRepDiscount,
 
-      salesRepDiscount:
-        promo.salesRepDiscount,
+        referralDiscount:
+          referral.referralDiscount,
 
-      referralDiscount:
-        referral.referralDiscount,
+        vipDiscount:
+          vip.vipDiscount,
 
-      vipDiscount:
-        vip.vipDiscount,
+        heroDiscount:
+          0,
 
-      heroDiscount: 0,
-      rewardsDiscount: 0,
+        rewardsDiscount:
+          0,
 
-      manualDiscount:
-        cappedManualDiscount,
-    });
+        manualDiscount:
+          cappedManualDiscount,
+      }
+    );
 
   const hero =
     calculateHeroPricing({
       isHeroAccount:
         customerProfile.isHeroAccount,
+
       heroDiscountPercent:
         customerProfile.heroDiscountPercent,
+
       eligibleMerchandiseAmount:
         merchandiseBeforeHero,
     });
 
   const rewards =
-    await calculateRewardsPricing({
-      supabase,
-      customerId,
-      campaign,
-      marketingRules,
+    await calculateRewardsPricing(
+      {
+        supabase,
+        customerId,
+        campaign,
+        marketingRules,
 
-      rewardPointsRequested:
-        input.rewardPointsRequested,
+        rewardPointsRequested:
+          input.rewardPointsRequested,
 
+        generalPromoDiscount:
+          promo.generalPromoDiscount,
 
-      generalPromoDiscount:
-        promo.generalPromoDiscount,
+        salesRepDiscount:
+          promo.salesRepDiscount,
 
-      salesRepDiscount:
-        promo.salesRepDiscount,
+        referralDiscount:
+          referral.referralDiscount,
 
-      referralDiscount:
-        referral.referralDiscount,
+        vipDiscount:
+          vip.vipDiscount,
 
-      vipDiscount:
-        vip.vipDiscount,
+        heroDiscount:
+          hero.heroDiscount,
 
-      heroDiscount:
-        hero.heroDiscount,
-
-      manualDiscount:
-        cappedManualDiscount,
-    });
+        manualDiscount:
+          cappedManualDiscount,
+      }
+    );
 
   const merchandiseBeforeTaxOffset =
-    calculateRemainingMerchandise({
-      campaignRevenue:
-        campaign.campaignMerchandiseRevenue,
+    calculateRemainingMerchandise(
+      {
+        campaignRevenue:
+          campaign.campaignMerchandiseRevenue,
 
+        generalPromoDiscount:
+          promo.generalPromoDiscount,
 
-      generalPromoDiscount:
-        promo.generalPromoDiscount,
+        salesRepDiscount:
+          promo.salesRepDiscount,
 
-      salesRepDiscount:
-        promo.salesRepDiscount,
+        referralDiscount:
+          referral.referralDiscount,
 
-      referralDiscount:
-        referral.referralDiscount,
+        vipDiscount:
+          vip.vipDiscount,
 
-      vipDiscount:
-        vip.vipDiscount,
+        heroDiscount:
+          hero.heroDiscount,
 
-      heroDiscount:
-        hero.heroDiscount,
+        rewardsDiscount:
+          rewards.rewardDiscount,
 
-      rewardsDiscount:
-        rewards.rewardDiscount,
-
-      manualDiscount:
-        cappedManualDiscount,
-    });
+        manualDiscount:
+          cappedManualDiscount,
+      }
+    );
 
   const shipping =
-    calculateShippingPricing({
-      campaign,
-      marketingRules,
+    calculateShippingPricing(
+      {
+        campaign,
+        marketingRules,
 
-      merchandiseRevenueAfterDiscounts:
-        merchandiseBeforeTaxOffset,
+        merchandiseRevenueAfterDiscounts:
+          merchandiseBeforeTaxOffset,
 
-      hasLifetimeFreeShipping:
-        customerProfile.hasLifetimeFreeShipping,
-    });
+        hasLifetimeFreeShipping:
+          customerProfile.hasLifetimeFreeShipping,
+      }
+    );
 
   const tax =
-    await calculateTaxPricing({
-      supabase,
-      customerId,
-      campaign,
-      promo,
-      shipping,
+    await calculateTaxPricing(
+      {
+        supabase,
+        customerId,
+        campaign,
+        promo,
+        shipping,
 
-      shippingAddress:
-        input.shippingAddress,
+        shippingAddress:
+          input.shippingAddress,
 
-      merchandiseRevenueAfterDiscounts:
-        merchandiseBeforeTaxOffset,
-    });
+        merchandiseRevenueAfterDiscounts:
+          merchandiseBeforeTaxOffset,
+      }
+    );
 
   /*
-   * First accounting pass establishes profit before commission.
+   * First accounting pass establishes
+   * profit before commission.
    */
   const provisionalAccounting =
     calculateAccounting({
@@ -686,7 +1336,6 @@ export async function calculatePricing(
 
       bundleDiscount:
         campaign.bundleDiscount,
-
 
       generalPromoDiscount:
         promo.generalPromoDiscount,
@@ -712,9 +1361,18 @@ export async function calculatePricing(
       otherDirectCost:
         input.otherDirectCost,
 
-      commissionAmount: 0,
+      commissionAmount:
+        0,
     });
 
+  /*
+   * Sales-rep attribution remains available
+   * through promo even when a larger sale won.
+   *
+   * That allows the commission/attribution engine
+   * to preserve the rep relationship without
+   * forcing a smaller customer discount.
+   */
   const commission =
     await calculateCommission({
       supabase,
@@ -728,74 +1386,134 @@ export async function calculatePricing(
     });
 
   /*
-   * Final accounting pass subtracts the calculated commission.
+   * Final accounting pass subtracts
+   * calculated commission.
    */
   const {
     discounts,
     accounting,
-  } = calculateAccounting({
-    campaign,
-    shipping,
-    tax,
+  } =
+    calculateAccounting({
+      campaign,
+      shipping,
+      tax,
 
-    /*
-     * IMPORTANT:
-     * Bundle savings are already reflected in
-     * campaign.campaignMerchandiseRevenue, but they still need to be
-     * carried into DiscountBreakdown so the order snapshot, admin view,
-     * checkout display, and ledger all preserve the correct amount.
-     */
-    bundleDiscount:
-      campaign.bundleDiscount,
+      /*
+       * Bundle savings are already reflected
+       * in campaignMerchandiseRevenue, but must
+       * remain in DiscountBreakdown for checkout,
+       * order snapshot, admin display, and ledger.
+       */
+      bundleDiscount:
+        campaign.bundleDiscount,
 
-    generalPromoDiscount:
-      promo.generalPromoDiscount,
+      generalPromoDiscount:
+        promo.generalPromoDiscount,
 
-    salesRepDiscount:
-      promo.salesRepDiscount,
+      salesRepDiscount:
+        promo.salesRepDiscount,
 
-    referralDiscount:
-      referral.referralDiscount,
+      referralDiscount:
+        referral.referralDiscount,
 
-    rewardsDiscount:
-      rewards.rewardDiscount,
+      rewardsDiscount:
+        rewards.rewardDiscount,
 
-    vipDiscount:
-      vip.vipDiscount,
+      vipDiscount:
+        vip.vipDiscount,
 
-    /*
-     * Hero Appreciation stacks on top of eligible sale, bundle, promo,
-     * referral, VIP, and other discounts. The provisional accounting pass
-     * already included it; the final accounting pass must include it too.
-     */
-    heroDiscount:
-      hero.heroDiscount,
+      /*
+       * Hero Appreciation remains a separate
+       * benefit and continues through the existing
+       * PugPep pricing architecture.
+       */
+      heroDiscount:
+        hero.heroDiscount,
 
-    manualDiscount:
-      cappedManualDiscount,
+      manualDiscount:
+        cappedManualDiscount,
 
-    otherDirectCost:
-      input.otherDirectCost,
+      otherDirectCost:
+        input.otherDirectCost,
 
-    commissionAmount:
-      commission.commissionAmount,
-  });
+      commissionAmount:
+        commission.commissionAmount,
+    });
 
   const engineWarnings:
-    PricingWarning[] = [];
+    PricingWarning[] =
+      [];
+
+  /*
+   * Record an informational pricing message
+   * whenever an active sale and promo actually
+   * competed.
+   */
+  if (
+    rawCampaign.saleDiscount >
+      0 &&
+    rawPromo.appliedPromoCode &&
+    (
+      rawPromo.generalPromoDiscount >
+        0 ||
+      rawPromo.salesRepDiscount >
+        0
+    )
+  ) {
+    if (
+      promotionResolution.winner ===
+      "sale"
+    ) {
+      engineWarnings.push(
+        createWarning({
+          code:
+            "PROMO_BLOCKED",
+
+          message:
+            "Best-discount rule applied: the current sale provides the larger savings, so the sale price was kept.",
+
+          severity:
+            "info",
+        })
+      );
+    }
+
+    if (
+      promotionResolution.winner ===
+        "general_promo" ||
+      promotionResolution.winner ===
+        "sales_rep"
+    ) {
+      engineWarnings.push(
+        createWarning({
+          code:
+            "PROMO_BLOCKED",
+
+          message:
+            "Best-discount rule applied: the promo code provides the larger savings, so it replaced the current sale price.",
+
+          severity:
+            "info",
+        })
+      );
+    }
+  }
 
   if (
     !isAdmin &&
     nonNegative(
       input.manualDiscount
-    ) > 0
+    ) >
+      0
   ) {
     engineWarnings.push(
       createWarning({
         code:
           "PROMO_BLOCKED",
+
         message:
           "Manual discounts may only be applied by an administrator.",
+
         severity:
           "warning",
       })
