@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -205,6 +206,9 @@ export default function CheckoutPage() {
     useState<
       string | null
     >(null);
+
+  const sharedPromoApplyingRef =
+    useRef(false);
 
   const [
     rewardPoints,
@@ -903,9 +907,8 @@ export default function CheckoutPage() {
     if (
       !pendingSharedPromo ||
       !canRequestPricing ||
-      promoLoading ||
-      pricingLoading ||
-      appliedPromoCode
+      appliedPromoCode ||
+      sharedPromoApplyingRef.current
     ) {
       return;
     }
@@ -913,17 +916,33 @@ export default function CheckoutPage() {
     let cancelled =
       false;
 
-    async function applySharedPromo() {
-      setPromoLoading(
-        true
+    const promoToApply =
+      pendingSharedPromo
+        .trim()
+        .toUpperCase();
+
+    if (!promoToApply) {
+      setPendingSharedPromo(
+        null
       );
 
+      return;
+    }
+
+    sharedPromoApplyingRef.current =
+      true;
+
+    setPromoLoading(
+      true
+    );
+
+    async function applySharedPromo() {
       try {
         const result =
           await requestPricing(
             {
               promoCode:
-                pendingSharedPromo,
+                promoToApply,
 
               showErrors:
                 false,
@@ -931,9 +950,37 @@ export default function CheckoutPage() {
           );
 
         if (
-          cancelled ||
-          !result
+          cancelled
         ) {
+          return;
+        }
+
+        /*
+         * A temporary pricing failure should NOT leave the
+         * checkout stuck in "Applying...".
+         *
+         * Keep the QR code saved for a later retry, clear the
+         * one-shot auto-apply state, and always release the
+         * loading flag in finally.
+         */
+        if (!result) {
+          setPendingSharedPromo(
+            null
+          );
+
+          try {
+            localStorage.removeItem(
+              LEGACY_PENDING_PROMO_KEY
+            );
+          } catch (
+            error
+          ) {
+            console.warn(
+              "Unable to clear legacy promo state:",
+              error
+            );
+          }
+
           return;
         }
 
@@ -942,11 +989,9 @@ export default function CheckoutPage() {
             .validation;
 
         /*
-         * A valid promo remains attached even if
-         * the pricing engine later determines that
-         * an active store sale gives the larger
-         * discount. The pricing engine—not this
-         * page—decides which discount wins.
+         * A valid promo remains attached even if the pricing
+         * engine determines that an active sale gives the
+         * customer the larger discount.
          */
         if (
           validation
@@ -955,8 +1000,7 @@ export default function CheckoutPage() {
           const appliedCode =
             (
               validation.code ||
-              pendingSharedPromo ||
-              ""
+              promoToApply
             )
               .trim()
               .toUpperCase();
@@ -972,24 +1016,55 @@ export default function CheckoutPage() {
               appliedCode
             );
 
-            localStorage.setItem(
-              SAVED_PROMO_KEY,
-              appliedCode
-            );
+            try {
+              localStorage.setItem(
+                SAVED_PROMO_KEY,
+                appliedCode
+              );
+            } catch (
+              error
+            ) {
+              console.warn(
+                "Unable to save promo code:",
+                error
+              );
+            }
           }
         } else {
-          localStorage.removeItem(
-            SAVED_PROMO_KEY
-          );
+          /*
+           * Invalid/inactive codes are cleared so they do not
+           * retry forever every time checkout opens.
+           */
+          try {
+            localStorage.removeItem(
+              SAVED_PROMO_KEY
+            );
+          } catch (
+            error
+          ) {
+            console.warn(
+              "Unable to clear invalid promo code:",
+              error
+            );
+          }
 
           setPromoInput(
             ""
           );
         }
 
-        localStorage.removeItem(
-          LEGACY_PENDING_PROMO_KEY
-        );
+        try {
+          localStorage.removeItem(
+            LEGACY_PENDING_PROMO_KEY
+          );
+        } catch (
+          error
+        ) {
+          console.warn(
+            "Unable to clear legacy promo state:",
+            error
+          );
+        }
 
         setPendingSharedPromo(
           null
@@ -1003,19 +1078,34 @@ export default function CheckoutPage() {
         );
 
         /*
-         * Do not erase the new persistent QR promo
-         * merely because pricing temporarily failed.
-         * A network/database failure should not
-         * destroy a customer's scanned promo.
+         * Keep the persistent QR promo for a future retry, but
+         * clear this auto-apply attempt so mobile checkout can
+         * never remain permanently stuck in "Applying...".
          */
-        localStorage.removeItem(
-          LEGACY_PENDING_PROMO_KEY
-        );
+        if (
+          !cancelled
+        ) {
+          setPendingSharedPromo(
+            null
+          );
+        }
 
-        setPendingSharedPromo(
-          null
-        );
+        try {
+          localStorage.removeItem(
+            LEGACY_PENDING_PROMO_KEY
+          );
+        } catch (
+          storageError
+        ) {
+          console.warn(
+            "Unable to clear legacy promo state:",
+            storageError
+          );
+        }
       } finally {
+        sharedPromoApplyingRef.current =
+          false;
+
         if (
           !cancelled
         ) {
@@ -1031,12 +1121,18 @@ export default function CheckoutPage() {
     return () => {
       cancelled =
         true;
+
+      /*
+       * Cleanup must also release the ref. This prevents React
+       * Strict Mode/navigation cleanup from blocking a later
+       * legitimate QR promo attempt.
+       */
+      sharedPromoApplyingRef.current =
+        false;
     };
   }, [
     pendingSharedPromo,
     canRequestPricing,
-    promoLoading,
-    pricingLoading,
     appliedPromoCode,
     requestPricing,
   ]);

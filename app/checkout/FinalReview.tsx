@@ -234,12 +234,27 @@ export function FinalReview({
 
         <div
           className="checkout-final-action"
-          style={styles.actionPanel}
+          style={{
+            ...styles.actionPanel,
+
+            /*
+             * Keep this panel in normal document flow.
+             * This prevents a sticky/fixed action panel
+             * from covering Order Review on smaller screens.
+             */
+            position: "static",
+            top: "auto",
+            alignSelf: "stretch",
+            width: "100%",
+            maxWidth: "100%",
+            boxSizing: "border-box",
+          }}
         >
           <button
             type="button"
             disabled={buttonDisabled}
             onClick={proceedToPayment}
+            className="checkout-enter-lab-button"
             style={{
               ...styles.primaryButton,
               background:
@@ -248,8 +263,16 @@ export function FinalReview({
                 "2px solid #45d97a",
               boxShadow:
                 "0 0 18px rgba(46,234,111,.32), 0 0 36px rgba(46,234,111,.14)",
-              minHeight: 66,
-              fontSize: 20,
+              width: "100%",
+              maxWidth: 460,
+              minHeight: 58,
+              padding: "14px 18px",
+              margin: "0 auto",
+              display: "block",
+              boxSizing: "border-box",
+              whiteSpace: "normal",
+              lineHeight: 1.25,
+              fontSize: 18,
               opacity:
                 buttonDisabled
                   ? 0.65
@@ -284,6 +307,44 @@ export function FinalReview({
           </p>
         </div>
       </div>
+
+      <style jsx>{`
+        @media (max-width: 640px) {
+          .checkout-final-action {
+            position: static !important;
+            top: auto !important;
+            right: auto !important;
+            bottom: auto !important;
+            left: auto !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin-top: 14px !important;
+            padding: 0 !important;
+            transform: none !important;
+            z-index: auto !important;
+          }
+
+          .checkout-enter-lab-button {
+            width: 100% !important;
+            max-width: 360px !important;
+            min-height: 50px !important;
+            padding: 11px 14px !important;
+            margin: 0 auto !important;
+            font-size: 16px !important;
+            line-height: 1.2 !important;
+            border-radius: 10px !important;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .checkout-enter-lab-button {
+            max-width: 100% !important;
+            min-height: 48px !important;
+            padding: 10px 12px !important;
+            font-size: 15px !important;
+          }
+        }
+      `}</style>
     </section>
   );
 }
