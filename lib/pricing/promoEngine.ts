@@ -34,6 +34,8 @@ type PromoRpcResponse = {
   code?: string | null;
   discount_type?: string | null;
   discount_value?: number | null;
+  minimum_spend?: number | null;
+  exclude_sale_items?: boolean | null;
   sales_rep_id?: string | null;
   sales_rep_name?: string | null;
   first_order_only?: boolean;
@@ -105,6 +107,16 @@ function normalizePromoValidation(
     discountValue:
       nonNegative(
         data.discount_value
+      ),
+
+    minimumSpend:
+      nonNegative(
+        data.minimum_spend
+      ),
+
+    excludeSaleItems:
+      Boolean(
+        data.exclude_sale_items
       ),
 
     salesRepId:
@@ -187,23 +199,51 @@ async function validatePromoCode({
   );
 }
 
+function isDiscountedLine(
+  line: CampaignPricingResult["items"][number]
+) {
+  return Boolean(
+    line.hasCampaign ||
+    line.hasManualSale ||
+    line.bundleDiscountApplied ||
+    Number(
+      line.saleDiscountAmount || 0
+    ) > 0 ||
+    Number(
+      line.bundleDiscountAmount || 0
+    ) > 0
+  );
+}
+
 function getEligibleBase({
   campaign,
   source,
+  excludeSaleItems = false,
 }: {
   campaign: CampaignPricingResult;
   source: Exclude<PromoSource, null>;
+  excludeSaleItems?: boolean;
 }) {
   const eligibleLines =
     campaign.items.filter(
       (line) => {
-        if (
+        const sourceEligible =
           source === "general"
-        ) {
-          return line.allowGeneralPromos;
+            ? line.allowGeneralPromos
+            : line.allowSalesRepDiscount;
+
+        if (!sourceEligible) {
+          return false;
         }
 
-        return line.allowSalesRepDiscount;
+        if (
+          excludeSaleItems &&
+          isDiscountedLine(line)
+        ) {
+          return false;
+        }
+
+        return true;
       }
     );
 
@@ -372,33 +412,82 @@ export async function calculatePromoPricing({
       false;
   }
 
+  /*
+   * Minimum spend is evaluated against merchandise after campaign,
+   * manual-sale, and bundle pricing, but before this promo is applied.
+   * Shipping and tax never count toward the threshold.
+   */
+  if (
+    validation.source ===
+      "general" &&
+    validation.discountAllowed &&
+    validation.minimumSpend > 0 &&
+    campaign.campaignMerchandiseRevenue <
+      validation.minimumSpend
+  ) {
+    validation.discountAllowed =
+      false;
+
+    validation.message =
+      `This promo requires a minimum merchandise spend of $${validation.minimumSpend.toFixed(2)}.`;
+
+    warnings.push(
+      createWarning({
+        code: "PROMO_BLOCKED",
+        message:
+          validation.message,
+        severity: "warning",
+      })
+    );
+  }
+
   const hasSaleItems =
     campaign.hasSaleItems;
+
+  /*
+   * A promo can exclude discounted lines even when the global marketing
+   * rule normally allows promos on sale items. The global rule still acts
+   * as the broader safety switch.
+   */
+  const excludeSaleItemsForGeneralPromo =
+    validation.source ===
+      "general" &&
+    (
+      validation.excludeSaleItems ||
+      (
+        hasSaleItems &&
+        !marketingRules.allow_general_promos_on_sale_items
+      )
+    );
 
   if (
     validation.source ===
       "general" &&
-    hasSaleItems &&
-    !marketingRules.allow_general_promos_on_sale_items
+    validation.discountAllowed &&
+    excludeSaleItemsForGeneralPromo
   ) {
     const eligibleBase =
       getEligibleBase({
         campaign,
         source: "general",
+        excludeSaleItems: true,
       });
 
     if (eligibleBase <= 0) {
+      validation.discountAllowed =
+        false;
+
+      validation.message =
+        "This promo applies only to full-price items, and there are no eligible full-price items in your cart.";
+
       warnings.push(
         createWarning({
           code: "PROMO_BLOCKED",
           message:
-            "This promo code cannot be used on the sale items in your cart.",
+            validation.message,
           severity: "warning",
         })
       );
-
-      validation.discountAllowed =
-        false;
     }
   }
 
@@ -472,6 +561,9 @@ export async function calculatePromoPricing({
       getEligibleBase({
         campaign,
         source: "general",
+        excludeSaleItems:
+          validation.excludeSaleItems ||
+          !marketingRules.allow_general_promos_on_sale_items,
       });
 
     generalPromoDiscount =

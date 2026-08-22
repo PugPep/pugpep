@@ -23,6 +23,8 @@ type Promo = {
   discount_type: string;
   discount_value: number;
   usage_type: PromoUsageType;
+  minimum_spend: number | null;
+  exclude_sale_items: boolean;
   is_active: boolean;
 };
 
@@ -37,6 +39,8 @@ type PromoEditForm = {
   discount_type: string;
   discount_value: string;
   usage_type: PromoUsageType;
+  minimum_spend: string;
+  exclude_sale_items: boolean;
   is_active: boolean;
 };
 
@@ -154,6 +158,8 @@ export default function PromoManagerPage() {
     discount_type: string;
     discount_value: string;
     usage_type: PromoUsageType;
+    minimum_spend: string;
+    exclude_sale_items: boolean;
   }>({
     code: "",
     discount_type:
@@ -161,6 +167,8 @@ export default function PromoManagerPage() {
     discount_value: "",
     usage_type:
       "continuous",
+    minimum_spend: "",
+    exclude_sale_items: false,
   });
 
   useEffect(() => {
@@ -305,6 +313,25 @@ export default function PromoManagerPage() {
       return;
     }
 
+    const minimumSpend =
+      newPromo.minimum_spend.trim()
+        ? Number(
+            newPromo.minimum_spend
+          )
+        : 0;
+
+    if (
+      !Number.isFinite(
+        minimumSpend
+      ) ||
+      minimumSpend < 0
+    ) {
+      setNotice(
+        "Minimum spend must be zero or a positive dollar amount."
+      );
+      return;
+    }
+
     if (
       newPromo.discount_type ===
         "percent" &&
@@ -332,6 +359,12 @@ export default function PromoManagerPage() {
             discountValue,
           usage_type:
             newPromo.usage_type,
+          minimum_spend:
+            minimumSpend > 0
+              ? minimumSpend
+              : null,
+          exclude_sale_items:
+            newPromo.exclude_sale_items,
           is_active: true,
         });
 
@@ -351,6 +384,8 @@ export default function PromoManagerPage() {
       discount_value: "",
       usage_type:
         "continuous",
+      minimum_spend: "",
+      exclude_sale_items: false,
     });
 
     setNotice(
@@ -458,6 +493,19 @@ export default function PromoManagerPage() {
         ),
       usage_type:
         promo.usage_type,
+      minimum_spend:
+        promo.minimum_spend &&
+        Number(
+          promo.minimum_spend
+        ) > 0
+          ? String(
+              promo.minimum_spend
+            )
+          : "",
+      exclude_sale_items:
+        Boolean(
+          promo.exclude_sale_items
+        ),
       is_active:
         promo.is_active,
     });
@@ -490,6 +538,25 @@ export default function PromoManagerPage() {
     ) {
       setNotice(
         "Enter a promo code and a discount greater than zero."
+      );
+      return;
+    }
+
+    const minimumSpend =
+      editingPromo.minimum_spend.trim()
+        ? Number(
+            editingPromo.minimum_spend
+          )
+        : 0;
+
+    if (
+      !Number.isFinite(
+        minimumSpend
+      ) ||
+      minimumSpend < 0
+    ) {
+      setNotice(
+        "Minimum spend must be zero or a positive dollar amount."
       );
       return;
     }
@@ -537,6 +604,12 @@ export default function PromoManagerPage() {
             discountValue,
           usage_type:
             editingPromo.usage_type,
+          minimum_spend:
+            minimumSpend > 0
+              ? minimumSpend
+              : null,
+          exclude_sale_items:
+            editingPromo.exclude_sale_items,
           is_active:
             editingPromo.is_active,
         })
@@ -1053,6 +1126,61 @@ export default function PromoManagerPage() {
 
             </label>
 
+            <label style={field}>
+              <span style={fieldLabel}>
+                Minimum Spend
+              </span>
+
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={
+                  newPromo.minimum_spend
+                }
+                onChange={(
+                  event
+                ) =>
+                  setNewPromo({
+                    ...newPromo,
+                    minimum_spend:
+                      event.target.value,
+                  })
+                }
+                placeholder="Optional — e.g. 100.00"
+                style={input}
+              />
+            </label>
+
+            <label style={toggleFieldCompact}>
+              <span>
+                <strong style={fieldLabel}>
+                  Exclude Sale Items
+                </strong>
+
+                <span style={toggleHelper}>
+                  Promo applies only to full-price merchandise.
+                </span>
+              </span>
+
+              <input
+                type="checkbox"
+                checked={
+                  newPromo.exclude_sale_items
+                }
+                onChange={(
+                  event
+                ) =>
+                  setNewPromo({
+                    ...newPromo,
+                    exclude_sale_items:
+                      event.target.checked,
+                  })
+                }
+                style={checkbox}
+              />
+            </label>
+
             <button
               type="button"
               onClick={() => {
@@ -1305,6 +1433,42 @@ export default function PromoManagerPage() {
                             "single_use_total"
                               ? " / 1"
                               : ""}
+                          </strong>
+                        </div>
+
+                        <div style={usageInfoRow}>
+                          <span style={usageInfoLabel}>
+                            Minimum Spend
+                          </span>
+
+                          <strong>
+                            {Number(
+                              promo.minimum_spend ||
+                                0
+                            ) > 0
+                              ? `$${Number(
+                                  promo.minimum_spend
+                                ).toFixed(2)}`
+                              : "None"}
+                          </strong>
+                        </div>
+
+                        <div style={usageInfoRow}>
+                          <span style={usageInfoLabel}>
+                            Sale Items
+                          </span>
+
+                          <strong
+                            style={{
+                              color:
+                                promo.exclude_sale_items
+                                  ? "#ffcc00"
+                                  : "#00ff99",
+                            }}
+                          >
+                            {promo.exclude_sale_items
+                              ? "Excluded"
+                              : "Eligible"}
                           </strong>
                         </div>
 
@@ -1656,6 +1820,65 @@ export default function PromoManagerPage() {
                     Single Use Total
                   </option>
                 </select>
+              </label>
+
+              <label style={field}>
+                <span style={fieldLabel}>
+                  Minimum Spend
+                </span>
+
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={
+                    editingPromo.minimum_spend
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setEditingPromo({
+                      ...editingPromo,
+                      minimum_spend:
+                        event.target.value,
+                    })
+                  }
+                  placeholder="Optional — e.g. 100.00"
+                  style={input}
+                />
+
+                <span style={fieldHelper}>
+                  Merchandise total required before the promo can apply. Shipping and tax do not count.
+                </span>
+              </label>
+
+              <label style={toggleField}>
+                <span>
+                  <strong style={fieldLabel}>
+                    Exclude Sale Items
+                  </strong>
+
+                  <span style={toggleHelper}>
+                    Campaign-sale, manual-sale, and bundle-discounted lines will not receive this promo.
+                  </span>
+                </span>
+
+                <input
+                  type="checkbox"
+                  checked={
+                    editingPromo.exclude_sale_items
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setEditingPromo({
+                      ...editingPromo,
+                      exclude_sale_items:
+                        event.target.checked,
+                    })
+                  }
+                  style={checkbox}
+                />
               </label>
 
               <label style={toggleField}>
@@ -2143,6 +2366,18 @@ const editGrid = {
   gridTemplateColumns:
     "repeat(auto-fit, minmax(240px, 1fr))",
   gap: 16,
+};
+
+const toggleFieldCompact = {
+  minHeight: 54,
+  padding: "9px 14px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 14,
+  border: "1px solid rgba(255,255,255,.16)",
+  borderRadius: 10,
+  background: "#050507",
 };
 
 const toggleField = {

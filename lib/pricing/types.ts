@@ -204,6 +204,20 @@ export type PromoValidationResult = {
   code: string | null;
   discountType: "percent" | "fixed" | null;
   discountValue: number;
+
+  /*
+   * General promo restrictions.
+   *
+   * minimumSpend is checked against merchandise revenue after
+   * campaign/manual/bundle pricing but before promo discounts.
+   *
+   * excludeSaleItems means the promo discount base contains only
+   * full-price lines. Campaign-sale, manual-sale, and bundle-discounted
+   * lines are excluded from the promo calculation.
+   */
+  minimumSpend: number;
+  excludeSaleItems: boolean;
+
   salesRepId: string | null;
   salesRepName: string | null;
   firstOrderOnly: boolean;
