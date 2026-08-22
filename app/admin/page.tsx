@@ -2,10 +2,23 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import emailjs from "emailjs-com";
 import { createClient } from "../../lib/supabaseClient";
 import { Html5QrcodeScanner } from "html5-qrcode";
 
 const ADMIN_EMAIL = "pugpep99@gmail.com";
+
+const EMAILJS_SERVICE_ID =
+  "service_quxnkin";
+
+const SHIPPING_EMAIL_TEMPLATE_ID =
+  "template_piq2u0f";
+
+const EMAILJS_PUBLIC_KEY =
+  "yc_0cE0Mcl3tfzc11";
+
+const PUGPEP_LOGO_URL =
+  "https://pugpep.com/pugpep-logo.png";
 
 type Order = {
   id: string;
@@ -13,6 +26,10 @@ type Order = {
   customer_name: string;
   customer_email: string;
   customer_phone?: string | null;
+  shipping_address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
   total: number;
   net_revenue?: number;
   product_cost_total?: number;
@@ -583,10 +600,16 @@ export default function AdminPage() {
           "shipped"
         );
 
+        /*
+         * A scan can safely save the tracking/status, but customer
+         * notifications are reserved for the dedicated
+         * "Mark Shipped & Notify Customer" button below.
+         */
         void saveDeliveryUpdate(
           deliveryOrderId,
           "shipped",
-          captured
+          captured,
+          false
         );
 
         setScannerOpen(
@@ -665,7 +688,8 @@ export default function AdminPage() {
   async function saveDeliveryUpdate(
     orderId = deliveryOrderId,
     status = deliveryStatus,
-    tracking = trackingNumber
+    tracking = trackingNumber,
+    notifyCustomer = false
   ) {
     if (!orderId || savingDelivery) {
       return;
@@ -753,33 +777,262 @@ export default function AdminPage() {
           );
         }
 
-        if (currentOrder.customer_phone) {
-          const smsResponse = await fetch(
-            "/api/send-shipping-sms",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                customerPhone: currentOrder.customer_phone,
-                orderNumber: currentOrder.order_number,
-                shippingStatus: finalStatus,
-                trackingNumber: cleanedTracking,
-              }),
-            }
-          );
+        if (notifyCustomer) {
+          /*
+           * Send shipping email through the same EmailJS service
+           * already used by PugPep order confirmations.
+           */
+          try {
+            /*
+             * Load the historical order-item snapshot saved with this
+             * order. Never rebuild shipping-email details from current
+             * product prices.
+             */
+            const {
+              data: shippingEmailItems,
+              error: shippingEmailItemsError,
+            } = await supabase
+              .from("order_items")
+              .select(
+                "product_name,dosage,purchase_type,quantity,line_revenue,price,actual_unit_price"
+              )
+              .eq(
+                "order_id",
+                currentOrder.id
+              )
+              .order(
+                "product_name",
+                {
+                  ascending: true,
+                }
+              );
 
-          if (!smsResponse.ok) {
-            const smsResult = await smsResponse
-              .json()
-              .catch(() => null);
+            if (
+              shippingEmailItemsError
+            ) {
+              throw shippingEmailItemsError;
+            }
+
+            const formattedItems =
+              (
+                shippingEmailItems ||
+                []
+              ).map(
+                (item) => {
+                  const quantity =
+                    Math.max(
+                      1,
+                      Number(
+                        item.quantity ||
+                        1
+                      )
+                    );
+
+                  const lineTotal =
+                    Number(
+                      item.line_revenue ??
+                      item.price ??
+                      (
+                        Number(
+                          item.actual_unit_price ||
+                          0
+                        ) *
+                        quantity
+                      )
+                    );
+
+                  const itemName =
+                    [
+                      item.product_name,
+                      item.dosage,
+                      item.purchase_type
+                        ? item.purchase_type ===
+                          "kit"
+                          ? "Kit"
+                          : "Single"
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" — ");
+
+                  return {
+                    name:
+                      itemName,
+                    quantity,
+                    total:
+                      Number.isFinite(
+                        lineTotal
+                      )
+                        ? lineTotal
+                        : 0,
+                  };
+                }
+              );
+
+            const orderDetails =
+              formattedItems.length >
+              0
+                ? formattedItems
+                    .map(
+                      (item) =>
+                        `${item.quantity} × ${item.name} — $${item.total.toFixed(2)}`
+                    )
+                    .join("\n")
+                : "Order details unavailable.";
+
+            const shippingAddress =
+              [
+                currentOrder
+                  .shipping_address,
+                [
+                  currentOrder.city,
+                  currentOrder.state,
+                  currentOrder.zip,
+                ]
+                  .filter(Boolean)
+                  .join(" "),
+              ]
+                .filter(Boolean)
+                .join("\n");
+
+            const orderTotal =
+              Number(
+                currentOrder.total ||
+                0
+              );
+
+            await emailjs.send(
+              EMAILJS_SERVICE_ID,
+              SHIPPING_EMAIL_TEMPLATE_ID,
+              {
+                /*
+                 * Recipient / greeting variables
+                 */
+                name:
+                  currentOrder.customer_name,
+                customer_name:
+                  currentOrder.customer_name,
+                email:
+                  currentOrder.customer_email,
+                to_email:
+                  currentOrder.customer_email,
+                admin_email:
+                  "Support@PugPep.com",
+
+                /*
+                 * Shipping variables
+                 */
+                order_number:
+                  currentOrder.order_number,
+                shipping_status:
+                  finalStatus,
+                tracking_number:
+                  cleanedTracking,
+                shipping_address:
+                  shippingAddress ||
+                  "Address unavailable",
+
+                /*
+                 * Order variables used by the shipping template
+                 */
+                order_details:
+                  orderDetails,
+                order_total:
+                  orderTotal.toFixed(
+                    2
+                  ),
+
+                /*
+                 * Also send the item array in case the EmailJS template
+                 * is later changed to loop over items.
+                 */
+                items:
+                  formattedItems.map(
+                    (item) => ({
+                      name:
+                        item.name,
+                      quantity:
+                        item.quantity,
+                      price:
+                        `$${item.total.toFixed(
+                          2
+                        )}`,
+                    })
+                  ),
+
+                /*
+                 * Email clients require an absolute public URL.
+                 * In EmailJS use:
+                 *   <img src="{{logo_url}}" alt="PugPep Logo">
+                 */
+                logo_url:
+                  PUGPEP_LOGO_URL,
+              },
+              EMAILJS_PUBLIC_KEY
+            );
+          } catch (emailError) {
+            console.error(
+              "Shipping email could not be sent:",
+              emailError
+            );
 
             warnings.push(
-              `Shipping SMS could not be sent: ${
-                smsResult?.error ||
-                "unknown SMS error"
-              }`
+              "Shipping email could not be sent."
+            );
+          }
+
+          /*
+           * Send the shipping SMS when a customer phone number exists.
+           * This remains ready for your SMS provider setup.
+           */
+          if (currentOrder.customer_phone) {
+            try {
+              const smsResponse = await fetch(
+                "/api/send-shipping-sms",
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    customerPhone:
+                      currentOrder.customer_phone,
+                    orderNumber:
+                      currentOrder.order_number,
+                    shippingStatus:
+                      finalStatus,
+                    trackingNumber:
+                      cleanedTracking,
+                  }),
+                }
+              );
+
+              if (!smsResponse.ok) {
+                const smsResult =
+                  await smsResponse
+                    .json()
+                    .catch(() => null);
+
+                warnings.push(
+                  `Shipping SMS could not be sent: ${
+                    smsResult?.error ||
+                    "unknown SMS error"
+                  }`
+                );
+              }
+            } catch (smsError) {
+              console.error(
+                "Shipping SMS could not be sent:",
+                smsError
+              );
+
+              warnings.push(
+                "Shipping SMS could not be sent."
+              );
+            }
+          } else {
+            warnings.push(
+              "No customer phone number is saved, so no shipping SMS was sent."
             );
           }
         }
@@ -791,7 +1044,9 @@ export default function AdminPage() {
           : "";
 
       setNotice(
-        cleanedTracking
+        notifyCustomer
+          ? `Order ${currentOrder.order_number} marked shipped. Tracking ${cleanedTracking} was saved and customer notifications were attempted.${warningText}`
+          : cleanedTracking
           ? `Tracking ${cleanedTracking} saved and delivery status set to ${finalStatus}.${warningText}`
           : `Delivery status updated to ${finalStatus}.${warningText}`
       );
@@ -1663,10 +1918,48 @@ export default function AdminPage() {
                           </button>
                         </div>
 
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void saveDeliveryUpdate(
+                              order.id,
+                              "shipped",
+                              trackingNumber,
+                              true
+                            )
+                          }
+                          disabled={
+                            savingDelivery ||
+                            !trackingNumber.trim()
+                          }
+                          title={
+                            !trackingNumber.trim()
+                              ? "Enter or scan a tracking number first"
+                              : "Mark this order shipped and send the customer an email and SMS"
+                          }
+                          style={{
+                            ...shipNotifyButton,
+                            opacity:
+                              savingDelivery ||
+                              !trackingNumber.trim()
+                                ? 0.5
+                                : 1,
+                            cursor:
+                              savingDelivery ||
+                              !trackingNumber.trim()
+                                ? "not-allowed"
+                                : "pointer",
+                          }}
+                        >
+                          {savingDelivery
+                            ? "Shipping..."
+                            : "Mark Shipped & Notify Customer"}
+                        </button>
+
                         {scannerOpen && (
                           <div style={scannerPanel}>
                             <p style={scannerInstructions}>
-                              Point the camera at the tracking barcode. A successful scan saves the tracking number, marks the order shipped, registers carrier monitoring, and sends the shipping text automatically.
+                              Point the camera at the tracking barcode. A successful scan saves the tracking number, marks the order shipped, and registers carrier monitoring. Use Mark Shipped & Notify Customer to send the shipping email and SMS.
                             </p>
 
                             <div
@@ -2381,6 +2674,23 @@ const saveDeliveryButton = {
   background:
     "linear-gradient(180deg, rgba(0,255,153,.14), rgba(0,255,153,.06))",
   color: "#00ff99",
+};
+
+const shipNotifyButton = {
+  width: "100%",
+  minHeight: 54,
+  padding: "13px 18px",
+  border:
+    "1px solid rgba(0,255,153,.72)",
+  borderRadius: 10,
+  background:
+    "linear-gradient(180deg, rgba(46,234,111,.22), rgba(25,184,87,.16))",
+  color: "#00ff99",
+  fontSize: 16,
+  fontWeight: 900,
+  letterSpacing: ".01em",
+  boxShadow:
+    "0 0 18px rgba(0,255,153,.08)",
 };
 
 const scanButton = {
