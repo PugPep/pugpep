@@ -5,19 +5,60 @@ import {
   useMemo,
   useState,
 } from "react";
+import QRCode from "qrcode";
 
 import { createClient } from "../../../lib/supabaseClient";
 
 const ADMIN_EMAIL =
   "pugpep99@gmail.com";
 
+type PromoUsageType =
+  | "continuous"
+  | "once_per_customer"
+  | "single_use_total";
+
 type Promo = {
   id: string;
   code: string;
   discount_type: string;
   discount_value: number;
+  usage_type: PromoUsageType;
   is_active: boolean;
 };
+
+type PromoRedemption = {
+  promo_code_id: string;
+};
+
+type PromoEditForm = {
+  id: string;
+  originalCode: string;
+  code: string;
+  discount_type: string;
+  discount_value: string;
+  usage_type: PromoUsageType;
+  is_active: boolean;
+};
+
+function usageLabel(
+  usageType: PromoUsageType
+) {
+  if (
+    usageType ===
+    "once_per_customer"
+  ) {
+    return "Once Per Customer";
+  }
+
+  if (
+    usageType ===
+    "single_use_total"
+  ) {
+    return "Single Use Total";
+  }
+
+  return "Continuous";
+}
 
 export default function PromoManagerPage() {
   const supabase = useMemo(
@@ -39,6 +80,13 @@ export default function PromoManagerPage() {
     promos,
     setPromos,
   ] = useState<Promo[]>([]);
+
+  const [
+    redemptionCounts,
+    setRedemptionCounts,
+  ] = useState<
+    Record<string, number>
+  >({});
 
   const [
     search,
@@ -70,13 +118,49 @@ export default function PromoManagerPage() {
   );
 
   const [
+    editingPromo,
+    setEditingPromo,
+  ] = useState<PromoEditForm | null>(
+    null
+  );
+
+  const [
+    savingEdit,
+    setSavingEdit,
+  ] = useState(false);
+
+  const [
+    qrPromo,
+    setQrPromo,
+  ] = useState<Promo | null>(
+    null
+  );
+
+  const [
+    qrDataUrl,
+    setQrDataUrl,
+  ] = useState("");
+
+  const [
+    qrLoading,
+    setQrLoading,
+  ] = useState(false);
+
+  const [
     newPromo,
     setNewPromo,
-  ] = useState({
+  ] = useState<{
+    code: string;
+    discount_type: string;
+    discount_value: string;
+    usage_type: PromoUsageType;
+  }>({
     code: "",
     discount_type:
       "percent",
     discount_value: "",
+    usage_type:
+      "continuous",
   });
 
   useEffect(() => {
@@ -129,24 +213,67 @@ export default function PromoManagerPage() {
   }, [supabase]);
 
   async function loadPromos() {
-    const {
-      data,
-      error,
-    } =
-      await supabase
-        .from("promo_codes")
-        .select("*")
-        .order("created_at", {
-          ascending: false,
-        });
+    const [
+      promoResult,
+      redemptionResult,
+    ] =
+      await Promise.all([
+        supabase
+          .from("promo_codes")
+          .select("*")
+          .order("created_at", {
+            ascending: false,
+          }),
 
-    if (error) {
-      alert(error.message);
+        supabase
+          .from(
+            "promo_code_redemptions"
+          )
+          .select(
+            "promo_code_id"
+          ),
+      ]);
+
+    if (promoResult.error) {
+      alert(
+        promoResult.error.message
+      );
       return;
     }
 
+    if (
+      redemptionResult.error
+    ) {
+      console.error(
+        "Unable to load promo redemption counts:",
+        redemptionResult.error
+      );
+    }
+
     setPromos(
-      (data || []) as Promo[]
+      (promoResult.data ||
+        []) as Promo[]
+    );
+
+    const counts:
+      Record<string, number> = {};
+
+    (
+      (redemptionResult.data ||
+        []) as PromoRedemption[]
+    ).forEach(
+      (redemption) => {
+        counts[
+          redemption.promo_code_id
+        ] =
+          (counts[
+            redemption.promo_code_id
+          ] || 0) + 1;
+      }
+    );
+
+    setRedemptionCounts(
+      counts
     );
   }
 
@@ -203,6 +330,8 @@ export default function PromoManagerPage() {
             newPromo.discount_type,
           discount_value:
             discountValue,
+          usage_type:
+            newPromo.usage_type,
           is_active: true,
         });
 
@@ -220,6 +349,8 @@ export default function PromoManagerPage() {
       discount_type:
         "percent",
       discount_value: "",
+      usage_type:
+        "continuous",
     });
 
     setNotice(
@@ -269,6 +400,235 @@ export default function PromoManagerPage() {
     );
 
     await loadPromos();
+  }
+
+  async function updateUsageType(
+    id: string,
+    usageType: PromoUsageType,
+    code: string
+  ) {
+    if (busyPromoId) {
+      return;
+    }
+
+    setBusyPromoId(id);
+    setNotice("");
+
+    const {
+      error,
+    } =
+      await supabase
+        .from("promo_codes")
+        .update({
+          usage_type:
+            usageType,
+        })
+        .eq("id", id);
+
+    setBusyPromoId(null);
+
+    if (error) {
+      setNotice(
+        error.message
+      );
+      return;
+    }
+
+    setNotice(
+      `${code} usage changed to ${usageLabel(
+        usageType
+      )}.`
+    );
+
+    await loadPromos();
+  }
+
+  function openEditPromo(
+    promo: Promo
+  ) {
+    setEditingPromo({
+      id: promo.id,
+      originalCode: promo.code,
+      code: promo.code,
+      discount_type:
+        promo.discount_type,
+      discount_value:
+        String(
+          promo.discount_value
+        ),
+      usage_type:
+        promo.usage_type,
+      is_active:
+        promo.is_active,
+    });
+  }
+
+  async function savePromoEdit() {
+    if (
+      !editingPromo ||
+      savingEdit
+    ) {
+      return;
+    }
+
+    const code =
+      editingPromo.code
+        .trim()
+        .toUpperCase();
+
+    const discountValue =
+      Number(
+        editingPromo.discount_value
+      );
+
+    if (
+      !code ||
+      !Number.isFinite(
+        discountValue
+      ) ||
+      discountValue <= 0
+    ) {
+      setNotice(
+        "Enter a promo code and a discount greater than zero."
+      );
+      return;
+    }
+
+    if (
+      editingPromo.discount_type ===
+        "percent" &&
+      discountValue > 100
+    ) {
+      setNotice(
+        "Percentage discounts cannot exceed 100%."
+      );
+      return;
+    }
+
+    const redemptionCount =
+      redemptionCounts[
+        editingPromo.id
+      ] || 0;
+
+    if (
+      redemptionCount > 0 &&
+      code !==
+        editingPromo.originalCode
+    ) {
+      setNotice(
+        "The promo code itself cannot be renamed after it has redemptions. You can still edit its discount, usage rule, and active status."
+      );
+      return;
+    }
+
+    setSavingEdit(true);
+    setNotice("");
+
+    const {
+      error,
+    } =
+      await supabase
+        .from("promo_codes")
+        .update({
+          code,
+          discount_type:
+            editingPromo.discount_type,
+          discount_value:
+            discountValue,
+          usage_type:
+            editingPromo.usage_type,
+          is_active:
+            editingPromo.is_active,
+        })
+        .eq(
+          "id",
+          editingPromo.id
+        );
+
+    setSavingEdit(false);
+
+    if (error) {
+      setNotice(
+        error.message
+      );
+      return;
+    }
+
+    setNotice(
+      `${code} updated.`
+    );
+
+    setEditingPromo(null);
+
+    await loadPromos();
+  }
+
+  async function openPromoQr(
+    promo: Promo
+  ) {
+    setQrPromo(promo);
+    setQrDataUrl("");
+    setQrLoading(true);
+
+    try {
+      const promoUrl =
+        `https://pugpep.com/promo/${encodeURIComponent(
+          promo.code
+        )}`;
+
+      const dataUrl =
+        await QRCode.toDataURL(
+          promoUrl,
+          {
+            width: 720,
+            margin: 2,
+            errorCorrectionLevel:
+              "H",
+          }
+        );
+
+      setQrDataUrl(
+        dataUrl
+      );
+    } catch (error) {
+      console.error(
+        "Promo QR generation failed:",
+        error
+      );
+
+      setNotice(
+        "Unable to generate the promo QR code."
+      );
+    } finally {
+      setQrLoading(false);
+    }
+  }
+
+  function downloadPromoQr() {
+    if (
+      !qrPromo ||
+      !qrDataUrl
+    ) {
+      return;
+    }
+
+    const anchor =
+      document.createElement(
+        "a"
+      );
+
+    anchor.href =
+      qrDataUrl;
+
+    anchor.download =
+      `PugPep-${qrPromo.code}-QR.png`;
+
+    document.body.appendChild(
+      anchor
+    );
+
+    anchor.click();
+    anchor.remove();
   }
 
   async function deletePromo(
@@ -369,6 +729,13 @@ export default function PromoManagerPage() {
               query
             ) ||
           promo.discount_type
+            .toLowerCase()
+            .includes(
+              query
+            ) ||
+          usageLabel(
+            promo.usage_type
+          )
             .toLowerCase()
             .includes(
               query
@@ -650,6 +1017,42 @@ export default function PromoManagerPage() {
               />
             </label>
 
+            <label style={field}>
+              <span style={fieldLabel}>
+                Usage Type
+              </span>
+
+              <select
+                value={
+                  newPromo.usage_type
+                }
+                onChange={(
+                  event
+                ) =>
+                  setNewPromo({
+                    ...newPromo,
+                    usage_type:
+                      event.target
+                        .value as PromoUsageType,
+                  })
+                }
+                style={input}
+              >
+                <option value="continuous">
+                  Continuous
+                </option>
+
+                <option value="once_per_customer">
+                  Single Use Per Customer
+                </option>
+
+                <option value="single_use_total">
+                  Single Use Total
+                </option>
+              </select>
+
+            </label>
+
             <button
               type="button"
               onClick={() => {
@@ -673,6 +1076,13 @@ export default function PromoManagerPage() {
                 : "Create Promo Code"}
             </button>
           </div>
+
+          <p style={usageHelperText}>
+            <strong style={{ color: "#7df9ff" }}>
+              Usage types:
+            </strong>{" "}
+            Continuous can be reused. Single Use Per Customer allows one redemption per account. Single Use Total allows one redemption across the entire store.
+          </p>
         </section>
 
         <section style={panel}>
@@ -858,6 +1268,107 @@ export default function PromoManagerPage() {
                             )} OFF`}
                       </div>
 
+                      <div style={usagePanel}>
+                        <div style={usageInfoRow}>
+                          <span style={usageInfoLabel}>
+                            Usage
+                          </span>
+
+                          <strong
+                            style={{
+                              color:
+                                promo.usage_type ===
+                                "continuous"
+                                  ? "#00d9ff"
+                                  : promo.usage_type ===
+                                    "once_per_customer"
+                                  ? "#ffcc00"
+                                  : "#ff75df",
+                            }}
+                          >
+                            {usageLabel(
+                              promo.usage_type
+                            )}
+                          </strong>
+                        </div>
+
+                        <div style={usageInfoRow}>
+                          <span style={usageInfoLabel}>
+                            Redemptions
+                          </span>
+
+                          <strong>
+                            {redemptionCounts[
+                              promo.id
+                            ] || 0}
+                            {promo.usage_type ===
+                            "single_use_total"
+                              ? " / 1"
+                              : ""}
+                          </strong>
+                        </div>
+
+                        <label style={usageEditor}>
+                          <span style={usageInfoLabel}>
+                            Change Usage Rule
+                          </span>
+
+                          <select
+                            value={
+                              promo.usage_type
+                            }
+                            disabled={busy}
+                            onChange={(
+                              event
+                            ) => {
+                              const next =
+                                event.target
+                                  .value as PromoUsageType;
+
+                              if (
+                                next ===
+                                  "single_use_total" &&
+                                (redemptionCounts[
+                                  promo.id
+                                ] || 0) > 1
+                              ) {
+                                const confirmed =
+                                  window.confirm(
+                                    `${promo.code} already has ${redemptionCounts[promo.id]} recorded redemptions. Changing it to Single Use Total will make it immediately exhausted. Continue?`
+                                  );
+
+                                if (
+                                  !confirmed
+                                ) {
+                                  event.target.value =
+                                    promo.usage_type;
+                                  return;
+                                }
+                              }
+
+                              void updateUsageType(
+                                promo.id,
+                                next,
+                                promo.code
+                              );
+                            }}
+                            style={smallSelect}
+                          >
+                            <option value="continuous">
+                              Continuous
+                            </option>
+
+                            <option value="once_per_customer">
+                              Once Per Customer
+                            </option>
+
+                            <option value="single_use_total">
+                              Single Use Total
+                            </option>
+                          </select>
+                        </label>
+                      </div>
+
                       <div style={actionRow}>
                         <button
                           type="button"
@@ -888,6 +1399,40 @@ export default function PromoManagerPage() {
                             : promo.is_active
                             ? "Deactivate"
                             : "Activate"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            openEditPromo(
+                              promo
+                            );
+                          }}
+                          disabled={
+                            Boolean(
+                              busyPromoId
+                            )
+                          }
+                          style={editButton}
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void openPromoQr(
+                              promo
+                            );
+                          }}
+                          disabled={
+                            Boolean(
+                              busyPromoId
+                            )
+                          }
+                          style={qrButton}
+                        >
+                          QR Code
                         </button>
 
                         <button
@@ -924,6 +1469,377 @@ export default function PromoManagerPage() {
           )}
         </section>
       </div>
+
+      {editingPromo && (
+        <div
+          style={modalOverlay}
+          role="presentation"
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              setEditingPromo(
+                null
+              );
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-promo-title"
+            style={modalCard}
+          >
+            <div style={modalHeader}>
+              <div>
+                <p style={sectionEyebrow}>
+                  EDIT PROMO
+                </p>
+
+                <h2
+                  id="edit-promo-title"
+                  style={modalTitle}
+                >
+                  {editingPromo.originalCode}
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setEditingPromo(
+                    null
+                  )
+                }
+                style={modalClose}
+                aria-label="Close edit promo dialog"
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={editGrid}>
+              <label style={field}>
+                <span style={fieldLabel}>
+                  Promo Code
+                </span>
+
+                <input
+                  value={
+                    editingPromo.code
+                  }
+                  disabled={
+                    (redemptionCounts[
+                      editingPromo.id
+                    ] || 0) > 0
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setEditingPromo({
+                      ...editingPromo,
+                      code:
+                        event.target.value.toUpperCase(),
+                    })
+                  }
+                  style={{
+                    ...input,
+                    opacity:
+                      (redemptionCounts[
+                        editingPromo.id
+                      ] || 0) > 0
+                        ? 0.55
+                        : 1,
+                  }}
+                />
+
+                {(redemptionCounts[
+                  editingPromo.id
+                ] || 0) > 0 && (
+                  <span style={fieldHelper}>
+                    Code name is locked after the first redemption to preserve order history.
+                  </span>
+                )}
+              </label>
+
+              <label style={field}>
+                <span style={fieldLabel}>
+                  Discount Type
+                </span>
+
+                <select
+                  value={
+                    editingPromo.discount_type
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setEditingPromo({
+                      ...editingPromo,
+                      discount_type:
+                        event.target.value,
+                    })
+                  }
+                  style={input}
+                >
+                  <option value="percent">
+                    Percent Off
+                  </option>
+
+                  <option value="fixed">
+                    Fixed Dollar Amount
+                  </option>
+                </select>
+              </label>
+
+              <label style={field}>
+                <span style={fieldLabel}>
+                  Discount Value
+                </span>
+
+                <input
+                  type="number"
+                  min="0"
+                  step={
+                    editingPromo.discount_type ===
+                    "percent"
+                      ? "1"
+                      : "0.01"
+                  }
+                  value={
+                    editingPromo.discount_value
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setEditingPromo({
+                      ...editingPromo,
+                      discount_value:
+                        event.target.value,
+                    })
+                  }
+                  style={input}
+                />
+              </label>
+
+              <label style={field}>
+                <span style={fieldLabel}>
+                  Usage Type
+                </span>
+
+                <select
+                  value={
+                    editingPromo.usage_type
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setEditingPromo({
+                      ...editingPromo,
+                      usage_type:
+                        event.target
+                          .value as PromoUsageType,
+                    })
+                  }
+                  style={input}
+                >
+                  <option value="continuous">
+                    Continuous
+                  </option>
+
+                  <option value="once_per_customer">
+                    Single Use Per Customer
+                  </option>
+
+                  <option value="single_use_total">
+                    Single Use Total
+                  </option>
+                </select>
+              </label>
+
+              <label style={toggleField}>
+                <span>
+                  <strong style={fieldLabel}>
+                    Active
+                  </strong>
+
+                  <span style={toggleHelper}>
+                    Customers can only redeem active promo codes.
+                  </span>
+                </span>
+
+                <input
+                  type="checkbox"
+                  checked={
+                    editingPromo.is_active
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setEditingPromo({
+                      ...editingPromo,
+                      is_active:
+                        event.target.checked,
+                    })
+                  }
+                  style={checkbox}
+                />
+              </label>
+            </div>
+
+            <div style={modalActions}>
+              <button
+                type="button"
+                onClick={() =>
+                  setEditingPromo(
+                    null
+                  )
+                }
+                style={secondaryButton}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  void savePromoEdit();
+                }}
+                disabled={
+                  savingEdit
+                }
+                style={{
+                  ...createButton,
+                  opacity:
+                    savingEdit
+                      ? 0.65
+                      : 1,
+                }}
+              >
+                {savingEdit
+                  ? "Saving..."
+                  : "Save Changes"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {qrPromo && (
+        <div
+          style={modalOverlay}
+          role="presentation"
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              setQrPromo(
+                null
+              );
+            }
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="promo-qr-title"
+            style={qrModalCard}
+          >
+            <div style={modalHeader}>
+              <div>
+                <p style={sectionEyebrow}>
+                  PROMO QR
+                </p>
+
+                <h2
+                  id="promo-qr-title"
+                  style={modalTitle}
+                >
+                  {qrPromo.code}
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setQrPromo(
+                    null
+                  )
+                }
+                style={modalClose}
+                aria-label="Close QR code dialog"
+              >
+                ×
+              </button>
+            </div>
+
+            <p style={qrDescription}>
+              Scanning this QR sends the customer to PugPep, remembers{" "}
+              <strong style={{ color: "#ff75df" }}>
+                {qrPromo.code}
+              </strong>
+              , and automatically applies it when they reach checkout.
+            </p>
+
+            <div style={qrPreview}>
+              {qrLoading ? (
+                <div style={qrLoadingBox}>
+                  Generating QR...
+                </div>
+              ) : qrDataUrl ? (
+                <img
+                  src={qrDataUrl}
+                  alt={`QR code for promo ${qrPromo.code}`}
+                  style={qrImage}
+                />
+              ) : (
+                <div style={qrLoadingBox}>
+                  QR unavailable
+                </div>
+              )}
+            </div>
+
+            <div style={qrLinkBox}>
+              https://pugpep.com/promo/{qrPromo.code}
+            </div>
+
+            <div style={modalActions}>
+              <button
+                type="button"
+                onClick={() =>
+                  setQrPromo(
+                    null
+                  )
+                }
+                style={secondaryButton}
+              >
+                Close
+              </button>
+
+              <button
+                type="button"
+                onClick={
+                  downloadPromoQr
+                }
+                disabled={
+                  !qrDataUrl
+                }
+                style={{
+                  ...createButton,
+                  opacity:
+                    qrDataUrl
+                      ? 1
+                      : 0.55,
+                }}
+              >
+                Download QR PNG
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
@@ -1156,6 +2072,213 @@ const input = {
   fontSize: 16,
 };
 
+const fieldHelper = {
+  color: "#8f8f98",
+  fontSize: 12,
+  lineHeight: 1.5,
+};
+
+const usageHelperText = {
+  margin: "12px 0 0",
+  color: "#8f8f98",
+  fontSize: 12,
+  lineHeight: 1.55,
+};
+
+const modalOverlay = {
+  position: "fixed" as const,
+  inset: 0,
+  zIndex: 1000,
+  padding: 20,
+  display: "grid",
+  placeItems: "center",
+  overflowY: "auto" as const,
+  background: "rgba(0,0,0,.78)",
+  backdropFilter: "blur(8px)",
+};
+
+const modalCard = {
+  width: "min(760px, 100%)",
+  padding: "clamp(20px, 4vw, 30px)",
+  border: "1px solid rgba(0,217,255,.42)",
+  borderRadius: 18,
+  background:
+    "linear-gradient(145deg, rgba(10,10,15,.99), rgba(17,8,20,.99))",
+  boxShadow:
+    "0 0 40px rgba(0,217,255,.12)",
+};
+
+const qrModalCard = {
+  ...modalCard,
+  width: "min(600px, 100%)",
+};
+
+const modalHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 16,
+  marginBottom: 20,
+};
+
+const modalTitle = {
+  margin: "5px 0 0",
+  color: "#ff75df",
+  fontSize: 32,
+};
+
+const modalClose = {
+  width: 44,
+  height: 44,
+  border: "1px solid rgba(255,255,255,.16)",
+  borderRadius: 10,
+  background: "rgba(255,255,255,.04)",
+  color: "#ffffff",
+  fontSize: 26,
+  cursor: "pointer",
+};
+
+const editGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: 16,
+};
+
+const toggleField = {
+  minHeight: 70,
+  padding: "12px 14px",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 16,
+  border: "1px solid rgba(255,255,255,.12)",
+  borderRadius: 10,
+  background: "#050507",
+};
+
+const toggleHelper = {
+  display: "block",
+  marginTop: 5,
+  color: "#8f8f98",
+  fontSize: 12,
+  lineHeight: 1.4,
+};
+
+const checkbox = {
+  width: 22,
+  height: 22,
+  accentColor: "#00ff99",
+};
+
+const modalActions = {
+  marginTop: 22,
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 10,
+  flexWrap: "wrap" as const,
+};
+
+const secondaryButton = {
+  minHeight: 54,
+  padding: "13px 18px",
+  border: "1px solid rgba(255,255,255,.18)",
+  borderRadius: 10,
+  background: "rgba(255,255,255,.04)",
+  color: "#ffffff",
+  fontSize: 15,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const qrDescription = {
+  margin: "0 0 16px",
+  color: "#c3c3cb",
+  lineHeight: 1.6,
+};
+
+const qrPreview = {
+  width: "100%",
+  display: "grid",
+  placeItems: "center",
+  padding: 18,
+  borderRadius: 16,
+  background: "#ffffff",
+};
+
+const qrImage = {
+  display: "block",
+  width: "min(340px, 100%)",
+  height: "auto",
+};
+
+const qrLoadingBox = {
+  minHeight: 260,
+  display: "grid",
+  placeItems: "center",
+  color: "#222222",
+  fontWeight: 900,
+};
+
+const qrLinkBox = {
+  marginTop: 12,
+  padding: "12px 14px",
+  border: "1px solid rgba(255,255,255,.12)",
+  borderRadius: 10,
+  background: "#050507",
+  color: "#7df9ff",
+  fontSize: 13,
+  overflowWrap: "anywhere" as const,
+};
+
+const usagePanel = {
+  display: "grid",
+  gap: 10,
+  padding: 13,
+  border:
+    "1px solid rgba(255,255,255,.10)",
+  borderRadius: 11,
+  background:
+    "rgba(255,255,255,.025)",
+};
+
+const usageInfoRow = {
+  display: "flex",
+  justifyContent:
+    "space-between",
+  gap: 12,
+  alignItems: "center",
+};
+
+const usageInfoLabel = {
+  color: "#9f9fa8",
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: ".05em",
+  textTransform:
+    "uppercase" as const,
+};
+
+const usageEditor = {
+  display: "grid",
+  gap: 7,
+  marginTop: 3,
+};
+
+const smallSelect = {
+  width: "100%",
+  minHeight: 42,
+  boxSizing:
+    "border-box" as const,
+  padding: "9px 11px",
+  border:
+    "1px solid rgba(255,255,255,.16)",
+  borderRadius: 9,
+  background: "#050507",
+  color: "#ffffff",
+  fontSize: 14,
+};
+
 const createButton = {
   minHeight: 54,
   padding: "13px 18px",
@@ -1302,6 +2425,34 @@ const deactivateButton = {
   background:
     "rgba(255,204,0,.07)",
   color: "#ffcc00",
+  fontSize: 15,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const editButton = {
+  minHeight: 46,
+  padding: "11px 15px",
+  border:
+    "1px solid rgba(0,217,255,.50)",
+  borderRadius: 9,
+  background:
+    "rgba(0,217,255,.07)",
+  color: "#7df9ff",
+  fontSize: 15,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const qrButton = {
+  minHeight: 46,
+  padding: "11px 15px",
+  border:
+    "1px solid rgba(255,117,223,.50)",
+  borderRadius: 9,
+  background:
+    "rgba(255,117,223,.07)",
+  color: "#ff75df",
   fontSize: 15,
   fontWeight: 900,
   cursor: "pointer",

@@ -231,6 +231,55 @@ export async function confirmOrderTransaction({
       throw attributionError;
     }
 
+    /*
+     * Record a GENERAL promo redemption only after the order and its
+     * product/ledger rows exist. The database RPC re-checks the usage
+     * rule under a row lock so one-time codes cannot be double-used by
+     * two nearly-simultaneous confirmations.
+     *
+     * Blocked promos and zero-dollar promo results are not consumed.
+     * Sales-rep promo codes continue to use their existing redemption
+     * flow above.
+     */
+    if (
+      pricing.promo
+        .appliedPromoSource ===
+        "general" &&
+      pricing.promo
+        .appliedPromoCode &&
+      pricing.discounts
+        .generalPromoDiscount >
+        0
+    ) {
+      const {
+        error:
+          promoRedemptionError,
+      } = await supabase.rpc(
+        "redeem_general_promo_for_order",
+        {
+          p_order_id:
+            order.id,
+
+          p_customer_id:
+            order.userId,
+
+          p_code:
+            pricing.promo
+              .appliedPromoCode,
+
+          p_discount_amount:
+            pricing.discounts
+              .generalPromoDiscount,
+        }
+      );
+
+      if (
+        promoRedemptionError
+      ) {
+        throw promoRedemptionError;
+      }
+    }
+
     deductedRewardPoints =
       await deductRewardPoints({
         supabase,

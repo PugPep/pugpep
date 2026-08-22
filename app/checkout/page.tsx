@@ -49,8 +49,6 @@ type CustomerProfile = {
   state?: string | null;
   zip?: string | null;
   reward_points?: number | null;
-  is_hero_account?: boolean | null;
-  hero_discount_percent?: number | null;
 };
 
 type SupabaseErrorDetails = {
@@ -138,6 +136,13 @@ export default function CheckoutPage() {
   const [promoLoading, setPromoLoading] =
     useState(false);
 
+  const [
+    pendingSharedPromo,
+    setPendingSharedPromo,
+  ] = useState<string | null>(
+    null
+  );
+
   const [rewardPoints, setRewardPoints] =
     useState(0);
 
@@ -162,6 +167,38 @@ export default function CheckoutPage() {
       state: "",
       zip: "",
     });
+
+  useEffect(() => {
+    try {
+      const storedPromo =
+        localStorage.getItem(
+          "pugpep_pending_promo"
+        );
+
+      if (
+        storedPromo &&
+        storedPromo.trim()
+      ) {
+        const normalized =
+          storedPromo
+            .trim()
+            .toUpperCase();
+
+        setPendingSharedPromo(
+          normalized
+        );
+
+        setPromoInput(
+          normalized
+        );
+      }
+    } catch (error) {
+      console.warn(
+        "Unable to load shared promo code:",
+        error
+      );
+    }
+  }, []);
 
   const hasPreSaleItems =
     cart.some(
@@ -349,8 +386,6 @@ export default function CheckoutPage() {
               "state",
               "zip",
               "reward_points",
-              "is_hero_account",
-              "hero_discount_percent",
             ].join(",")
           )
           .eq("id", user.id)
@@ -519,6 +554,106 @@ export default function CheckoutPage() {
       setPromoLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (
+      !pendingSharedPromo ||
+      !canRequestPricing ||
+      promoLoading ||
+      pricingLoading ||
+      appliedPromoCode
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function applySharedPromo() {
+      setPromoLoading(true);
+
+      try {
+        const result =
+          await requestPricing({
+            promoCode:
+              pendingSharedPromo,
+
+            showErrors: false,
+          });
+
+        if (
+          cancelled ||
+          !result
+        ) {
+          return;
+        }
+
+        const validation =
+          result.promo.validation;
+
+        if (
+          validation?.valid &&
+          validation.discountAllowed
+        ) {
+          const appliedCode =
+            (
+              validation.code ||
+              pendingSharedPromo ||
+              ""
+            )
+              .trim()
+              .toUpperCase();
+
+          if (appliedCode) {
+            setAppliedPromoCode(
+              appliedCode
+            );
+
+            setPromoInput(
+              appliedCode
+            );
+          }
+        }
+
+        localStorage.removeItem(
+          "pugpep_pending_promo"
+        );
+
+        setPendingSharedPromo(
+          null
+        );
+      } catch (error) {
+        console.warn(
+          "Shared promo could not be auto-applied:",
+          error
+        );
+
+        localStorage.removeItem(
+          "pugpep_pending_promo"
+        );
+
+        setPendingSharedPromo(
+          null
+        );
+      } finally {
+        if (!cancelled) {
+          setPromoLoading(false);
+        }
+      }
+    }
+
+    void applySharedPromo();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    pendingSharedPromo,
+    canRequestPricing,
+    promoLoading,
+    pricingLoading,
+    appliedPromoCode,
+    requestPricing,
+  ]);
 
   async function removePromoCode() {
     setAppliedPromoCode(null);
@@ -1015,51 +1150,6 @@ export default function CheckoutPage() {
           </section>
 
           <section style={styles.column}>
-            {pricing?.hero.isHeroAccount && (
-              <div
-                style={{
-                  padding: 16,
-                  borderRadius: 14,
-                  border: "1px solid rgba(125,249,255,.42)",
-                  background:
-                    "linear-gradient(135deg, rgba(0,217,255,.09), rgba(255,45,216,.055))",
-                }}
-              >
-                <strong style={{ color: "#7df9ff", fontSize: 16 }}>
-                  Hero Appreciation
-                </strong>
-                <p style={{ margin: "7px 0 0", color: "#cfd6dc", lineHeight: 1.55 }}>
-                  Your Hero Account adds {pricing.hero.heroDiscountPercent}% on top of
-                  your other eligible savings.
-                </p>
-                <p
-                  style={{
-                    margin: "8px 0 0",
-                    color: "#00ff99",
-                    fontWeight: 900,
-                  }}
-                >
-                  Hero savings: -${Number(pricing.hero.heroDiscount || 0).toFixed(2)}
-                </p>
-              </div>
-            )}
-
-            {pricing && pricing.discounts.bundleDiscount > 0 && (
-              <div
-                style={{
-                  padding: 14,
-                  borderRadius: 12,
-                  border: "1px solid rgba(0,255,153,.30)",
-                  background: "rgba(0,255,153,.05)",
-                  color: "#bfffe3",
-                  fontWeight: 800,
-                }}
-              >
-                Bundle savings applied: -$
-                {Number(pricing.discounts.bundleDiscount).toFixed(2)}
-              </div>
-            )}
-
             <RewardsSection
               rewardPoints={rewardPoints}
               pointsToUse={pointsToUse}
