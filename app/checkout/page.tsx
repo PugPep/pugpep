@@ -250,6 +250,12 @@ export default function CheckoutPage() {
       zip: "",
     });
 
+  const [
+    smsConsent,
+    setSmsConsent,
+  ] =
+    useState(false);
+
   useEffect(() => {
     function normalizeStoredPromo(
       value:
@@ -1531,6 +1537,8 @@ export default function CheckoutPage() {
               .shipping
               .hasLifetimeFreeShipping,
 
+          smsConsent,
+
           createdAt:
             new Date().toISOString(),
 
@@ -1736,22 +1744,6 @@ export default function CheckoutPage() {
           </div>
         </header>
 
-        <p
-          style={{
-            color:
-              "#8f8f8f",
-            fontSize:
-              12,
-            lineHeight:
-              1.6,
-            marginBottom:
-              20,
-          }}
-        >
-          By providing your phone number, you agree to receive transactional
-          order and shipping messages. Message and data rates may apply.
-        </p>
-
         {hasPreSaleItems && (
           <div
             style={
@@ -1811,6 +1803,153 @@ export default function CheckoutPage() {
                 updateField
               }
             />
+
+            <section
+              style={{
+                border:
+                  "1px solid rgba(0, 255, 153, 0.28)",
+                borderRadius:
+                  16,
+                background:
+                  "rgba(0, 255, 153, 0.045)",
+                padding:
+                  16,
+                marginTop:
+                  14,
+              }}
+            >
+              <label
+                style={{
+                  display:
+                    "flex",
+                  alignItems:
+                    "flex-start",
+                  gap:
+                    12,
+                  cursor:
+                    "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={
+                    smsConsent
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setSmsConsent(
+                      event.target
+                        .checked
+                    )
+                  }
+                  aria-describedby="sms-consent-details"
+                  style={{
+                    width:
+                      18,
+                    height:
+                      18,
+                    marginTop:
+                      2,
+                    flex:
+                      "0 0 auto",
+                    accentColor:
+                      "#00ff99",
+                  }}
+                />
+
+                <span
+                  style={{
+                    color:
+                      "#e9e9e9",
+                    fontSize:
+                      13,
+                    lineHeight:
+                      1.6,
+                  }}
+                >
+                  <strong
+                    style={{
+                      display:
+                        "block",
+                      marginBottom:
+                        4,
+                      color:
+                        "#ffffff",
+                    }}
+                  >
+                    Text me order updates
+                  </strong>
+
+                  I agree to receive optional transactional SMS messages
+                  from PugPep Order Updates regarding this order, including
+                  order confirmation, shipping, tracking, out-for-delivery,
+                  carrier-related, and delivery notifications. Message
+                  frequency varies based on order activity. Message and data
+                  rates may apply. Reply STOP to opt out or HELP for
+                  assistance. Consent is optional and is not required to
+                  complete a purchase.{" "}
+                  <a
+                    href="/sms-terms"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color:
+                        "#7df9ff",
+                      textDecoration:
+                        "underline",
+                    }}
+                  >
+                    SMS Terms
+                  </a>
+                  {" · "}
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color:
+                        "#7df9ff",
+                      textDecoration:
+                        "underline",
+                    }}
+                  >
+                    Terms &amp; Conditions
+                  </a>
+                  {" · "}
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color:
+                        "#7df9ff",
+                      textDecoration:
+                        "underline",
+                    }}
+                  >
+                    Privacy Policy
+                  </a>
+                </span>
+              </label>
+
+              <p
+                id="sms-consent-details"
+                style={{
+                  color:
+                    "#8f8f8f",
+                  fontSize:
+                    11,
+                  lineHeight:
+                    1.55,
+                  margin:
+                    "10px 0 0 30px",
+                }}
+              >
+                Your phone number may still be used as contact information for
+                your order even if you do not opt in to SMS notifications.
+              </p>
+            </section>
 
             <ShippingMethodSection
               shippingMethod={

@@ -565,69 +565,344 @@ export default function OrderDetailsPage() {
     }
   }
 
-  function formatPhoneNumber(phone: string) {
-    const digits = String(phone || "").replace(/\D/g, "");
-    if (digits.length === 10) return `+1${digits}`;
-    if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-    return phone;
-  }
-
   async function notifyCustomer() {
     if (!order) return;
-    if (!trackingNumber) return alert("Please scan or enter a tracking number before notifying the customer.");
+
+    const cleanedTracking =
+      String(trackingNumber || "").trim();
+
+    if (!cleanedTracking) {
+      return alert(
+        "Please scan or enter a tracking number before notifying the customer."
+      );
+    }
+
+    if (!order.customer_email) {
+      return alert(
+        "This order does not have a customer email address."
+      );
+    }
 
     setSendingEmail(true);
+
     try {
-      const { error } = await supabase
-        .from("orders")
-        .update({ shipping_status: "shipped", tracking_number: trackingNumber })
-        .eq("id", id);
+      /*
+       * Save the shipping state first so the order record is authoritative
+       * before any customer notification is attempted.
+       */
+      const { error } =
+        await supabase
+          .from("orders")
+          .update({
+            shipping_status:
+              "shipped",
+            tracking_number:
+              cleanedTracking,
+          })
+          .eq("id", id);
 
-      if (error) throw error;
-      setShippingStatus("shipped");
+      if (error) {
+        throw error;
+      }
 
-      await emailjs.send(
-        EMAILJS_SERVICE_ID,
-        SHIPPING_TEMPLATE_ID,
-        {
-          name: order.customer_name,
-          email: order.customer_email,
-          order_number: order.order_number,
-          shipping_status: "shipped",
-          tracking_number: trackingNumber,
-          shipping_address: `${order.shipping_address}, ${order.city}, ${order.state} ${order.zip}`,
-          order_total: Number(order.total).toFixed(2),
-          items: items.map((item) => ({
-            name: item.product_name,
-            dosage: item.dosage,
-            purchase_type: item.purchase_type,
-            price: Number(item.line_revenue ?? item.price ?? 0).toFixed(2),
-          })),
-        },
-        EMAILJS_PUBLIC_KEY
+      setShippingStatus(
+        "shipped"
       );
 
-      const smsRes = await fetch("/api/send-shipping-sms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerPhone: formatPhoneNumber(order.customer_phone),
-          orderNumber: order.order_number,
-          shippingStatus: "shipped",
-          trackingNumber,
-        }),
-      });
+      setTrackingNumber(
+        cleanedTracking
+      );
 
-      const smsData = await smsRes.json();
-      if (!smsData.success) return alert("Email sent, but text failed: " + (smsData.error || "SMS failed."));
+      let emailSucceeded =
+        false;
 
-      alert("Customer notified by email and text.");
+      let smsSucceeded =
+        false;
+
+      let smsSkippedForConsent =
+        false;
+
+      let emailErrorMessage =
+        "";
+
+      let smsErrorMessage =
+        "";
+
+      /*
+       * Email and SMS are attempted independently.
+       * A failure in one channel must not prevent the other channel
+       * from being attempted.
+       */
+      try {
+        await emailjs.send(
+          EMAILJS_SERVICE_ID,
+          SHIPPING_TEMPLATE_ID,
+          {
+            name:
+              order.customer_name,
+
+            email:
+              order.customer_email,
+
+            order_number:
+              order.order_number,
+
+            shipping_status:
+              "shipped",
+
+            tracking_number:
+              cleanedTracking,
+
+            shipping_address:
+              `${order.shipping_address}, ${order.city}, ${order.state} ${order.zip}`,
+
+            order_total:
+              Number(
+                order.total
+              ).toFixed(2),
+
+            items:
+              items.map(
+                (item) => ({
+                  name:
+                    item.product_name,
+
+                  dosage:
+                    item.dosage,
+
+                  purchase_type:
+                    item.purchase_type,
+
+                  price:
+                    Number(
+                      item.line_revenue ??
+                        item.price ??
+                        0
+                    ).toFixed(2),
+                })
+              ),
+          },
+          EMAILJS_PUBLIC_KEY
+        );
+
+        emailSucceeded =
+          true;
+      } catch (
+        emailError
+      ) {
+        console.error(
+          "Shipping email failed:",
+          emailError
+        );
+
+        emailErrorMessage =
+          getErrorMessage(
+            emailError
+          );
+      }
+
+      try {
+        const smsRes =
+          await fetch(
+            "/api/send-shipping-sms",
+            {
+              method:
+                "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+
+              body:
+                JSON.stringify({
+                  orderNumber:
+                    order.order_number,
+
+                  shippingStatus:
+                    "shipped",
+
+                  trackingNumber:
+                    cleanedTracking,
+                }),
+            }
+          );
+
+        let smsData:
+          {
+            success?: boolean;
+            skipped?: boolean;
+            error?: string;
+            code?: number | null;
+            twilioStatus?: number | null;
+            moreInfo?: string | null;
+            sid?: string;
+            status?: string;
+            to?: string;
+          } | null =
+          null;
+
+        try {
+          smsData =
+            await smsRes.json();
+        } catch {
+          smsData =
+            null;
+        }
+
+        if (
+          smsData?.skipped
+        ) {
+          smsSkippedForConsent =
+            true;
+
+          console.log(
+            "Shipping SMS skipped because customer did not opt in.",
+            {
+              orderNumber:
+                order.order_number,
+            }
+          );
+        } else if (
+          !smsRes.ok ||
+          !smsData?.success
+        ) {
+          smsErrorMessage =
+            smsData?.error ||
+            `SMS request failed with HTTP ${smsRes.status}.`;
+
+          console.error(
+            "Shipping SMS failed:",
+            {
+              orderNumber:
+                order.order_number,
+
+              httpStatus:
+                smsRes.status,
+
+              error:
+                smsData?.error ||
+                null,
+
+              code:
+                smsData?.code ||
+                null,
+
+              twilioStatus:
+                smsData?.twilioStatus ||
+                null,
+
+              moreInfo:
+                smsData?.moreInfo ||
+                null,
+            }
+          );
+        } else {
+          smsSucceeded =
+            true;
+
+          console.log(
+            "Shipping SMS accepted:",
+            {
+              orderNumber:
+                order.order_number,
+
+              sid:
+                smsData.sid,
+
+              status:
+                smsData.status,
+
+              to:
+                smsData.to,
+            }
+          );
+        }
+      } catch (
+        smsError
+      ) {
+        console.error(
+          "Shipping SMS request failed:",
+          smsError
+        );
+
+        smsErrorMessage =
+          getErrorMessage(
+            smsError
+          );
+      }
+
+      if (
+        emailSucceeded &&
+        smsSucceeded
+      ) {
+        alert(
+          "Order marked shipped. Customer notified by email and text."
+        );
+      } else if (
+        emailSucceeded &&
+        smsSkippedForConsent
+      ) {
+        alert(
+          "Order marked shipped and email sent. Text message was skipped because the customer did not opt in to SMS."
+        );
+      } else if (
+        emailSucceeded
+      ) {
+        alert(
+          `Order marked shipped and email sent, but the text failed: ${
+            smsErrorMessage ||
+            "Unknown SMS error."
+          }`
+        );
+      } else if (
+        smsSucceeded
+      ) {
+        alert(
+          `Order marked shipped and text sent, but the email failed: ${
+            emailErrorMessage ||
+            "Unknown email error."
+          }`
+        );
+      } else if (
+        smsSkippedForConsent
+      ) {
+        alert(
+          `Order was marked shipped. SMS was skipped because the customer did not opt in. Email failed: ${
+            emailErrorMessage ||
+            "unknown error"
+          }.`
+        );
+      } else {
+        alert(
+          `Order was marked shipped, but customer notifications failed. Email: ${
+            emailErrorMessage ||
+            "unknown error"
+          }. SMS: ${
+            smsErrorMessage ||
+            "unknown error"
+          }.`
+        );
+      }
+
       await loadOrder();
-    } catch (error) {
-      console.error(error);
-      alert("Customer notification failed.");
+    } catch (
+      error
+    ) {
+      console.error(
+        "Unable to mark order shipped:",
+        error
+      );
+
+      alert(
+        `The order could not be marked shipped: ${getErrorMessage(
+          error
+        )}`
+      );
     } finally {
-      setSendingEmail(false);
+      setSendingEmail(
+        false
+      );
     }
   }
 
@@ -765,6 +1040,11 @@ export default function OrderDetailsPage() {
                 <Info label="Name" value={order.customer_name || "-"} />
                 <Info label="Email" value={order.customer_email || "-"} />
                 <Info label="Phone" value={order.customer_phone || "Not provided"} />
+                <Info
+                  label="SMS Updates"
+                  value={order.sms_consent === true ? "Opted In" : "Not Opted In"}
+                  accent={order.sms_consent === true ? "#00ff99" : "#ffcc66"}
+                />
                 <Info label="VIP at Purchase" value={order.vip_tier_at_purchase || "-"} />
                 <Info label="Lifetime Spend Before" value={`$${Number(order.lifetime_spend_before || 0).toFixed(2)}`} />
                 <Info label="Lifetime Spend After" value={`$${Number(order.lifetime_spend_after || 0).toFixed(2)}`} />

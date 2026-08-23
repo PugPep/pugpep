@@ -1,52 +1,283 @@
 import { NextResponse } from "next/server";
+
 import { sendSms } from "@/lib/sendSms";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-function formatPhoneNumber(phone: string) {
-  const digits = phone.replace(/\D/g, "");
+export const runtime = "nodejs";
 
-  if (digits.length === 10) return `+1${digits}`;
-  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+type ShippingSmsRequest = {
+  orderNumber?: unknown;
+  shippingStatus?: unknown;
+  trackingNumber?: unknown;
+};
 
-  return phone;
+type OrderSmsRow = {
+  order_number: string | null;
+  customer_phone: string | null;
+  sms_consent: boolean | null;
+};
+
+function cleanText(
+  value: unknown,
+  maxLength: number
+) {
+  if (
+    typeof value !== "string"
+  ) {
+    return "";
+  }
+
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, maxLength);
 }
 
-export async function POST(req: Request) {
+export async function POST(
+  req: Request
+) {
   try {
-    const body = await req.json();
+    const body =
+      (await req.json()) as ShippingSmsRequest;
 
-    const {
-      customerPhone,
-      orderNumber,
-      shippingStatus,
-      trackingNumber,
-    } = body;
+    const orderNumber =
+      cleanText(
+        body.orderNumber,
+        80
+      );
 
-    if (!customerPhone) {
+    const shippingStatus =
+      cleanText(
+        body.shippingStatus,
+        80
+      );
+
+    const trackingNumber =
+      cleanText(
+        body.trackingNumber,
+        120
+      );
+
+    if (!orderNumber) {
       return NextResponse.json(
-        { success: false, error: "Customer phone missing" },
-        { status: 400 }
+        {
+          success: false,
+          error:
+            "Order number missing.",
+        },
+        {
+          status: 400,
+        }
       );
     }
 
-    await sendSms(
-      formatPhoneNumber(customerPhone),
-      `PugPep: Your order #${orderNumber} shipping status is now ${shippingStatus}. Tracking: ${
-        trackingNumber || "not available yet"
-      }`
+    if (!shippingStatus) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Shipping status missing.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    /*
+     * Enforce SMS consent from the authoritative order record.
+     * Do not trust a browser-supplied phone number.
+     */
+    const {
+      data,
+      error:
+        orderError,
+    } =
+      await supabaseAdmin
+        .from("orders")
+        .select(
+          [
+            "order_number",
+            "customer_phone",
+            "sms_consent",
+          ].join(",")
+        )
+        .eq(
+          "order_number",
+          orderNumber
+        )
+        .maybeSingle();
+
+    if (orderError) {
+      throw orderError;
+    }
+
+    const order =
+      data as unknown as
+        OrderSmsRow | null;
+
+    if (!order) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Order not found.",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    if (
+      order.sms_consent !==
+      true
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          skipped: true,
+          error:
+            "Customer did not opt in to SMS notifications.",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    const customerPhone =
+      cleanText(
+        order.customer_phone,
+        40
+      );
+
+    if (!customerPhone) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Customer phone missing.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const statusText =
+      shippingStatus
+        .trim()
+        .toLowerCase();
+
+    let smsBody:
+      string;
+
+    if (
+      statusText ===
+        "shipped" &&
+      trackingNumber
+    ) {
+      smsBody =
+        `PugPep: ${orderNumber} has shipped. Tracking: ${trackingNumber}`;
+    } else if (
+      statusText ===
+        "shipped"
+    ) {
+      smsBody =
+        `PugPep: ${orderNumber} has shipped. Tracking will be available soon.`;
+    } else if (
+      statusText ===
+        "out for delivery" &&
+      trackingNumber
+    ) {
+      smsBody =
+        `PugPep: ${orderNumber} is out for delivery. Tracking: ${trackingNumber}`;
+    } else if (
+      statusText ===
+        "out for delivery"
+    ) {
+      smsBody =
+        `PugPep: ${orderNumber} is out for delivery.`;
+    } else if (
+      statusText ===
+        "shipping exception"
+    ) {
+      smsBody =
+        trackingNumber
+          ? `PugPep: There is a carrier update for ${orderNumber}. Tracking: ${trackingNumber}`
+          : `PugPep: There is a carrier update for ${orderNumber}.`;
+    } else {
+      smsBody =
+        trackingNumber
+          ? `PugPep: ${orderNumber} shipping status is now ${shippingStatus}. Tracking: ${trackingNumber}`
+          : `PugPep: ${orderNumber} shipping status is now ${shippingStatus}.`;
+    }
+
+    const message =
+      await sendSms(
+        customerPhone,
+        smsBody
+      );
+
+    return NextResponse.json({
+      success: true,
+      sid:
+        message.sid,
+      status:
+        message.status,
+      to:
+        message.to,
+    });
+  } catch (error) {
+    const details =
+      error as {
+        code?: number;
+        status?: number;
+        message?: string;
+        moreInfo?: string;
+      };
+
+    console.error(
+      "Shipping SMS failed:",
+      {
+        code:
+          details.code,
+
+        status:
+          details.status,
+
+        message:
+          details.message,
+
+        moreInfo:
+          details.moreInfo,
+      }
     );
 
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-  console.error("SMS failed:", error);
+    return NextResponse.json(
+      {
+        success: false,
 
-  return NextResponse.json(
-    {
-      success: false,
-      error: error?.message || "SMS failed",
-      code: error?.code || null,
-      moreInfo: error?.moreInfo || null,
-    },
-    { status: 500 }
-  );
-}
+        error:
+          details.message ||
+          "SMS failed.",
+
+        code:
+          details.code ||
+          null,
+
+        twilioStatus:
+          details.status ||
+          null,
+
+        moreInfo:
+          details.moreInfo ||
+          null,
+      },
+      {
+        status: 500,
+      }
+    );
+  }
 }

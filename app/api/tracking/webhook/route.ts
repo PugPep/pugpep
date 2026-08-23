@@ -18,39 +18,10 @@ type OrderRow = {
   id: string;
   order_number: string | null;
   customer_phone: string | null;
+  sms_consent: boolean | null;
   shipping_status: string | null;
   closed_at: string | null;
 };
-
-
-function formatPhoneNumber(
-  phone: string
-) {
-  const digits =
-    phone.replace(
-      /\D/g,
-      ""
-    );
-
-  if (
-    digits.length ===
-    10
-  ) {
-    return `+1${digits}`;
-  }
-
-  if (
-    digits.length ===
-      11 &&
-    digits.startsWith(
-      "1"
-    )
-  ) {
-    return `+${digits}`;
-  }
-
-  return phone;
-}
 
 function verifySignature(
   rawBody: string,
@@ -310,6 +281,7 @@ export async function POST(
             "id",
             "order_number",
             "customer_phone",
+            "sms_consent",
             "shipping_status",
             "closed_at",
           ].join(",")
@@ -379,7 +351,9 @@ export async function POST(
       );
 
     const delivered =
-      tag.toLowerCase() ===
+      tag
+        .trim()
+        .toLowerCase() ===
       "delivered";
 
     const updatePayload:
@@ -428,30 +402,95 @@ export async function POST(
     }
 
     /*
-     * Updating shipping_status to delivered activates the database
-     * trigger that sets closed_at, so the order moves to Closed.
+     * Delivery status updates must always be saved, regardless of
+     * whether the customer opted in to SMS.
+     *
+     * A delivered text is sent only when:
+     * - this webhook moves the order INTO delivered,
+     * - the customer explicitly consented to SMS,
+     * - and a customer phone number exists.
      */
     if (
       delivered &&
       order.shipping_status !==
         "delivered" &&
+      order.sms_consent ===
+        true &&
       order.customer_phone
     ) {
       try {
-        await sendSms(
-          formatPhoneNumber(
-            order.customer_phone
-          ),
-          `PugPep: Your order #${order.order_number} has been delivered. Thank you for choosing PugPep.`
+        const orderLabel =
+          order.order_number?.trim() ||
+          "Your order";
+
+        const message =
+          await sendSms(
+            order.customer_phone,
+            `PugPep: ${orderLabel} has been delivered. Thank you for choosing PugPep. Reply STOP to opt out or HELP for help.`
+          );
+
+        console.log(
+          "Delivered SMS accepted:",
+          {
+            orderId:
+              order.id,
+            orderNumber:
+              order.order_number,
+            sid:
+              message.sid,
+            status:
+              message.status,
+          }
         );
       } catch (
         smsError
       ) {
+        const details =
+          smsError as {
+            code?: number;
+            status?: number;
+            message?: string;
+            moreInfo?: string;
+          };
+
+        /*
+         * A failed customer text must not cause AfterShip to retry
+         * the entire webhook after the order status was already saved.
+         */
         console.error(
           "Delivered SMS failed:",
-          smsError
+          {
+            orderId:
+              order.id,
+            orderNumber:
+              order.order_number,
+            code:
+              details.code,
+            status:
+              details.status,
+            message:
+              details.message,
+            moreInfo:
+              details.moreInfo,
+          }
         );
       }
+    } else if (
+      delivered &&
+      order.shipping_status !==
+        "delivered" &&
+      order.sms_consent !==
+        true
+    ) {
+      console.log(
+        "Delivered SMS skipped because customer did not opt in.",
+        {
+          orderId:
+            order.id,
+          orderNumber:
+            order.order_number,
+        }
+      );
     }
 
     return NextResponse.json({

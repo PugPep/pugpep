@@ -54,6 +54,17 @@ export type PendingOrder = {
   items:
     PendingCartItem[];
 
+  /*
+   * Explicit customer consent for transactional SMS messages.
+   *
+   * This is optional for backwards compatibility with pending
+   * orders created before SMS consent was added to checkout.
+   *
+   * Only a strict `true` value should be treated as consent.
+   */
+  smsConsent?:
+    boolean;
+
   pricingInput?: {
     items: {
       productOptionId?: string;

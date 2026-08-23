@@ -48,6 +48,13 @@ export async function persistOrder({
     customer_phone:
       order.customer.phone,
 
+    /*
+     * Store the customer's explicit checkout choice.
+     * Only a strict true value is treated as SMS consent.
+     */
+    sms_consent:
+      order.smsConsent === true,
+
     shipping_address:
       order.customer.address,
     city:

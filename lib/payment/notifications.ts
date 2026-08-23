@@ -4,6 +4,18 @@ import type { PricingResult } from "../pricing/types";
 import type { PendingOrder } from "./types";
 import { money } from "./utils";
 
+type SmsApiResponse = {
+  success?: boolean;
+  skipped?: boolean;
+  error?: string;
+  code?: number | null;
+  twilioStatus?: number | null;
+  moreInfo?: string | null;
+  sid?: string;
+  status?: string;
+  to?: string;
+};
+
 export async function sendOrderNotifications({
   order,
   pricing,
@@ -17,6 +29,13 @@ export async function sendOrderNotifications({
   const discounts =
     pricing.discounts;
 
+  /*
+   * EMAIL
+   *
+   * Email and SMS are intentionally isolated from one another.
+   * A failure in one notification channel must never prevent
+   * the other notification from being attempted.
+   */
   try {
     await emailjs.send(
       "service_quxnkin",
@@ -101,6 +120,34 @@ export async function sendOrderNotifications({
     );
   }
 
+  /*
+   * SMS
+   *
+   * Only an explicit checkout opt-in allows SMS.
+   * Older pending orders without smsConsent are treated as
+   * not consented.
+   */
+  if (
+    order.smsConsent !==
+    true
+  ) {
+    console.log(
+      "Order confirmation SMS skipped because customer did not opt in.",
+      {
+        orderNumber:
+          order.orderNumber,
+      }
+    );
+
+    return;
+  }
+
+  /*
+   * The SMS API now loads the authoritative phone number,
+   * total, and sms_consent value directly from the saved order.
+   *
+   * Only the order number is sent from this layer.
+   */
   try {
     const smsResponse =
       await fetch(
@@ -115,29 +162,100 @@ export async function sendOrderNotifications({
 
           body:
             JSON.stringify({
-              customerPhone:
-                order.customer
-                  .phone,
-
               orderNumber:
                 order.orderNumber,
-
-              orderTotal:
-                accounting
-                  .customerTotal,
             }),
         }
       );
 
-    if (!smsResponse.ok) {
-      console.error(
-        "Order created, but confirmation SMS failed."
-      );
+    let smsResult:
+      SmsApiResponse | null =
+      null;
+
+    try {
+      smsResult =
+        (await smsResponse.json()) as SmsApiResponse;
+    } catch {
+      smsResult =
+        null;
     }
+
+    if (
+      smsResult?.skipped
+    ) {
+      console.log(
+        "Order confirmation SMS skipped by server-side consent check.",
+        {
+          orderNumber:
+            order.orderNumber,
+        }
+      );
+
+      return;
+    }
+
+    if (
+      !smsResponse.ok ||
+      !smsResult?.success
+    ) {
+      console.error(
+        "Order created, but confirmation SMS failed:",
+        {
+          orderNumber:
+            order.orderNumber,
+
+          httpStatus:
+            smsResponse.status,
+
+          error:
+            smsResult?.error ||
+            "SMS API returned an unsuccessful response.",
+
+          code:
+            smsResult?.code ||
+            null,
+
+          twilioStatus:
+            smsResult?.twilioStatus ||
+            null,
+
+          moreInfo:
+            smsResult?.moreInfo ||
+            null,
+        }
+      );
+
+      return;
+    }
+
+    console.log(
+      "Order confirmation SMS accepted:",
+      {
+        orderNumber:
+          order.orderNumber,
+
+        sid:
+          smsResult.sid,
+
+        status:
+          smsResult.status,
+
+        to:
+          smsResult.to,
+      }
+    );
   } catch (smsError) {
     console.error(
-      "Order created, but confirmation SMS failed:",
-      smsError
+      "Order created, but confirmation SMS request failed:",
+      {
+        orderNumber:
+          order.orderNumber,
+
+        error:
+          smsError instanceof Error
+            ? smsError.message
+            : smsError,
+      }
     );
   }
 }

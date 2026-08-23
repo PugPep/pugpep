@@ -371,26 +371,93 @@ export default function HomePage() {
       </section>
 
       <footer style={footer}>
-        <p
-          style={{
-            marginBottom: 18,
-            color: "#00d9ff",
-            fontWeight: "bold",
-          }}
-        >
-          PUGPEP © 2026 All Rights Reserved
+        <div style={footerGrid}>
+          <div style={footerColumn}>
+            <p style={footerColumnTitle}>
+              CUSTOMER SUPPORT
+            </p>
+
+            <Link href="/account" style={footerLink}>
+              My Account
+            </Link>
+
+            <Link href="/cart" style={footerLink}>
+              Cart
+            </Link>
+
+            <Link href="/checkout" style={footerLink}>
+              Checkout
+            </Link>
+
+            <a
+              href="mailto:Support@PugPep.com"
+              style={footerLink}
+            >
+              Contact Support
+            </a>
+          </div>
+
+          <div style={footerColumn}>
+            <p style={footerColumnTitle}>
+              COMPANY &amp; RESEARCH
+            </p>
+
+            <Link href="/quality" style={footerLink}>
+              Quality &amp; Testing
+            </Link>
+
+            <Link href="/research-use" style={footerLink}>
+              Research Use Policy
+            </Link>
+
+            <Link href="/policies" style={footerLink}>
+              Legal &amp; Policies
+            </Link>
+          </div>
+
+          <div style={footerColumn}>
+            <p style={footerColumnTitle}>
+              LEGAL &amp; POLICIES
+            </p>
+
+            <Link href="/terms" style={footerLink}>
+              Terms &amp; Conditions
+            </Link>
+
+            <Link href="/privacy" style={footerLink}>
+              Privacy Policy
+            </Link>
+
+            <Link href="/refund-policy" style={footerLink}>
+              Refund &amp; Return Policy
+            </Link>
+
+            <Link href="/shipping-policy" style={footerLink}>
+              Shipping &amp; Delivery Policy
+            </Link>
+
+            <Link href="/sms-terms" style={footerLink}>
+              SMS Terms
+            </Link>
+          </div>
+        </div>
+
+        <div style={footerDivider} />
+
+        <p style={footerResearchNotice}>
+          <strong style={{ color: "#00ff99" }}>
+            RESEARCH USE ONLY:
+          </strong>{" "}
+          PugPep products are intended for laboratory research purposes only.
+          Not for human or veterinary use.
         </p>
 
-        <a href="/terms" style={{ color: "#00d9ff", textDecoration: "none" }}>
-          Terms & Conditions
-        </a>
-
         <p style={footerText}>
-          All products are sold for research, laboratory, or analytical
-          purposes only, and are not for human consumption. The statements made
-          within this website have not been evaluated by the US Food and Drug
-          Administration. The statements and the products of this company are
-          not intended to diagnose, treat, cure or prevent any disease.
+          Information provided on this website is for research and
+          informational purposes only and does not constitute medical advice,
+          dosing guidance, treatment recommendations, or claims of therapeutic
+          benefit. Products are not intended to diagnose, treat, cure, mitigate,
+          or prevent disease.
         </p>
 
         <p style={footerText}>
@@ -398,6 +465,10 @@ export default function HomePage() {
           or chemical compounding facility as defined under 503A of the Federal
           Food, Drug, and Cosmetic Act. PUGPEP is not an outsourcing facility
           as defined under 503B of the Federal Food, Drug, and Cosmetic Act.
+        </p>
+
+        <p style={footerCopyright}>
+          PUGPEP © 2026 All Rights Reserved
         </p>
       </footer>
     </main>
@@ -675,18 +746,80 @@ const mainButton = {
 
 const footer = {
   marginTop: 60,
-  padding: "40px 20px",
-  borderTop: "1px solid rgba(255,255,255,.12)",
-  background: "#050505",
+  padding:
+    "clamp(34px, 5vw, 54px) clamp(20px, 4vw, 36px)",
+  borderTop:
+    "1px solid rgba(255,255,255,.12)",
+  background:
+    "radial-gradient(circle at 10% 0%, rgba(0,217,255,.07), transparent 28%), radial-gradient(circle at 90% 0%, rgba(255,45,210,.08), transparent 30%), #050505",
+};
+
+const footerGrid = {
+  width: "100%",
+  maxWidth: 1180,
+  margin: "0 auto",
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fit, minmax(210px, 1fr))",
+  gap: 28,
+};
+
+const footerColumn = {
+  display: "grid",
+  alignContent: "start",
+  gap: 10,
+};
+
+const footerColumnTitle = {
+  margin: "0 0 5px",
+  color: "#ff75df",
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: ".13em",
+};
+
+const footerLink = {
+  width: "fit-content",
+  color: "#cfcfd5",
+  fontSize: 14,
+  lineHeight: 1.5,
+  textDecoration: "none",
+};
+
+const footerDivider = {
+  width: "100%",
+  maxWidth: 1180,
+  height: 1,
+  margin: "32px auto 24px",
+  background:
+    "linear-gradient(90deg, transparent, rgba(0,217,255,.32), rgba(255,69,216,.32), rgba(0,255,153,.28), transparent)",
+};
+
+const footerResearchNotice = {
+  maxWidth: 1100,
+  margin: "0 auto 14px",
+  color: "#cfcfd5",
+  lineHeight: 1.7,
+  fontSize: 13,
   textAlign: "center" as const,
 };
 
 const footerText = {
   maxWidth: 1100,
-  margin: "0 auto 18px",
+  margin: "0 auto 14px",
   color: "#888",
   lineHeight: 1.7,
   fontSize: 13,
+  textAlign: "center" as const,
+};
+
+const footerCopyright = {
+  maxWidth: 1100,
+  margin: "22px auto 0",
+  color: "#00d9ff",
+  fontWeight: 900,
+  fontSize: 13,
+  textAlign: "center" as const,
 };
 
 const discoverBanner = {
