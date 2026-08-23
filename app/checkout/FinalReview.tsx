@@ -25,25 +25,23 @@ export function FinalReview({
 
   return (
     <section style={styles.finalCard}>
-      <div style={styles.finalHeader}>
+      <div
+        className="checkout-final-header"
+        style={styles.finalHeader}
+      >
         <div>
           <p style={styles.eyebrow}>
-            {pricing
-              ? "RESEARCH READY"
-              : "FINAL REVIEW"}
+            {pricing ? "RESEARCH READY" : "FINAL REVIEW"}
           </p>
 
           <h2
             style={{
               margin: "5px 0 0",
               color: "#fff",
-              fontSize:
-                "clamp(26px,5vw,36px)",
+              fontSize: "clamp(26px,5vw,36px)",
             }}
           >
-            {pricing
-              ? "Everything Checks Out"
-              : "Almost Ready"}
+            {pricing ? "Everything Checks Out" : "Almost Ready"}
           </h2>
 
           <p
@@ -64,16 +62,8 @@ export function FinalReview({
             style={styles.totalBadge}
           >
             <span>Your Total</span>
-
-            <strong
-              style={{
-                fontSize: 26,
-              }}
-            >
-              {money(
-                pricing.accounting
-                  .customerTotal
-              )}
+            <strong style={{ fontSize: 26 }}>
+              {money(pricing.accounting.customerTotal)}
             </strong>
           </div>
         )}
@@ -83,124 +73,84 @@ export function FinalReview({
         className="final-summary-grid"
         style={styles.finalGrid}
       >
-        <div>
+        <div className="checkout-final-summary">
           {pricing ? (
             <>
               <Row
                 label="Items"
                 value={money(
-                  pricing.accounting
-                    .regularMerchandiseValue
+                  pricing.accounting.regularMerchandiseValue
                 )}
               />
 
               <Discount
                 label="Sale Savings"
-                value={
-                  pricing.discounts
-                    .saleDiscount
-                }
+                value={pricing.discounts.saleDiscount}
               />
 
               <Discount
                 label="Bundle Savings"
-                value={
-                  pricing.discounts
-                    .bundleDiscount
-                }
+                value={pricing.discounts.bundleDiscount}
               />
 
               <Discount
                 label="Promo Savings"
-                value={
-                  pricing.discounts
-                    .generalPromoDiscount
-                }
+                value={pricing.discounts.generalPromoDiscount}
               />
 
               <Discount
                 label="Partner Savings"
-                value={
-                  pricing.discounts
-                    .salesRepDiscount
-                }
+                value={pricing.discounts.salesRepDiscount}
               />
 
               <Discount
                 label="Referral Savings"
-                value={
-                  pricing.discounts
-                    .referralDiscount
-                }
+                value={pricing.discounts.referralDiscount}
               />
 
               <Discount
                 label="VIP Savings"
-                value={
-                  pricing.discounts
-                    .vipDiscount
-                }
+                value={pricing.discounts.vipDiscount}
               />
 
               <Discount
                 label="Hero Appreciation"
-                value={
-                  pricing.discounts
-                    .heroDiscount
-                }
+                value={pricing.discounts.heroDiscount}
               />
 
               <Discount
                 label="Rewards Applied"
-                value={
-                  pricing.discounts
-                    .rewardsDiscount
-                }
+                value={pricing.discounts.rewardsDiscount}
               />
 
               <Discount
                 label="PugPep Credit"
-                value={
-                  pricing.discounts
-                    .merchantTaxOffsetDiscount
-                }
+                value={pricing.discounts.merchantTaxOffsetDiscount}
               />
 
               <Row
                 label="After Savings"
                 value={money(
-                  pricing.accounting
-                    .merchandiseRevenueAfterDiscounts
+                  pricing.accounting.merchandiseRevenueAfterDiscounts
                 )}
               />
 
               <Row
-                label={
-                  pricing.shipping
-                    .shippingMethodLabel
-                }
+                label={pricing.shipping.shippingMethodLabel}
                 value={
-                  pricing.shipping
-                    .shippingCollected === 0
+                  pricing.shipping.shippingCollected === 0
                     ? "FREE"
-                    : money(
-                        pricing.shipping
-                          .shippingCollected
-                      )
+                    : money(pricing.shipping.shippingCollected)
                 }
                 positive={
-                  pricing.shipping
-                    .shippingCollected === 0
+                  pricing.shipping.shippingCollected === 0
                 }
               />
 
               {pricing.tax.enabled && (
                 <Row
                   label="Sales Tax"
-                  value={money(
-                    pricing.tax
-                      .salesTaxAmount
-                  )}
+                  value={money(pricing.tax.salesTaxAmount)}
                 />
               )}
             </>
@@ -219,15 +169,12 @@ export function FinalReview({
                   color: "#00d9ff",
                 }}
               >
-                Final pricing is waiting on your
-                checkout information.
+                Final pricing is waiting on your checkout information.
               </strong>
 
-              Product prices remain visible in the
-              Research Summary above. Your discounts,
-              shipping eligibility, and applicable tax
-              are verified before you enter the payment
-              screen.
+              Product prices remain visible in the Research Summary above.
+              Your discounts, shipping eligibility, and applicable tax are
+              verified before you enter the payment screen.
             </div>
           )}
         </div>
@@ -236,17 +183,13 @@ export function FinalReview({
           className="checkout-final-action"
           style={{
             ...styles.actionPanel,
-
-            /*
-             * Keep this panel in normal document flow.
-             * This prevents a sticky/fixed action panel
-             * from covering Order Review on smaller screens.
-             */
             position: "static",
             top: "auto",
-            alignSelf: "stretch",
+            alignSelf: "start",
             width: "100%",
             maxWidth: "100%",
+            minHeight: "auto",
+            height: "auto",
             boxSizing: "border-box",
           }}
         >
@@ -259,28 +202,21 @@ export function FinalReview({
               ...styles.primaryButton,
               background:
                 "linear-gradient(180deg,#2eea6f,#19b857)",
-              border:
-                "2px solid #45d97a",
+              border: "2px solid #45d97a",
               boxShadow:
                 "0 0 18px rgba(46,234,111,.32), 0 0 36px rgba(46,234,111,.14)",
               width: "100%",
               maxWidth: 460,
-              minHeight: 58,
-              padding: "14px 18px",
+              minHeight: 54,
+              padding: "12px 16px",
               margin: "0 auto",
               display: "block",
               boxSizing: "border-box",
               whiteSpace: "normal",
-              lineHeight: 1.25,
+              lineHeight: 1.2,
               fontSize: 18,
-              opacity:
-                buttonDisabled
-                  ? 0.65
-                  : 1,
-              cursor:
-                buttonDisabled
-                  ? "not-allowed"
-                  : "pointer",
+              opacity: buttonDisabled ? 0.65 : 1,
+              cursor: buttonDisabled ? "not-allowed" : "pointer",
             }}
           >
             {proceeding
@@ -294,11 +230,11 @@ export function FinalReview({
 
           <p
             style={{
-              margin: "10px 0 0",
+              margin: "8px 0 0",
               color: "#888",
               fontSize: 12,
               textAlign: "center",
-              lineHeight: 1.5,
+              lineHeight: 1.4,
             }}
           >
             {pricingLoading
@@ -309,7 +245,32 @@ export function FinalReview({
       </div>
 
       <style jsx>{`
-        @media (max-width: 640px) {
+        @media (max-width: 700px) {
+          .checkout-final-header {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 14px !important;
+          }
+
+          .checkout-final-total {
+            width: 100% !important;
+            max-width: 220px !important;
+            box-sizing: border-box !important;
+            text-align: left !important;
+          }
+
+          .final-summary-grid {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 16px !important;
+            align-items: start !important;
+          }
+
+          .checkout-final-summary {
+            width: 100% !important;
+            min-width: 0 !important;
+          }
+
           .checkout-final-action {
             position: static !important;
             top: auto !important;
@@ -318,17 +279,21 @@ export function FinalReview({
             left: auto !important;
             width: 100% !important;
             max-width: 100% !important;
-            margin-top: 14px !important;
-            padding: 0 !important;
+            min-height: 0 !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 14px !important;
             transform: none !important;
             z-index: auto !important;
+            align-self: start !important;
+            box-sizing: border-box !important;
           }
 
           .checkout-enter-lab-button {
             width: 100% !important;
             max-width: 360px !important;
-            min-height: 50px !important;
-            padding: 11px 14px !important;
+            min-height: 48px !important;
+            padding: 10px 14px !important;
             margin: 0 auto !important;
             font-size: 16px !important;
             line-height: 1.2 !important;
@@ -337,10 +302,18 @@ export function FinalReview({
         }
 
         @media (max-width: 380px) {
+          .checkout-final-total {
+            max-width: 100% !important;
+          }
+
+          .checkout-final-action {
+            padding: 12px !important;
+          }
+
           .checkout-enter-lab-button {
             max-width: 100% !important;
-            min-height: 48px !important;
-            padding: 10px 12px !important;
+            min-height: 46px !important;
+            padding: 9px 12px !important;
             font-size: 15px !important;
           }
         }
@@ -364,9 +337,7 @@ function Row({
 
       <strong
         style={{
-          color: positive
-            ? "#00ff99"
-            : "#fff",
+          color: positive ? "#00ff99" : "#fff",
         }}
       >
         {value}
@@ -390,11 +361,7 @@ function Discount({
     <div style={styles.summaryRow}>
       <span>{label}</span>
 
-      <strong
-        style={{
-          color: "#00ff99",
-        }}
-      >
+      <strong style={{ color: "#00ff99" }}>
         -{money(value)}
       </strong>
     </div>
