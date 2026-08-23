@@ -1,6 +1,7 @@
 import emailjs from "emailjs-com";
 
 import type { PricingResult } from "../pricing/types";
+import { createClient } from "../supabaseClient";
 import type { PendingOrder } from "./types";
 import { money } from "./utils";
 
@@ -143,12 +144,46 @@ export async function sendOrderNotifications({
   }
 
   /*
-   * The SMS API now loads the authoritative phone number,
-   * total, and sms_consent value directly from the saved order.
+   * The SMS API loads the authoritative phone number,
+   * total, sms_consent value, and order owner directly
+   * from the saved order.
    *
-   * Only the order number is sent from this layer.
+   * The current authenticated customer's Supabase access
+   * token is included so the API can verify that the caller
+   * owns this order before sending the message.
    */
   try {
+    const supabase =
+      createClient();
+
+    const {
+      data: {
+        session,
+      },
+      error:
+        sessionError,
+    } =
+      await supabase.auth.getSession();
+
+    if (
+      sessionError ||
+      !session?.access_token
+    ) {
+      console.error(
+        "Order created, but confirmation SMS could not authenticate:",
+        {
+          orderNumber:
+            order.orderNumber,
+
+          error:
+            sessionError?.message ||
+            "No active Supabase session was available.",
+        }
+      );
+
+      return;
+    }
+
     const smsResponse =
       await fetch(
         "/api/send-order-confirmation-sms",
@@ -158,6 +193,9 @@ export async function sendOrderNotifications({
           headers: {
             "Content-Type":
               "application/json",
+
+            Authorization:
+              `Bearer ${session.access_token}`,
           },
 
           body:

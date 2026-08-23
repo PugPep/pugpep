@@ -702,6 +702,25 @@ export default function OrderDetailsPage() {
       }
 
       try {
+        const {
+          data: {
+            session,
+          },
+          error:
+            sessionError,
+        } =
+          await supabase.auth.getSession();
+
+        if (
+          sessionError ||
+          !session?.access_token
+        ) {
+          throw new Error(
+            sessionError?.message ||
+              "Admin session is unavailable. Please sign in again."
+          );
+        }
+
         const smsRes =
           await fetch(
             "/api/send-shipping-sms",
@@ -712,6 +731,9 @@ export default function OrderDetailsPage() {
               headers: {
                 "Content-Type":
                   "application/json",
+
+                Authorization:
+                  `Bearer ${session.access_token}`,
               },
 
               body:

@@ -993,10 +993,11 @@ export default function AdminPage() {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
+                    Authorization: session?.access_token
+                      ? `Bearer ${session.access_token}`
+                      : "",
                   },
                   body: JSON.stringify({
-                    customerPhone:
-                      currentOrder.customer_phone,
                     orderNumber:
                       currentOrder.order_number,
                     shippingStatus:

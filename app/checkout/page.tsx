@@ -120,6 +120,10 @@ const SAVED_PROMO_KEY =
 const LEGACY_PENDING_PROMO_KEY =
   "pugpep_pending_promo";
 
+const SMS_ENABLED =
+  process.env.NEXT_PUBLIC_SMS_ENABLED ===
+  "true";
+
 export default function CheckoutPage() {
   const {
     cart,
@@ -1537,7 +1541,9 @@ export default function CheckoutPage() {
               .shipping
               .hasLifetimeFreeShipping,
 
-          smsConsent,
+          smsConsent:
+            SMS_ENABLED &&
+            smsConsent,
 
           createdAt:
             new Date().toISOString(),
@@ -1804,6 +1810,7 @@ export default function CheckoutPage() {
               }
             />
 
+            {SMS_ENABLED && (
             <section
               style={{
                 border:
@@ -1950,6 +1957,8 @@ export default function CheckoutPage() {
                 your order even if you do not opt in to SMS notifications.
               </p>
             </section>
+
+            )}
 
             <ShippingMethodSection
               shippingMethod={

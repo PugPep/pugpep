@@ -14,6 +14,7 @@ type OrderSmsRow = {
   customer_phone: string | null;
   total: number | string | null;
   sms_consent: boolean | null;
+  user_id: string | null;
 };
 
 function cleanText(
@@ -32,10 +33,71 @@ function cleanText(
     .slice(0, maxLength);
 }
 
+function getBearerToken(
+  req: Request
+) {
+  const authorization =
+    req.headers.get("authorization")?.trim() || "";
+
+  if (
+    !authorization
+      .toLowerCase()
+      .startsWith("bearer ")
+  ) {
+    return "";
+  }
+
+  return authorization
+    .slice(7)
+    .trim();
+}
+
 export async function POST(
   req: Request
 ) {
   try {
+    const accessToken =
+      getBearerToken(req);
+
+    if (!accessToken) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Authentication required.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    const {
+      data:
+        authData,
+      error:
+        authError,
+    } =
+      await supabaseAdmin.auth.getUser(
+        accessToken
+      );
+
+    if (
+      authError ||
+      !authData.user
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Invalid or expired session.",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
     const body =
       (await req.json()) as OrderConfirmationSmsRequest;
 
@@ -62,6 +124,9 @@ export async function POST(
      * Do not trust a phone number or consent flag supplied by the browser.
      * Load the authoritative order record and enforce the saved checkout
      * consent before sending any SMS.
+     *
+     * The authenticated user must also own this order. This prevents
+     * somebody from triggering an SMS by guessing another order number.
      */
     const {
       data,
@@ -76,6 +141,7 @@ export async function POST(
             "customer_phone",
             "total",
             "sms_consent",
+            "user_id",
           ].join(",")
         )
         .eq(
@@ -101,6 +167,23 @@ export async function POST(
         },
         {
           status: 404,
+        }
+      );
+    }
+
+    if (
+      !order.user_id ||
+      order.user_id !==
+        authData.user.id
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "You are not authorized to send notifications for this order.",
+        },
+        {
+          status: 403,
         }
       );
     }
@@ -168,7 +251,7 @@ export async function POST(
     const message =
       await sendSms(
         customerPhone,
-        `PugPep: We received order ${orderNumber}. Total: $${orderTotal.toFixed(
+        `PugPep Order Updates: We received order ${orderNumber}. Total: $${orderTotal.toFixed(
           2
         )}. We’ll text you again when your order ships. Reply STOP to opt out or HELP for help.`
       );

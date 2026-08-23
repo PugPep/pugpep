@@ -5,6 +5,8 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
+const ADMIN_EMAIL = "pugpep99@gmail.com";
+
 type ShippingSmsRequest = {
   orderNumber?: unknown;
   shippingStatus?: unknown;
@@ -33,10 +35,103 @@ function cleanText(
     .slice(0, maxLength);
 }
 
+function getBearerToken(
+  req: Request
+) {
+  const authorization =
+    req.headers.get("authorization")?.trim() || "";
+
+  if (
+    !authorization
+      .toLowerCase()
+      .startsWith("bearer ")
+  ) {
+    return "";
+  }
+
+  return authorization
+    .slice(7)
+    .trim();
+}
+
+async function requireAdmin(
+  req: Request
+) {
+  const accessToken =
+    getBearerToken(req);
+
+  if (!accessToken) {
+    return {
+      authorized: false as const,
+      status: 401,
+      error: "Authentication required.",
+    };
+  }
+
+  const {
+    data,
+    error,
+  } =
+    await supabaseAdmin.auth.getUser(
+      accessToken
+    );
+
+  if (
+    error ||
+    !data.user
+  ) {
+    return {
+      authorized: false as const,
+      status: 401,
+      error: "Invalid or expired session.",
+    };
+  }
+
+  const email =
+    data.user.email
+      ?.trim()
+      .toLowerCase() ||
+    "";
+
+  if (
+    email !==
+    ADMIN_EMAIL.toLowerCase()
+  ) {
+    return {
+      authorized: false as const,
+      status: 403,
+      error: "Admin access required.",
+    };
+  }
+
+  return {
+    authorized: true as const,
+    userId:
+      data.user.id,
+  };
+}
+
 export async function POST(
   req: Request
 ) {
   try {
+    const admin =
+      await requireAdmin(req);
+
+    if (!admin.authorized) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            admin.error,
+        },
+        {
+          status:
+            admin.status,
+        }
+      );
+    }
+
     const body =
       (await req.json()) as ShippingSmsRequest;
 

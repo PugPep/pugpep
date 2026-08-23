@@ -4,6 +4,18 @@ import { sendSms } from "@/lib/sendSms";
 export const runtime = "nodejs";
 
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "SMS test endpoint is disabled in production.",
+      },
+      {
+        status: 404,
+      }
+    );
+  }
+
   try {
     const testNumber =
       process.env.TWILIO_TEST_PHONE_NUMBER?.trim();
