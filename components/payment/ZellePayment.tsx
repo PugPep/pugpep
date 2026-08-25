@@ -68,7 +68,7 @@ export function ZellePayment({
           </span>
 
           <strong style={zelleTag}>
-            PugPep
+            PugPepLLC
           </strong>
         </div>
       </div>
