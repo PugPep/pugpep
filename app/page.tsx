@@ -17,6 +17,10 @@ type Product = {
   image: string;
   color: string;
   category: string;
+  is_new: boolean;
+  feature_on_homepage: boolean;
+  new_until?: string | null;
+  homepage_feature_order?: number | null;
 };
 
 export default function HomePage() {
@@ -52,7 +56,9 @@ export default function HomePage() {
   async function loadProducts() {
     const { data: productData, error: productError } = await supabase
       .from("products")
-      .select("id, name, slug, color, image, category")
+      .select(
+        "id, name, slug, color, image, category, is_new, feature_on_homepage, new_until, homepage_feature_order"
+      )
       .eq("is_active", true)
       .order("name", { ascending: true });
 
@@ -75,6 +81,31 @@ export default function HomePage() {
       setCampaignLoading(false);
     }
   }
+
+  function isProductNew(product: Product) {
+    if (!product.is_new) return false;
+    if (!product.new_until) return true;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(`${product.new_until}T23:59:59`);
+    return endDate.getTime() >= today.getTime();
+  }
+
+  const featuredNewProducts = products
+    .filter(
+      (product) =>
+        product.feature_on_homepage &&
+        isProductNew(product)
+    )
+    .sort((a, b) => {
+      const aOrder = a.homepage_feature_order ?? 9999;
+      const bOrder = b.homepage_feature_order ?? 9999;
+
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.name.localeCompare(b.name);
+    });
 
   const primaryCampaign = getPrimaryStorefrontCampaign(saleMap);
 
@@ -179,6 +210,55 @@ export default function HomePage() {
         </section>
       )}
 
+      {featuredNewProducts.length > 0 && (
+        <section style={newProductsSection}>
+          <div style={newProductsHeader}>
+            <span style={newProductsEyebrow}>🧪 JUST DROPPED</span>
+            <h2 style={newProductsTitle}>New Products at PUGPEP</h2>
+            <p style={newProductsText}>
+              Explore the latest additions to the PUGPEP research catalog.
+            </p>
+          </div>
+
+          <div style={newProductsGrid}>
+            {featuredNewProducts.map((product) => (
+              <Link
+                key={`new-${product.slug}`}
+                href={`/products/${product.slug}`}
+                style={{ textDecoration: "none" }}
+              >
+                <article
+                  style={{
+                    ...newProductCard,
+                    borderColor: product.color || "#ff45d8",
+                    boxShadow: `0 0 28px ${product.color || "#ff45d8"}33`,
+                  }}
+                >
+                  <span style={newBadge}>NEW</span>
+
+                  <img
+                    src={product.image || "/pugpep-logo.png"}
+                    alt={product.name}
+                    style={newProductImage}
+                  />
+
+                  <strong
+                    style={{
+                      ...newProductName,
+                      color: product.color || "#ff45d8",
+                    }}
+                  >
+                    {product.name}
+                  </strong>
+
+                  <span style={newProductCta}>VIEW PRODUCT →</span>
+                </article>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section style={discoverBanner}>
         <h2 style={discoverTitle}>
           Discover the Full Line of PUGPEP Products
@@ -278,6 +358,10 @@ export default function HomePage() {
                     }55`,
                   }}
                 >
+                  {isProductNew(product) && (
+                    <div style={catalogNewBadge}>NEW</div>
+                  )}
+
                   {effectiveSale?.isOnSale && (
                     <div style={saleBadge}>{effectiveSale.badgeText}</div>
                   )}
@@ -575,6 +659,112 @@ const shopSaleButton = {
   color: "#00ff99",
   fontWeight: 900,
   cursor: "pointer",
+};
+
+const newProductsSection = {
+  maxWidth: 1320,
+  margin: "24px auto 18px",
+  padding: "26px 20px",
+  border: "1px solid rgba(0,255,153,.32)",
+  borderRadius: 20,
+  background:
+    "linear-gradient(135deg, rgba(0,255,153,.07), rgba(0,217,255,.055), rgba(255,69,216,.055))",
+  boxShadow: "0 0 30px rgba(0,255,153,.08)",
+};
+
+const newProductsHeader = {
+  textAlign: "center" as const,
+  marginBottom: 20,
+};
+
+const newProductsEyebrow = {
+  color: "#00ff99",
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: ".14em",
+};
+
+const newProductsTitle = {
+  margin: "7px 0 4px",
+  color: "#7df9ff",
+  fontSize: "clamp(28px, 5vw, 42px)",
+  textTransform: "uppercase" as const,
+};
+
+const newProductsText = {
+  margin: "7px auto 0",
+  maxWidth: 760,
+  color: "#cfcfd5",
+  fontSize: 16,
+};
+
+const newProductsGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+  gap: 16,
+};
+
+const newProductCard = {
+  position: "relative" as const,
+  height: "100%",
+  padding: 15,
+  display: "grid",
+  gap: 10,
+  alignContent: "start",
+  border: "1px solid",
+  borderRadius: 16,
+  background: "rgba(3,3,3,.92)",
+};
+
+const newProductImage = {
+  width: "100%",
+  aspectRatio: "1 / 1",
+  objectFit: "cover" as const,
+  borderRadius: 12,
+};
+
+const newProductName = {
+  display: "block",
+  textAlign: "center" as const,
+  fontSize: 19,
+  textTransform: "uppercase" as const,
+};
+
+const newProductCta = {
+  display: "block",
+  textAlign: "center" as const,
+  color: "#00ff99",
+  fontSize: 12,
+  fontWeight: 900,
+};
+
+const newBadge = {
+  position: "absolute" as const,
+  top: 10,
+  left: 10,
+  zIndex: 4,
+  padding: "6px 10px",
+  borderRadius: 999,
+  background: "linear-gradient(90deg, #00ff99, #00d9ff)",
+  color: "#000",
+  fontSize: 11,
+  fontWeight: 1000,
+  letterSpacing: ".08em",
+  boxShadow: "0 0 14px rgba(0,255,153,.45)",
+};
+
+const catalogNewBadge = {
+  position: "absolute" as const,
+  top: 12,
+  left: 12,
+  zIndex: 4,
+  padding: "6px 10px",
+  borderRadius: 999,
+  background: "linear-gradient(90deg, #00ff99, #00d9ff)",
+  color: "#000",
+  fontWeight: 900,
+  fontSize: 12,
+  boxShadow: "0 0 14px rgba(0,255,153,.45)",
 };
 
 const searchSection = {

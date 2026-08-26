@@ -16,6 +16,10 @@ type Product = {
   storage?: string | null;
   category: string;
   is_active: boolean;
+  is_new: boolean;
+  feature_on_homepage: boolean;
+  new_until?: string | null;
+  homepage_feature_order?: number | null;
   deleted_at?: string | null;
 };
 
@@ -102,6 +106,10 @@ export default function InventoryManagerPage() {
   storage: "",
   category: "peptide",
   is_active: true,
+  is_new: false,
+  feature_on_homepage: false,
+  new_until: "",
+  homepage_feature_order: "",
 });
 
   const [newOption, setNewOption] = useState(emptyNewOption);
@@ -413,7 +421,14 @@ export default function InventoryManagerPage() {
       return;
     }
 
-    const { error } = await supabase.from("products").insert(newProduct);
+    const { error } = await supabase.from("products").insert({
+      ...newProduct,
+      new_until: newProduct.new_until || null,
+      homepage_feature_order:
+        newProduct.homepage_feature_order === ""
+          ? null
+          : Number(newProduct.homepage_feature_order),
+    });
 
     if (error) {
       alert(error.message);
@@ -432,6 +447,10 @@ export default function InventoryManagerPage() {
   storage: "",
   category: "peptide",
   is_active: true,
+  is_new: false,
+  feature_on_homepage: false,
+  new_until: "",
+  homepage_feature_order: "",
 });
     setShowAddProduct(false);
     await loadProducts();
@@ -1342,6 +1361,69 @@ export default function InventoryManagerPage() {
                         </span>
                       </div>
                     </div>
+                  </Field>
+
+                  <Field label="New Product">
+                    <label style={toggleCard}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(newProduct.is_new)}
+                        onChange={(event) =>
+                          setNewProduct({
+                            ...newProduct,
+                            is_new: event.target.checked,
+                          })
+                        }
+                      />
+                      <span>Show a NEW badge for this product</span>
+                    </label>
+                  </Field>
+
+                  <Field label="Feature on Homepage">
+                    <label style={toggleCard}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(newProduct.feature_on_homepage)}
+                        onChange={(event) =>
+                          setNewProduct({
+                            ...newProduct,
+                            feature_on_homepage: event.target.checked,
+                          })
+                        }
+                      />
+                      <span>Include in the New Products homepage section</span>
+                    </label>
+                  </Field>
+
+                  <Field label="New Until">
+                    <input
+                      type="date"
+                      value={newProduct.new_until}
+                      onChange={(event) =>
+                        setNewProduct({
+                          ...newProduct,
+                          new_until: event.target.value,
+                        })
+                      }
+                      style={input}
+                    />
+                  </Field>
+
+                  <Field label="Homepage Display Order">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={newProduct.homepage_feature_order}
+                      onChange={(event) =>
+                        setNewProduct({
+                          ...newProduct,
+                          homepage_feature_order: event.target.value,
+                        })
+                      }
+                      placeholder="1 = first"
+                      style={input}
+                    />
                   </Field>
 
                   <Field label="Accent Color">
@@ -2364,6 +2446,66 @@ export default function InventoryManagerPage() {
                     </select>
                   </Field>
 
+                  <Field label="New Product">
+                    <label style={toggleCard}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedProduct.is_new)}
+                        onChange={(event) =>
+                          updateProductField("is_new", event.target.checked)
+                        }
+                      />
+                      <span>Show a NEW badge for this product</span>
+                    </label>
+                  </Field>
+
+                  <Field label="Feature on Homepage">
+                    <label style={toggleCard}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedProduct.feature_on_homepage)}
+                        onChange={(event) =>
+                          updateProductField(
+                            "feature_on_homepage",
+                            event.target.checked
+                          )
+                        }
+                      />
+                      <span>Include in the New Products homepage section</span>
+                    </label>
+                  </Field>
+
+                  <Field label="New Until">
+                    <input
+                      type="date"
+                      value={selectedProduct.new_until || ""}
+                      onChange={(event) =>
+                        updateProductField("new_until", event.target.value)
+                      }
+                      style={input}
+                    />
+                  </Field>
+
+                  <Field label="Homepage Display Order">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={selectedProduct.homepage_feature_order ?? ""}
+                      onChange={(event) =>
+                        setSelectedProduct((previous) => ({
+                          ...previous,
+                          homepage_feature_order:
+                            event.target.value === ""
+                              ? null
+                              : Number(event.target.value),
+                        }))
+                      }
+                      placeholder="1 = first"
+                      style={input}
+                    />
+                  </Field>
+
                   <Field label="Accent Color">
                     <input
                       type="color"
@@ -2974,6 +3116,22 @@ const colorInput = {
   border: "1px solid rgba(255,255,255,.16)",
   borderRadius: 9,
   background: "#050507",
+};
+
+const toggleCard = {
+  minHeight: 54,
+  boxSizing: "border-box" as const,
+  padding: "13px 14px",
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  border: "1px solid rgba(255,255,255,.16)",
+  borderRadius: 9,
+  background: "#050507",
+  color: "#ffffff",
+  cursor: "pointer",
+  fontSize: 14,
+  fontWeight: 800,
 };
 
 const textarea = {

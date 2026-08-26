@@ -21,6 +21,10 @@ type Product = {
   storage?: string | null;
   category?: string | null;
   is_active: boolean;
+  is_new: boolean;
+  feature_on_homepage?: boolean;
+  new_until?: string | null;
+  homepage_feature_order?: number | null;
 };
 
 type ProductOption = {
@@ -1174,6 +1178,17 @@ export default function ProductDetailPage() {
     );
   }
 
+  function isCurrentProductNew() {
+    if (!product?.is_new) return false;
+    if (!product.new_until) return true;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const endDate = new Date(`${product.new_until}T23:59:59`);
+    return endDate.getTime() >= today.getTime();
+  }
+
   function renderDescription(description: string) {
     const sections = description
       .split(/\n\s*\n/)
@@ -1306,6 +1321,10 @@ export default function ProductDetailPage() {
 
           {/* Right side: product details and purchasing */}
           <div style={purchaseColumn}>
+            {isCurrentProductNew() && (
+              <div style={productNewBadge}>NEW PRODUCT</div>
+            )}
+
             <h1 style={productTitle}>
               {product.name}
             </h1>
@@ -2048,6 +2067,19 @@ const trustBadge = {
 
 const purchaseColumn = {
   minWidth: 0,
+};
+
+const productNewBadge = {
+  width: "fit-content",
+  marginBottom: 12,
+  padding: "7px 12px",
+  borderRadius: 999,
+  background: "linear-gradient(90deg, #00ff99, #00d9ff)",
+  color: "#000",
+  fontSize: 12,
+  fontWeight: 1000,
+  letterSpacing: ".1em",
+  boxShadow: "0 0 18px rgba(0,255,153,.38)",
 };
 
 const productTitle = {
