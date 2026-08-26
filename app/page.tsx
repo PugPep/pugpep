@@ -364,9 +364,9 @@ export default function HomePage() {
         />
 
         <QualityItem
-          icon="✅"
-          title="SATISFACTION FOCUSED"
-          text="Quality you can trust"
+          icon="🇺🇸"
+          title="VETERAN-OWNED HUMAN SUPPORT"
+          text="Real U.S.-based people when you need help"
         />
       </section>
 
@@ -375,6 +375,10 @@ export default function HomePage() {
           <div style={footerColumn}>
             <p style={footerColumnTitle}>
               CUSTOMER SUPPORT
+            </p>
+
+            <p style={footerSupportPromise}>
+              🇺🇸 Veteran-Owned • U.S.-Based • Human Support
             </p>
 
             <Link href="/account" style={footerLink}>
@@ -776,6 +780,14 @@ const footerColumnTitle = {
   fontSize: 12,
   fontWeight: 900,
   letterSpacing: ".13em",
+};
+
+const footerSupportPromise = {
+  margin: "0 0 8px",
+  color: "#00ff99",
+  fontSize: 13,
+  lineHeight: 1.5,
+  fontWeight: 700,
 };
 
 const footerLink = {

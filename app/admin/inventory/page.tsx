@@ -77,6 +77,7 @@ export default function InventoryManagerPage() {
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
   const [imageUploading, setImageUploading] = useState(false);
+  const [newProductImageUploading, setNewProductImageUploading] = useState(false);
   const [globalKitDiscount, setGlobalKitDiscount] = useState("15");
   const [updatingAllKits, setUpdatingAllKits] = useState(false);
 
@@ -214,6 +215,75 @@ export default function InventoryManagerPage() {
 
   function updateProductField(field: keyof Product, value: string | boolean) {
     setSelectedProduct((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function uploadNewProductImage(file: File) {
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file.");
+      return;
+    }
+
+    const maxFileSize = 5 * 1024 * 1024;
+
+    if (file.size > maxFileSize) {
+      alert("Product images must be 5 MB or smaller.");
+      return;
+    }
+
+    setNewProductImageUploading(true);
+
+    try {
+      const extension =
+        file.name.split(".").pop()?.toLowerCase() || "png";
+
+      const rawSlug = newProduct.slug || newProduct.name || "new-product";
+      const safeSlug = rawSlug
+        .toLowerCase()
+        .replace(/[^a-z0-9-_]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "new-product";
+
+      const objectPath =
+        `products/${safeSlug}-${Date.now()}.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("product-images")
+        .upload(objectPath, file, {
+          cacheControl: "3600",
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from("product-images")
+        .getPublicUrl(objectPath);
+
+      const publicUrl = publicUrlData.publicUrl;
+
+      if (!publicUrl) {
+        throw new Error("Supabase did not return a public image URL.");
+      }
+
+      setNewProduct((previous) => ({
+        ...previous,
+        image: publicUrl,
+      }));
+
+      setNotice("New product image uploaded. Finish the product details and click Save New Product.");
+    } catch (error) {
+      console.error("New product image upload failed:", error);
+
+      alert(
+        error instanceof Error
+          ? error.message
+          : "The product image could not be uploaded."
+      );
+    } finally {
+      setNewProductImageUploading(false);
+    }
   }
 
   async function uploadProductImage(file: File) {
@@ -1179,17 +1249,99 @@ export default function InventoryManagerPage() {
                     </select>
                   </Field>
 
-                  <Field label="Image Path">
-                    <input
-                      value={newProduct.image}
-                      onChange={(event) =>
-                        setNewProduct({
-                          ...newProduct,
-                          image: event.target.value,
-                        })
-                      }
-                      style={input}
-                    />
+                  <Field label="Product Image" wide>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "minmax(140px, 220px) minmax(0, 1fr)",
+                        gap: 16,
+                        alignItems: "center",
+                      }}
+                    >
+                      <div
+                        style={{
+                          padding: 10,
+                          border: "1px solid rgba(255,255,255,.12)",
+                          borderRadius: 14,
+                          background: "#050505",
+                        }}
+                      >
+                        <img
+                          src={newProduct.image || "/pugpep-logo.png"}
+                          alt={newProduct.name || "New product preview"}
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            aspectRatio: "1 / 1",
+                            objectFit: "contain",
+                            borderRadius: 10,
+                          }}
+                        />
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 10,
+                          minWidth: 0,
+                        }}
+                      >
+                        <label
+                          style={{
+                            ...primaryButton,
+                            display: "inline-flex",
+                            width: "fit-content",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            cursor: newProductImageUploading ? "wait" : "pointer",
+                            opacity: newProductImageUploading ? 0.6 : 1,
+                          }}
+                        >
+                          {newProductImageUploading
+                            ? "Uploading Image..."
+                            : "Upload Image From Computer"}
+
+                          <input
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp"
+                            disabled={newProductImageUploading}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+
+                              if (file) {
+                                void uploadNewProductImage(file);
+                              }
+
+                              event.currentTarget.value = "";
+                            }}
+                            style={{ display: "none" }}
+                          />
+                        </label>
+
+                        <input
+                          value={newProduct.image}
+                          onChange={(event) =>
+                            setNewProduct({
+                              ...newProduct,
+                              image: event.target.value,
+                            })
+                          }
+                          placeholder="Or paste an existing image URL/path"
+                          style={input}
+                        />
+
+                        <span
+                          style={{
+                            color: "#8f8f98",
+                            fontSize: 12,
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          PNG, JPG, or WebP up to 5 MB. Uploaded files are stored in the Supabase product-images bucket.
+                        </span>
+                      </div>
+                    </div>
                   </Field>
 
                   <Field label="Accent Color">
