@@ -20,6 +20,8 @@ type Product = {
   feature_on_homepage: boolean;
   new_until?: string | null;
   homepage_feature_order?: number | null;
+  is_coming_soon?: boolean;
+  coming_soon_date?: string | null;
   deleted_at?: string | null;
 };
 
@@ -110,6 +112,8 @@ export default function InventoryManagerPage() {
   feature_on_homepage: false,
   new_until: "",
   homepage_feature_order: "",
+  is_coming_soon: false,
+  coming_soon_date: "",
 });
 
   const [newOption, setNewOption] = useState(emptyNewOption);
@@ -395,15 +399,26 @@ export default function InventoryManagerPage() {
     const { error } = await supabase
       .from("products")
       .update({
-  name: selectedProduct.name,
-  slug: selectedProduct.slug,
-  category: selectedProduct.category,
-  color: selectedProduct.color,
-  image: selectedProduct.image,
-  short_description: selectedProduct.short_description,
-  description: selectedProduct.description,
-  storage: selectedProduct.storage || "",
-})
+        name: selectedProduct.name,
+        slug: selectedProduct.slug,
+        category: selectedProduct.category,
+        color: selectedProduct.color,
+        image: selectedProduct.image,
+        short_description: selectedProduct.short_description,
+        description: selectedProduct.description,
+        storage: selectedProduct.storage || "",
+        is_active: selectedProduct.is_active ?? true,
+        is_new: selectedProduct.is_new ?? false,
+        feature_on_homepage: selectedProduct.feature_on_homepage ?? false,
+        new_until: selectedProduct.new_until || null,
+        homepage_feature_order:
+          selectedProduct.homepage_feature_order === undefined ||
+          selectedProduct.homepage_feature_order === null
+            ? null
+            : Number(selectedProduct.homepage_feature_order),
+        is_coming_soon: selectedProduct.is_coming_soon ?? false,
+        coming_soon_date: selectedProduct.coming_soon_date || null,
+      })
       .eq("id", selectedProduct.id);
 
     if (error) {
@@ -428,6 +443,8 @@ export default function InventoryManagerPage() {
         newProduct.homepage_feature_order === ""
           ? null
           : Number(newProduct.homepage_feature_order),
+      is_coming_soon: Boolean(newProduct.is_coming_soon),
+      coming_soon_date: newProduct.coming_soon_date || null,
     });
 
     if (error) {
@@ -451,6 +468,8 @@ export default function InventoryManagerPage() {
   feature_on_homepage: false,
   new_until: "",
   homepage_feature_order: "",
+  is_coming_soon: false,
+  coming_soon_date: "",
 });
     setShowAddProduct(false);
     await loadProducts();
@@ -1394,6 +1413,41 @@ export default function InventoryManagerPage() {
                       <span>Include in the New Products homepage section</span>
                     </label>
                   </Field>
+
+                  <Field label="Coming Soon">
+                    <label style={toggleCard}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(newProduct.is_coming_soon)}
+                        onChange={(event) =>
+                          setNewProduct({
+                            ...newProduct,
+                            is_coming_soon: event.target.checked,
+                            coming_soon_date: event.target.checked
+                              ? newProduct.coming_soon_date
+                              : "",
+                          })
+                        }
+                      />
+                      <span>Show a COMING SOON badge for this product</span>
+                    </label>
+                  </Field>
+
+                  {newProduct.is_coming_soon && (
+                    <Field label="Expected Launch Date">
+                      <input
+                        type="date"
+                        value={newProduct.coming_soon_date}
+                        onChange={(event) =>
+                          setNewProduct({
+                            ...newProduct,
+                            coming_soon_date: event.target.value,
+                          })
+                        }
+                        style={input}
+                      />
+                    </Field>
+                  )}
 
                   <Field label="New Until">
                     <input
@@ -2445,6 +2499,41 @@ export default function InventoryManagerPage() {
                       <option value="lab-material">Lab Material</option>
                     </select>
                   </Field>
+
+                  <Field label="Coming Soon">
+                    <label style={toggleCard}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedProduct.is_coming_soon)}
+                        onChange={(event) =>
+                          setSelectedProduct((previous) => ({
+                            ...previous,
+                            is_coming_soon: event.target.checked,
+                            coming_soon_date: event.target.checked
+                              ? previous.coming_soon_date || null
+                              : null,
+                          }))
+                        }
+                      />
+                      <span>Show a COMING SOON badge for this product</span>
+                    </label>
+                  </Field>
+
+                  {selectedProduct.is_coming_soon && (
+                    <Field label="Expected Launch Date">
+                      <input
+                        type="date"
+                        value={selectedProduct.coming_soon_date || ""}
+                        onChange={(event) =>
+                          setSelectedProduct((previous) => ({
+                            ...previous,
+                            coming_soon_date: event.target.value || null,
+                          }))
+                        }
+                        style={input}
+                      />
+                    </Field>
+                  )}
 
                   <Field label="New Product">
                     <label style={toggleCard}>

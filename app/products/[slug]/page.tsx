@@ -25,6 +25,8 @@ type Product = {
   feature_on_homepage?: boolean;
   new_until?: string | null;
   homepage_feature_order?: number | null;
+  is_coming_soon?: boolean;
+  coming_soon_date?: string | null;
 };
 
 type ProductOption = {
@@ -1020,6 +1022,17 @@ export default function ProductDetailPage() {
       return;
     }
 
+    if (product.is_coming_soon) {
+      alert(
+        product.coming_soon_date
+          ? `This product is coming soon. Expected ${formatLaunchDate(
+              product.coming_soon_date
+            )}.`
+          : "This product is coming soon and is not available for purchase yet."
+      );
+      return;
+    }
+
     const availableQuantity =
       getAvailableQuantity(selectedOption);
 
@@ -1178,6 +1191,17 @@ export default function ProductDetailPage() {
     );
   }
 
+  function formatLaunchDate(value: string) {
+    const date = new Date(`${value}T12:00:00`);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return date.toLocaleDateString(undefined, {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+
   function isCurrentProductNew() {
     if (!product?.is_new) return false;
     if (!product.new_until) return true;
@@ -1321,7 +1345,11 @@ export default function ProductDetailPage() {
 
           {/* Right side: product details and purchasing */}
           <div style={purchaseColumn}>
-            {isCurrentProductNew() && (
+            {product.is_coming_soon && (
+              <div style={comingSoonBadge}>COMING SOON</div>
+            )}
+
+            {!product.is_coming_soon && isCurrentProductNew() && (
               <div style={productNewBadge}>NEW PRODUCT</div>
             )}
 
@@ -1343,6 +1371,21 @@ export default function ProductDetailPage() {
               For research purposes only. Not for human or
               veterinary use.
             </div>
+
+            {product.is_coming_soon && (
+              <div style={comingSoonBox}>
+                <strong>COMING SOON</strong>
+                <span>
+                  This research product is visible for preview but is not
+                  available for purchase yet.
+                </span>
+                {product.coming_soon_date && (
+                  <span style={comingSoonDate}>
+                    Expected: {formatLaunchDate(product.coming_soon_date)}
+                  </span>
+                )}
+              </div>
+            )}
 
             {selectedOption?.status ===
               "pre-sale" && (
@@ -1369,6 +1412,7 @@ export default function ProductDetailPage() {
               <div style={optionsGrid}>
                 {options.map((option) => {
                   const canBuy =
+                    !product.is_coming_soon &&
                     isOptionAvailable(option);
 
                   const availableQuantity =
@@ -1532,7 +1576,26 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {selectedOption && (
+            {product.is_coming_soon && (
+              <button
+                type="button"
+                disabled
+                style={{
+                  ...addButton,
+                  marginTop: 18,
+                  opacity: 0.62,
+                  cursor: "not-allowed",
+                  background:
+                    "linear-gradient(90deg, rgba(255,204,0,.18), rgba(255,117,223,.16))",
+                  borderColor: "rgba(255,204,0,.45)",
+                  color: "#ffdf73",
+                }}
+              >
+                COMING SOON
+              </button>
+            )}
+
+            {selectedOption && !product.is_coming_soon && (
               <>
                 <div style={quantitySection}>
                   <span style={quantityLabel}>
@@ -2069,6 +2132,20 @@ const purchaseColumn = {
   minWidth: 0,
 };
 
+const comingSoonBadge = {
+  width: "fit-content",
+  marginBottom: 12,
+  padding: "7px 12px",
+  border: "1px solid rgba(255,204,0,.55)",
+  borderRadius: 999,
+  background: "rgba(255,204,0,.10)",
+  color: "#ffdf73",
+  fontSize: 12,
+  fontWeight: 1000,
+  letterSpacing: ".1em",
+  boxShadow: "0 0 18px rgba(255,204,0,.18)",
+};
+
 const productNewBadge = {
   width: "fit-content",
   marginBottom: 12,
@@ -2134,6 +2211,24 @@ const disclaimerBox = {
   background: "rgba(255,45,216,.08)",
   fontWeight: 700,
   lineHeight: 1.55,
+};
+
+const comingSoonBox = {
+  display: "grid",
+  gap: 6,
+  marginTop: 16,
+  padding: 16,
+  border: "1px solid rgba(255,204,0,.48)",
+  borderRadius: 12,
+  background:
+    "linear-gradient(135deg, rgba(255,204,0,.08), rgba(255,69,216,.045))",
+  color: "#f4f1dc",
+  lineHeight: 1.55,
+};
+
+const comingSoonDate = {
+  color: "#ffdf73",
+  fontWeight: 900,
 };
 
 const presaleBox = {

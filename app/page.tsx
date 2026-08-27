@@ -21,6 +21,8 @@ type Product = {
   feature_on_homepage: boolean;
   new_until?: string | null;
   homepage_feature_order?: number | null;
+  is_coming_soon?: boolean;
+  coming_soon_date?: string | null;
 };
 
 export default function HomePage() {
@@ -58,7 +60,7 @@ export default function HomePage() {
     const { data: productData, error: productError } = await supabase
       .from("products")
       .select(
-        "id, name, slug, color, image, category, is_new, feature_on_homepage, new_until, homepage_feature_order"
+        "id, name, slug, color, image, category, is_new, feature_on_homepage, new_until, homepage_feature_order, is_coming_soon, coming_soon_date"
       )
       .eq("is_active", true)
       .order("name", { ascending: true });
@@ -98,7 +100,7 @@ export default function HomePage() {
     .filter(
       (product) =>
         product.feature_on_homepage &&
-        isProductNew(product)
+        (isProductNew(product) || product.is_coming_soon)
     )
     .sort((a, b) => {
       const aOrder = a.homepage_feature_order ?? 9999;
@@ -283,7 +285,11 @@ export default function HomePage() {
                     borderColor: product.color || "#ff45d8",
                   }}
                 >
-                  <span style={newBadge}>NEW</span>
+                  {product.is_coming_soon ? (
+                    <span style={comingSoonBadge}>COMING SOON</span>
+                  ) : (
+                    <span style={newBadge}>NEW</span>
+                  )}
 
                   <div style={newProductImageWrap}>
                     <img
@@ -427,13 +433,16 @@ export default function HomePage() {
                     }}
                   >
                     <div style={productImageWrap}>
-                      {isProductNew(product) && (
+                      {product.is_coming_soon ? (
+                        <div style={catalogComingSoonBadge}>COMING SOON</div>
+                      ) : isProductNew(product) ? (
                         <div style={catalogNewBadge}>NEW</div>
-                      )}
+                      ) : null}
 
-                      {effectiveSale?.isOnSale && (
-                        <div style={saleBadge}>{effectiveSale.badgeText}</div>
-                      )}
+                      {!product.is_coming_soon &&
+                        effectiveSale?.isOnSale && (
+                          <div style={saleBadge}>{effectiveSale.badgeText}</div>
+                        )}
 
                       <img
                         src={
@@ -457,14 +466,16 @@ export default function HomePage() {
                         {product.name}
                       </h2>
 
-                      {effectiveSale?.source === "campaign" &&
+                      {!product.is_coming_soon &&
+                        effectiveSale?.source === "campaign" &&
                         effectiveSale.campaignName && (
                           <div style={campaignNameBadge}>
                             {effectiveSale.campaignName}
                           </div>
                         )}
 
-                      {effectiveSale?.isOnSale && (
+                      {!product.is_coming_soon &&
+                        effectiveSale?.isOnSale && (
                         <div style={saleDetail}>
                           {effectiveSale.source === "campaign" &&
                           effectiveSale.campaignName
@@ -823,6 +834,20 @@ const newProductCta = {
   fontWeight: 900,
 };
 
+const comingSoonBadge = {
+  position: "absolute" as const,
+  top: 9,
+  left: 9,
+  zIndex: 4,
+  padding: "5px 8px",
+  border: "1px solid rgba(255,204,0,.65)",
+  borderRadius: 999,
+  background: "rgba(0,0,0,.78)",
+  color: "#ffdf73",
+  fontSize: 10,
+  fontWeight: 1000,
+};
+
 const newBadge = {
   position: "absolute" as const,
   top: 9,
@@ -834,6 +859,20 @@ const newBadge = {
   color: "#000",
   fontSize: 10,
   fontWeight: 1000,
+};
+
+const catalogComingSoonBadge = {
+  position: "absolute" as const,
+  top: 10,
+  left: 10,
+  zIndex: 4,
+  padding: "5px 8px",
+  border: "1px solid rgba(255,204,0,.65)",
+  borderRadius: 999,
+  background: "rgba(0,0,0,.78)",
+  color: "#ffdf73",
+  fontWeight: 900,
+  fontSize: 10,
 };
 
 const catalogNewBadge = {

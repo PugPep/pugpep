@@ -15,6 +15,12 @@ type Product = {
   description: string;
   category: string;
   is_active: boolean;
+  is_new?: boolean;
+  feature_on_homepage?: boolean;
+  new_until?: string | null;
+  homepage_feature_order?: number | null;
+  is_coming_soon?: boolean;
+  coming_soon_date?: string | null;
   deleted_at?: string | null;
 };
 
@@ -65,6 +71,9 @@ export default function InventoryManagerPage() {
   const [showAddOption, setShowAddOption] = useState(false);
 
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "live" | "coming-soon" | "new" | "featured" | "hidden"
+  >("all");
   const [notice, setNotice] = useState("");
 
 
@@ -86,6 +95,12 @@ export default function InventoryManagerPage() {
   description: "",
   category: "peptide",
   is_active: true,
+  is_new: false,
+  feature_on_homepage: false,
+  new_until: null as string | null,
+  homepage_feature_order: null as number | null,
+  is_coming_soon: false,
+  coming_soon_date: null as string | null,
 });
 
   const [newOption, setNewOption] = useState(emptyNewOption);
@@ -207,15 +222,28 @@ export default function InventoryManagerPage() {
     const { error } = await supabase
       .from("products")
       .update({
-  name: selectedProduct.name,
-  slug: selectedProduct.slug,
-  category: selectedProduct.category,
-  color: selectedProduct.color,
-  image: selectedProduct.image,
-  short_description: selectedProduct.short_description,
-  description: selectedProduct.description,
-  is_active: selectedProduct.is_active,
-})
+        name: selectedProduct.name,
+        slug: selectedProduct.slug,
+        category: selectedProduct.category,
+        color: selectedProduct.color,
+        image: selectedProduct.image,
+        short_description: selectedProduct.short_description,
+        description: selectedProduct.description,
+        is_active: selectedProduct.is_active,
+        is_new: selectedProduct.is_new ?? false,
+        feature_on_homepage:
+          selectedProduct.feature_on_homepage ?? false,
+        new_until: selectedProduct.new_until || null,
+        homepage_feature_order:
+          selectedProduct.homepage_feature_order === undefined ||
+          selectedProduct.homepage_feature_order === null
+            ? null
+            : Number(selectedProduct.homepage_feature_order),
+        is_coming_soon:
+          selectedProduct.is_coming_soon ?? false,
+        coming_soon_date:
+          selectedProduct.coming_soon_date || null,
+      })
       .eq("id", selectedProduct.id);
 
     if (error) {
@@ -251,6 +279,12 @@ export default function InventoryManagerPage() {
   description: "",
   category: "peptide",
   is_active: true,
+  is_new: false,
+  feature_on_homepage: false,
+  new_until: null,
+  homepage_feature_order: null,
+  is_coming_soon: false,
+  coming_soon_date: null,
 });
     setShowAddProduct(false);
     await loadProducts();
@@ -542,15 +576,39 @@ export default function InventoryManagerPage() {
   const filteredProducts = products.filter((product) => {
     const query = search.trim().toLowerCase();
 
-    if (!query) {
-      return true;
-    }
-
-    return (
+    const matchesSearch =
+      !query ||
       product.name.toLowerCase().includes(query) ||
       product.slug.toLowerCase().includes(query) ||
-      String(product.category || "").toLowerCase().includes(query)
-    );
+      String(product.category || "").toLowerCase().includes(query);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const newUntil = product.new_until
+      ? new Date(`${product.new_until}T23:59:59`)
+      : null;
+
+    const currentlyNew =
+      Boolean(product.is_new) &&
+      (!newUntil || newUntil.getTime() >= today.getTime());
+
+    const matchesStatus =
+      statusFilter === "all"
+        ? true
+        : statusFilter === "live"
+        ? Boolean(product.is_active) && !product.is_coming_soon
+        : statusFilter === "coming-soon"
+        ? Boolean(product.is_coming_soon)
+        : statusFilter === "new"
+        ? currentlyNew
+        : statusFilter === "featured"
+        ? Boolean(product.feature_on_homepage)
+        : statusFilter === "hidden"
+        ? !product.is_active
+        : true;
+
+    return matchesSearch && matchesStatus;
   });
 
   const totalOptions = options.length;
@@ -568,6 +626,14 @@ export default function InventoryManagerPage() {
     (option) =>
       option.sale_active &&
       Number(option.sale_percent || 0) > 0
+  ).length;
+
+  const comingSoonCount = products.filter(
+    (product) => product.is_coming_soon
+  ).length;
+
+  const featuredCount = products.filter(
+    (product) => product.feature_on_homepage
   ).length;
 
   if (loading) return <main style={page}>Loading...</main>;
@@ -638,6 +704,18 @@ export default function InventoryManagerPage() {
           />
 
           <StatCard
+            label="Coming Soon"
+            value={String(comingSoonCount)}
+            accent="#ffcc00"
+          />
+
+          <StatCard
+            label="Featured"
+            value={String(featuredCount)}
+            accent="#ff75df"
+          />
+
+          <StatCard
             label="Deleted Products"
             value={String(deletedProducts.length)}
             accent="#b8bcc4"
@@ -689,6 +767,50 @@ export default function InventoryManagerPage() {
               style={searchInput}
             />
 
+            <div style={statusFilterRow}>
+              {[
+                ["all", "All"],
+                ["live", "Live"],
+                ["coming-soon", "Coming Soon"],
+                ["new", "New"],
+                ["featured", "Featured"],
+                ["hidden", "Hidden"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() =>
+                    setStatusFilter(
+                      value as
+                        | "all"
+                        | "live"
+                        | "coming-soon"
+                        | "new"
+                        | "featured"
+                        | "hidden"
+                    )
+                  }
+                  style={{
+                    ...statusFilterButton,
+                    borderColor:
+                      statusFilter === value
+                        ? "#00ff99"
+                        : "rgba(255,255,255,.13)",
+                    color:
+                      statusFilter === value
+                        ? "#00ff99"
+                        : "#aeb1b7",
+                    background:
+                      statusFilter === value
+                        ? "rgba(0,255,153,.07)"
+                        : "rgba(255,255,255,.025)",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             <div style={productList}>
               {filteredProducts.length === 0 ? (
                 <p style={muted}>No matching products found.</p>
@@ -737,11 +859,15 @@ export default function InventoryManagerPage() {
                             : "#ffcc00",
                         }}
                       >
-                        {product.is_active
-                          ? product.category === "lab-material"
-                            ? "Material"
-                            : "Compound"
-                          : "HIDDEN"}
+                        {!product.is_active
+                          ? "HIDDEN"
+                          : product.is_coming_soon
+                          ? "COMING SOON"
+                          : product.feature_on_homepage
+                          ? "FEATURED"
+                          : product.is_new
+                          ? "NEW"
+                          : "LIVE"}
                       </span>
                     </button>
                   );
@@ -879,6 +1005,104 @@ export default function InventoryManagerPage() {
                         })
                       }
                       style={colorInput}
+                    />
+                  </Field>
+
+                  <Field label="Coming Soon">
+                    <label style={inlineToggle}>
+                      <input
+                        type="checkbox"
+                        checked={newProduct.is_coming_soon}
+                        onChange={(event) =>
+                          setNewProduct({
+                            ...newProduct,
+                            is_coming_soon: event.target.checked,
+                            coming_soon_date: event.target.checked
+                              ? newProduct.coming_soon_date
+                              : null,
+                          })
+                        }
+                      />
+                      Show COMING SOON badge
+                    </label>
+                  </Field>
+
+                  {newProduct.is_coming_soon && (
+                    <Field label="Expected Launch Date">
+                      <input
+                        type="date"
+                        value={newProduct.coming_soon_date || ""}
+                        onChange={(event) =>
+                          setNewProduct({
+                            ...newProduct,
+                            coming_soon_date: event.target.value || null,
+                          })
+                        }
+                        style={input}
+                      />
+                    </Field>
+                  )}
+
+                  <Field label="New Product">
+                    <label style={inlineToggle}>
+                      <input
+                        type="checkbox"
+                        checked={newProduct.is_new}
+                        onChange={(event) =>
+                          setNewProduct({
+                            ...newProduct,
+                            is_new: event.target.checked,
+                          })
+                        }
+                      />
+                      Show NEW badge
+                    </label>
+                  </Field>
+
+                  <Field label="NEW Until">
+                    <input
+                      type="date"
+                      value={newProduct.new_until || ""}
+                      onChange={(event) =>
+                        setNewProduct({
+                          ...newProduct,
+                          new_until: event.target.value || null,
+                        })
+                      }
+                      style={input}
+                    />
+                  </Field>
+
+                  <Field label="Homepage">
+                    <label style={inlineToggle}>
+                      <input
+                        type="checkbox"
+                        checked={newProduct.feature_on_homepage}
+                        onChange={(event) =>
+                          setNewProduct({
+                            ...newProduct,
+                            feature_on_homepage: event.target.checked,
+                          })
+                        }
+                      />
+                      Feature on homepage
+                    </label>
+                  </Field>
+
+                  <Field label="Homepage Order">
+                    <input
+                      type="number"
+                      min="1"
+                      value={newProduct.homepage_feature_order ?? ""}
+                      onChange={(event) =>
+                        setNewProduct({
+                          ...newProduct,
+                          homepage_feature_order: event.target.value
+                            ? Number(event.target.value)
+                            : null,
+                        })
+                      }
+                      style={input}
                     />
                   </Field>
 
@@ -1459,6 +1683,93 @@ export default function InventoryManagerPage() {
                     />
                   </Field>
 
+                  <Field label="Launch Status">
+                    <label style={inlineToggle}>
+                      <input
+                        type="checkbox"
+                        checked={selectedProduct.is_coming_soon ?? false}
+                        onChange={(event) =>
+                          updateProductField(
+                            "is_coming_soon",
+                            event.target.checked
+                          )
+                        }
+                      />
+                      Coming Soon
+                    </label>
+                  </Field>
+
+                  <Field label="Coming Soon Date">
+                    <input
+                      type="date"
+                      value={selectedProduct.coming_soon_date || ""}
+                      onChange={(event) =>
+                        updateProductField(
+                          "coming_soon_date",
+                          event.target.value
+                        )
+                      }
+                      style={input}
+                    />
+                  </Field>
+
+                  <Field label="New Product">
+                    <label style={inlineToggle}>
+                      <input
+                        type="checkbox"
+                        checked={selectedProduct.is_new ?? false}
+                        onChange={(event) =>
+                          updateProductField("is_new", event.target.checked)
+                        }
+                      />
+                      Show NEW badge
+                    </label>
+                  </Field>
+
+                  <Field label="NEW Until">
+                    <input
+                      type="date"
+                      value={selectedProduct.new_until || ""}
+                      onChange={(event) =>
+                        updateProductField("new_until", event.target.value)
+                      }
+                      style={input}
+                    />
+                  </Field>
+
+                  <Field label="Homepage">
+                    <label style={inlineToggle}>
+                      <input
+                        type="checkbox"
+                        checked={selectedProduct.feature_on_homepage ?? false}
+                        onChange={(event) =>
+                          updateProductField(
+                            "feature_on_homepage",
+                            event.target.checked
+                          )
+                        }
+                      />
+                      Feature on homepage
+                    </label>
+                  </Field>
+
+                  <Field label="Homepage Order">
+                    <input
+                      type="number"
+                      min="1"
+                      value={selectedProduct.homepage_feature_order ?? ""}
+                      onChange={(event) =>
+                        setSelectedProduct((previous) => ({
+                          ...previous,
+                          homepage_feature_order: event.target.value
+                            ? Number(event.target.value)
+                            : null,
+                        }))
+                      }
+                      style={input}
+                    />
+                  </Field>
+
                   <Field label="Short Description" wide>
                     <textarea
                       value={selectedProduct.short_description || ""}
@@ -1484,6 +1795,49 @@ export default function InventoryManagerPage() {
                       style={bigTextarea}
                     />
                   </Field>
+                </div>
+
+                <div style={storefrontSummary}>
+                  <div>
+                    <span style={summaryLabel}>CUSTOMER STATUS</span>
+                    <strong style={summaryValue}>
+                      {!selectedProduct.is_active
+                        ? "HIDDEN"
+                        : selectedProduct.is_coming_soon
+                        ? "COMING SOON"
+                        : "LIVE"}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span style={summaryLabel}>NEW BADGE</span>
+                    <strong style={summaryValue}>
+                      {selectedProduct.is_new
+                        ? selectedProduct.new_until
+                          ? `UNTIL ${selectedProduct.new_until}`
+                          : "ON"
+                        : "OFF"}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span style={summaryLabel}>HOMEPAGE</span>
+                    <strong style={summaryValue}>
+                      {selectedProduct.feature_on_homepage
+                        ? `FEATURED #${selectedProduct.homepage_feature_order ?? "—"}`
+                        : "NOT FEATURED"}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span style={summaryLabel}>PURCHASING</span>
+                    <strong style={summaryValue}>
+                      {selectedProduct.is_active &&
+                      !selectedProduct.is_coming_soon
+                        ? "ENABLED"
+                        : "DISABLED"}
+                    </strong>
+                  </div>
                 </div>
 
                 <div
@@ -1845,6 +2199,69 @@ const searchInput = {
   borderRadius: 9,
   background: "#050507",
   color: "#ffffff",
+};
+
+
+
+
+
+
+
+
+const statusFilterRow = {
+  marginTop: 10,
+  display: "flex",
+  gap: 6,
+  flexWrap: "wrap" as const,
+};
+
+const statusFilterButton = {
+  minHeight: 32,
+  padding: "6px 9px",
+  border: "1px solid",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const inlineToggle = {
+  minHeight: 54,
+  padding: "12px 14px",
+  display: "flex",
+  alignItems: "center",
+  gap: 9,
+  border: "1px solid rgba(255,255,255,.16)",
+  borderRadius: 9,
+  background: "#050507",
+  color: "#ffffff",
+  fontWeight: 800,
+};
+
+const storefrontSummary = {
+  marginTop: 18,
+  padding: 14,
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  gap: 10,
+  border: "1px solid rgba(0,217,255,.24)",
+  borderRadius: 11,
+  background: "rgba(0,217,255,.035)",
+};
+
+const summaryLabel = {
+  display: "block",
+  color: "#838992",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: ".08em",
+};
+
+const summaryValue = {
+  display: "block",
+  marginTop: 4,
+  color: "#ffffff",
+  fontSize: 13,
 };
 
 const productList = {
