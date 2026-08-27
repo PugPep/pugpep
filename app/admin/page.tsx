@@ -101,6 +101,10 @@ export default function AdminPage() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  });
 
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [markingPaidOrderId, setMarkingPaidOrderId] = useState<string | null>(null);
@@ -1081,8 +1085,53 @@ export default function AdminPage() {
     );
   }
 
-  const activeOrders = orders.filter((order) => !order.deleted_at);
-  const deletedOrders = orders.filter((order) => Boolean(order.deleted_at));
+  function getMonthKey(dateValue: string) {
+    const date = new Date(dateValue);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function formatMonthLabel(monthKey: string) {
+    if (monthKey === "all") return "All Months";
+
+    const [year, month] = monthKey.split("-").map(Number);
+
+    return new Date(year, month - 1, 1).toLocaleDateString(undefined, {
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  function shiftMonth(monthKey: string, amount: number) {
+    if (monthKey === "all") return;
+
+    const [year, month] = monthKey.split("-").map(Number);
+    const next = new Date(year, month - 1 + amount, 1);
+
+    setSelectedMonth(
+      `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`
+    );
+  }
+
+  const monthOptions = Array.from(
+    new Set(
+      orders
+        .map((order) => getMonthKey(order.created_at))
+        .filter(Boolean)
+    )
+  ).sort((a, b) => b.localeCompare(a));
+
+  const monthScopedOrders = orders.filter((order) => {
+    if (selectedMonth === "all") return true;
+    return getMonthKey(order.created_at) === selectedMonth;
+  });
+
+  const activeOrders = monthScopedOrders.filter((order) => !order.deleted_at);
+  const deletedOrders = monthScopedOrders.filter((order) => Boolean(order.deleted_at));
   const pendingCount = activeOrders.filter((order) => order.status === "pending").length;
   const paidCount = activeOrders.filter(
     (order) =>
@@ -1100,7 +1149,7 @@ export default function AdminPage() {
     (order) => Boolean(order.closed_at)
   ).length;
 
-  const filteredOrders = orders.filter((order) => {
+  const filteredOrders = monthScopedOrders.filter((order) => {
     const query = search.trim().toLowerCase();
     const matchesSearch = !query || order.order_number?.toLowerCase().includes(query) || order.customer_name?.toLowerCase().includes(query) || order.customer_email?.toLowerCase().includes(query) || order.promo_code?.toLowerCase().includes(query) || order.payment_method?.toLowerCase().includes(query) ||
       order.tracking_number?.toLowerCase().includes(query);
@@ -1306,6 +1355,65 @@ export default function AdminPage() {
             />
           </div>
 
+          <div style={monthToolbar}>
+            <div style={monthPickerGroup}>
+              <span style={monthLabel}>VIEW ORDERS BY MONTH</span>
+
+              <div style={monthControls}>
+                <button
+                  type="button"
+                  onClick={() => shiftMonth(selectedMonth, -1)}
+                  disabled={selectedMonth === "all"}
+                  style={{
+                    ...monthArrowButton,
+                    opacity: selectedMonth === "all" ? 0.4 : 1,
+                    cursor: selectedMonth === "all" ? "not-allowed" : "pointer",
+                  }}
+                  aria-label="Previous month"
+                >
+                  ←
+                </button>
+
+                <select
+                  value={selectedMonth}
+                  onChange={(event) => setSelectedMonth(event.target.value)}
+                  style={monthSelect}
+                >
+                  <option value="all">All Months</option>
+                  {monthOptions.map((monthKey) => (
+                    <option key={monthKey} value={monthKey}>
+                      {formatMonthLabel(monthKey)}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => shiftMonth(selectedMonth, 1)}
+                  disabled={selectedMonth === "all"}
+                  style={{
+                    ...monthArrowButton,
+                    opacity: selectedMonth === "all" ? 0.4 : 1,
+                    cursor: selectedMonth === "all" ? "not-allowed" : "pointer",
+                  }}
+                  aria-label="Next month"
+                >
+                  →
+                </button>
+              </div>
+            </div>
+
+            <div style={monthSummary}>
+              <span style={monthSummaryEyebrow}>CURRENT VIEW</span>
+              <strong style={monthSummaryTitle}>
+                {formatMonthLabel(selectedMonth)}
+              </strong>
+              <span style={monthSummaryMeta}>
+                {monthScopedOrders.length} order{monthScopedOrders.length === 1 ? "" : "s"} in this view
+              </span>
+            </div>
+          </div>
+
           <div style={filterRow}>
             {[
               { key: "all", label: `All (${activeOrders.length})` },
@@ -1391,6 +1499,10 @@ export default function AdminPage() {
                 {filteredOrders.length} Visible Order
                 {filteredOrders.length === 1 ? "" : "s"}
               </h2>
+
+              <p style={ordersMonthCaption}>
+                {formatMonthLabel(selectedMonth)}
+              </p>
             </div>
 
             {(search || filter !== "all") && (
@@ -1407,9 +1519,11 @@ export default function AdminPage() {
             )}
           </div>
 
-          {orders.length === 0 ? (
+          {monthScopedOrders.length === 0 ? (
             <div style={emptyState}>
-              <p style={muted}>No orders found.</p>
+              <p style={muted}>
+                No orders found for {formatMonthLabel(selectedMonth)}.
+              </p>
             </div>
           ) : filteredOrders.length === 0 ? (
             <div style={emptyState}>
@@ -2293,6 +2407,93 @@ const searchInput = {
   background: "#050507",
   color: "#ffffff",
   fontSize: 16,
+};
+
+const monthToolbar = {
+  marginTop: 16,
+  padding: 16,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 18,
+  flexWrap: "wrap" as const,
+  border: "1px solid rgba(0,217,255,.24)",
+  borderRadius: 14,
+  background:
+    "linear-gradient(135deg, rgba(0,217,255,.055), rgba(255,69,216,.035))",
+};
+
+const monthPickerGroup = {
+  display: "grid",
+  gap: 8,
+};
+
+const monthLabel = {
+  color: "#8f8f98",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: ".12em",
+};
+
+const monthControls = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap" as const,
+};
+
+const monthSelect = {
+  minWidth: 210,
+  minHeight: 48,
+  padding: "10px 13px",
+  border: "1px solid rgba(0,217,255,.45)",
+  borderRadius: 10,
+  background: "#050507",
+  color: "#ffffff",
+  fontSize: 16,
+  fontWeight: 900,
+};
+
+const monthArrowButton = {
+  width: 48,
+  minHeight: 48,
+  border: "1px solid rgba(255,69,216,.42)",
+  borderRadius: 10,
+  background: "rgba(255,69,216,.07)",
+  color: "#ff75df",
+  fontSize: 20,
+  fontWeight: 900,
+};
+
+const monthSummary = {
+  display: "grid",
+  justifyItems: "end",
+  gap: 2,
+};
+
+const monthSummaryEyebrow = {
+  color: "#8f8f98",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: ".12em",
+};
+
+const monthSummaryTitle = {
+  color: "#00ff99",
+  fontSize: 22,
+};
+
+const monthSummaryMeta = {
+  color: "#b8b8c1",
+  fontSize: 13,
+};
+
+const ordersMonthCaption = {
+  margin: "5px 0 0",
+  color: "#00ff99",
+  fontSize: 13,
+  fontWeight: 900,
+  letterSpacing: ".05em",
 };
 
 const filterRow = {
