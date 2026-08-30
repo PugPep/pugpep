@@ -1,4 +1,4 @@
-"use client";
+
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../../lib/supabaseClient";
@@ -423,6 +423,48 @@ export function useAdminInventory() {
 });
     setShowAddProduct(false);
     await loadProducts();
+  }
+
+  async function archiveProduct() {
+    if (!selectedProduct.id || !selectedSlug) {
+      alert("Select a product first.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Archive ${selectedProduct.name || "this product"}?\n\n` +
+        "This will hide the product from customers and move it to Archived Products. " +
+        "It can be restored later."
+    );
+
+    if (!confirmed) return;
+
+    const archivedAt = new Date().toISOString();
+
+    const { error } = await supabase
+      .from("products")
+      .update({
+        is_active: false,
+        deleted_at: archivedAt,
+      })
+      .eq("id", selectedProduct.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setNotice(
+      `${selectedProduct.name || "Product"} moved to Archived Products.`
+    );
+
+    setSelectedSlug("");
+    setSelectedProduct({});
+    setOptions([]);
+    setInventory([]);
+
+    await loadProducts();
+    await loadDeletedProducts();
   }
 
   async function restoreProduct(productId: string) {
@@ -948,6 +990,7 @@ export function useAdminInventory() {
     updateProductField,
     saveProductChanges,
     createProduct,
+    archiveProduct,
     restoreProduct,
     findMatchingSingleOption,
     getKitSavings,

@@ -563,7 +563,7 @@ export default function InventoryOptionCard({
                                   >
                                     {isArchived
                                       ? "Restore Option"
-                                      : "Archive Product"}
+                                      : "Archive Option"}
                                   </button>
                                 </div>
                               </div>
@@ -598,7 +598,7 @@ export default function InventoryOptionCard({
                                 >
                                   {isArchived
                                     ? "Restore Option"
-                                    : "Archive Product"}
+                                    : "Archive Option"}
                                 </button>
                               </div>
                             )}

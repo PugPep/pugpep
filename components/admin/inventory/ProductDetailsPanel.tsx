@@ -18,6 +18,7 @@ export default function ProductDetailsPanel({
     uploadProductImage,
     updateProductField,
     saveProductChanges,
+    archiveProduct,
   } = admin;
 
   if (!selectedSlug) return null;
@@ -374,6 +375,16 @@ export default function ProductDetailsPanel({
                   >
                     Save Product Changes
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void archiveProduct();
+                    }}
+                    style={dangerButton}
+                  >
+                    Archive Product
+                  </button>
                 </div>
               </section>
   );
@@ -504,6 +515,18 @@ const primaryButton = {
   borderRadius: 9,
   background: "linear-gradient(180deg, #2eea6f, #19b857)",
   color: "#ffffff",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const dangerButton = {
+  minHeight: 54,
+  fontSize: 16,
+  padding: "13px 18px",
+  border: "1px solid rgba(255,111,111,.58)",
+  borderRadius: 9,
+  background: "rgba(255,111,111,.08)",
+  color: "#ff8a8a",
   fontWeight: 900,
   cursor: "pointer",
 };
