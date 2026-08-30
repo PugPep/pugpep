@@ -1,3 +1,5 @@
+"use client";
+
 import type {
   PaymentMethod,
 } from "../../lib/payment/types";
@@ -27,7 +29,7 @@ export function PaymentPanel({
           accent="#31d86f"
           amount={amount}
           paymentInfo="$PugPep1111"
-          message="Include only your name in the memo or note section."
+          message="IMPORTANT: Include ONLY your First and Last Name in the memo or note section. Do not include the order number, product name, or any other order details."
         />
       )}
 
@@ -37,7 +39,7 @@ export function PaymentPanel({
           accent="#00d9ff"
           amount={amount}
           paymentInfo="@PugPep1111"
-          message="Friends & Family preferred. Include only your name in the note section."
+          message="IMPORTANT: Friends & Family preferred. Include ONLY your First and Last Name in the note section. Do not include the order number, product name, or any other order details."
         />
       )}
 
