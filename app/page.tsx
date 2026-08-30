@@ -37,6 +37,8 @@ export default function HomePage() {
   const supabase = useMemo(() => createClient(), []);
 
   const [ageVerified, setAgeVerified] = useState(true);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [researchConfirmed, setResearchConfirmed] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [saleMap, setSaleMap] = useState<Record<string, StorefrontSale>>({});
   const [search, setSearch] = useState("");
@@ -205,6 +207,36 @@ export default function HomePage() {
     }
   }
 
+  async function handleProductAccess(
+    event: React.MouseEvent<HTMLAnchorElement>,
+    productSlug: string
+  ) {
+    event.preventDefault();
+
+    const productPath = `/products/${productSlug}`;
+
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error || !user) {
+      try {
+        localStorage.setItem(
+          "pugpep_redirect_after_login",
+          productPath
+        );
+      } catch {
+        // Redirect persistence is a convenience only.
+      }
+
+      window.location.href = "/login";
+      return;
+    }
+
+    window.location.href = productPath;
+  }
+
   function isProductNew(product: Product) {
     if (!product.is_new) return false;
     if (!product.new_until) return true;
@@ -243,13 +275,19 @@ export default function HomePage() {
         product.name.toLowerCase().includes(query) ||
         product.slug.toLowerCase().includes(query);
 
+      const isSpray =
+        category === "spray" ||
+        category === "nasal-spray";
+
       const matchesFilter =
         filter === "all"
           ? true
           : filter === "sale"
           ? Boolean(sale?.isOnSale)
           : filter === "peptides"
-          ? category === "peptide"
+          ? category === "peptide" && !isSpray
+          : filter === "sprays"
+          ? isSpray
           : filter === "lab materials"
           ? category === "lab-material"
           : true;
@@ -305,21 +343,58 @@ export default function HomePage() {
             <h1 style={{ color: "#ff45d8" }}>PUGPEP Disclaimer</h1>
 
             <p style={{ color: "#ddd", lineHeight: 1.6 }}>
-              You must be 21+ to enter. By clicking "I Agree & Enter", you
-              certify that you are an authorized laboratory representative
-              procurement agent purchasing reagents solely for in-vitro
-              evaluation. All products are for research purposes only and not
-              for human or veterinary use. By clicking "I Agree & Enter", you
-              confirm that you understand and accept these terms.
+              Access to PUGPEP requires confirmation of the following research
+              eligibility requirements.
             </p>
+
+            <label style={gateCheckboxRow}>
+              <input
+                type="checkbox"
+                checked={ageConfirmed}
+                onChange={(event) => setAgeConfirmed(event.target.checked)}
+                style={gateCheckbox}
+              />
+              <span>
+                I confirm that I am 21 years of age or older.
+              </span>
+            </label>
+
+            <label style={gateCheckboxRow}>
+              <input
+                type="checkbox"
+                checked={researchConfirmed}
+                onChange={(event) => setResearchConfirmed(event.target.checked)}
+                style={gateCheckbox}
+              />
+              <span>
+                I confirm that I am an authorized representative of an
+                independent research laboratory, research organization, or
+                other qualified research entity, and that I am accessing
+                PUGPEP solely for lawful laboratory research purposes.
+                Products are not for human or veterinary use.
+              </span>
+            </label>
 
             <button
               type="button"
+              disabled={!ageConfirmed || !researchConfirmed}
               onClick={() => {
+                if (!ageConfirmed || !researchConfirmed) return;
+
                 localStorage.setItem("pugpep_age_verified", "yes");
                 setAgeVerified(true);
               }}
-              style={mainButton}
+              style={{
+                ...mainButton,
+                opacity:
+                  ageConfirmed && researchConfirmed
+                    ? 1
+                    : 0.45,
+                cursor:
+                  ageConfirmed && researchConfirmed
+                    ? "pointer"
+                    : "not-allowed",
+              }}
             >
               I Agree & Enter
             </button>
@@ -397,6 +472,12 @@ export default function HomePage() {
               <Link
                 key={`new-${product.slug}`}
                 href={`/products/${product.slug}`}
+                onClick={(event) => {
+                  void handleProductAccess(
+                    event,
+                    product.slug
+                  );
+                }}
                 style={{ textDecoration: "none" }}
               >
                 <article
@@ -479,7 +560,7 @@ export default function HomePage() {
 
           <div style={catalogControls}>
             <div style={filterButtons}>
-              {["all", "sale", "peptides", "lab materials"].map((item) => (
+              {["all", "sale", "peptides", "sprays", "lab materials"].map((item) => (
                 <button
                   key={item}
                   type="button"
@@ -544,6 +625,12 @@ export default function HomePage() {
                 <Link
                   key={product.slug}
                   href={`/products/${product.slug}`}
+                  onClick={(event) => {
+                    void handleProductAccess(
+                      event,
+                      product.slug
+                    );
+                  }}
                   style={{ textDecoration: "none" }}
                 >
                   <article
@@ -1317,6 +1404,31 @@ const modal = {
   borderRadius: 18,
   background: "#080808",
   textAlign: "center" as const,
+};
+
+const gateCheckboxRow = {
+  marginTop: 14,
+  padding: 14,
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 12,
+  border: "1px solid rgba(0,217,255,.22)",
+  borderRadius: 12,
+  background: "rgba(0,217,255,.035)",
+  color: "#e5e5ea",
+  textAlign: "left" as const,
+  lineHeight: 1.55,
+  fontSize: 14,
+  cursor: "pointer",
+};
+
+const gateCheckbox = {
+  width: 20,
+  height: 20,
+  marginTop: 2,
+  flex: "0 0 auto",
+  accentColor: "#00ff99",
+  cursor: "pointer",
 };
 
 const mainButton = {

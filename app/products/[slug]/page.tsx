@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "../../../lib/supabaseClient";
+import {
+  createClient,
+  enforceAuthPersistencePolicy,
+} from "../../../lib/supabaseClient";
 import {
   loadStorefrontSales,
   type StorefrontSale,
@@ -103,6 +106,8 @@ export default function ProductDetailPage() {
   const [selectedOption, setSelectedOption] =
     useState<ProductOption | null>(null);
 
+  const [authChecking, setAuthChecking] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
 
@@ -449,6 +454,50 @@ export default function ProductDetailPage() {
   }
 
   useEffect(() => {
+    let mounted = true;
+
+    async function checkAuthentication() {
+      await enforceAuthPersistencePolicy(
+        supabase
+      );
+
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+
+      if (!mounted) return;
+
+      if (error || !user) {
+        try {
+          localStorage.setItem(
+            "pugpep_redirect_after_login",
+            `/products/${slug}`
+          );
+        } catch {
+          // Redirect persistence is a convenience only.
+        }
+
+        window.location.replace("/login");
+        return;
+      }
+
+      setIsAuthenticated(true);
+      setAuthChecking(false);
+    }
+
+    void checkAuthentication();
+
+    return () => {
+      mounted = false;
+    };
+  }, [slug, supabase]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
     async function loadProduct() {
       setLoading(true);
 
@@ -692,7 +741,7 @@ export default function ProductDetailPage() {
     }
 
     loadProduct();
-  }, [slug, supabase]);
+  }, [slug, supabase, isAuthenticated]);
 
   useEffect(() => {
     if (options.length === 0) {
@@ -1278,12 +1327,14 @@ export default function ProductDetailPage() {
     });
   }
 
-  if (loading) {
+  if (authChecking || !isAuthenticated || loading) {
     return (
       <main style={pageStyle}>
         <div style={pageContainer}>
           <p style={loadingText}>
-            Loading product...
+            {authChecking || !isAuthenticated
+              ? "Verifying account access..."
+              : "Loading product..."}
           </p>
         </div>
       </main>

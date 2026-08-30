@@ -74,6 +74,7 @@ export default function AddProductPanel({
                       style={input}
                     >
                       <option value="peptide">Compound</option>
+                      <option value="nasal-spray">Spray</option>
                       <option value="lab-material">Lab Material</option>
                     </select>
                   </Field>

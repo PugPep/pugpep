@@ -1,173 +1,190 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import Link from "next/link";
 import { createClient } from "../../lib/supabaseClient";
+import AuthShell from "../../components/auth/AuthShell";
 
 export default function ForgotPasswordPage() {
   const supabase = useMemo(() => createClient(), []);
 
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [sending, setSending] = useState(false);
+  const [isError, setIsError] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  async function sendResetEmail(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault();
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-    if (sending) {
-      return;
-    }
+    if (loading) return;
 
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (!normalizedEmail) {
-      setErrorMessage("Enter your email address.");
-      return;
-    }
-
-    setSending(true);
+    setLoading(true);
     setMessage("");
-    setErrorMessage("");
+    setIsError(false);
 
     try {
-      const callbackUrl = new URL(
-        "/auth/callback",
-        window.location.origin
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        {
+          redirectTo: `${window.location.origin}/update-password`,
+        }
       );
-
-      callbackUrl.searchParams.set(
-        "next",
-        "/update-password"
-      );
-
-      const { error } =
-        await supabase.auth.resetPasswordForEmail(
-          normalizedEmail,
-          {
-            redirectTo: callbackUrl.toString(),
-          }
-        );
 
       if (error) {
         throw error;
       }
 
       setMessage(
-        "Password reset email sent. Check your inbox and spam folder."
+        "Password reset email sent. Check your inbox and follow the reset link."
       );
     } catch (error) {
-      console.error(
-        "Password reset email error:",
-        error
-      );
-
-      setErrorMessage(
+      setIsError(true);
+      setMessage(
         error instanceof Error
           ? error.message
-          : "Unable to send the reset email. Please try again."
+          : "We could not send the reset email."
       );
     } finally {
-      setSending(false);
+      setLoading(false);
     }
   }
 
   return (
-    <main style={page}>
-      <section style={box}>
-        <h1 style={{ color: "#ff45d8" }}>
-          Forgot Password
-        </h1>
-
-        <p
-          style={{
-            color: "#aaaaaa",
-            lineHeight: 1.6,
-          }}
-        >
-          Enter the email address connected
-          to your account.
-        </p>
-
-        <form onSubmit={sendResetEmail}>
+    <AuthShell
+      eyebrow="PUGPEP PASSWORD RECOVERY"
+      title="Forgot Password"
+      subtitle="Use the same neon glass-card design as login and registration, with a cleaner vibrant look and less heavy black."
+      footer={
+        <div style={footerRow}>
+          <Link href="/login" style={footerLink}>
+            Back to Login
+          </Link>
+          <Link href="/" style={footerLinkSecondary}>
+            Return Home
+          </Link>
+        </div>
+      }
+    >
+      <form onSubmit={handleSubmit} style={form}>
+        <label style={label}>
+          Email
           <input
             type="email"
             autoComplete="email"
-            placeholder="Enter your email"
+            placeholder="Enter your email address"
             value={email}
-            onChange={(event) =>
-              setEmail(event.target.value)
-            }
+            onChange={(event) => setEmail(event.target.value)}
             style={input}
             required
           />
+        </label>
 
-          <button
-            type="submit"
-            disabled={sending}
-            style={{
-              ...button,
-              opacity: sending ? 0.65 : 1,
-              cursor: sending
-                ? "not-allowed"
-                : "pointer",
-            }}
-          >
-            {sending
-              ? "Sending..."
-              : "Send Reset Email"}
-          </button>
-        </form>
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            ...primaryButton,
+            opacity: loading ? 0.72 : 1,
+            cursor: loading ? "not-allowed" : "pointer",
+          }}
+        >
+          {loading ? "SENDING RESET LINK..." : "SEND RESET LINK"}
+        </button>
+      </form>
 
-        {message && (
-          <p style={{ color: "#00ff99" }}>
-            {message}
-          </p>
-        )}
-
-        {errorMessage && (
-          <p style={{ color: "#ff6666" }}>
-            {errorMessage}
-          </p>
-        )}
-      </section>
-    </main>
+      {message ? (
+        <div
+          style={{
+            ...messageBox,
+            ...(isError ? messageError : messageSuccess),
+          }}
+        >
+          {message}
+        </div>
+      ) : null}
+    </AuthShell>
   );
 }
 
-const page = {
-  minHeight: "100vh",
-  background: "#000",
-  color: "#fff",
-  padding: 35,
+const form = {
+  display: "grid",
+  gap: 14,
 };
 
-const box = {
-  maxWidth: 500,
-  margin: "60px auto",
-  padding: 25,
-  border: "1px solid #333",
-  borderRadius: 14,
-  background: "#080808",
+const label = {
+  display: "grid",
+  gap: 8,
+  fontWeight: 700,
+  color: "#f6f7fb",
+  fontSize: 14,
 };
 
 const input = {
   width: "100%",
   boxSizing: "border-box" as const,
-  padding: 12,
-  marginBottom: 14,
-  background: "#111",
+  borderRadius: 14,
+  border: "1px solid rgba(255,255,255,.14)",
+  background: "rgba(8, 14, 24, .54)",
   color: "#fff",
-  border: "1px solid #333",
-  borderRadius: 8,
+  padding: "14px 14px",
+  outline: "none",
+  fontSize: 15,
+  boxShadow:
+    "inset 0 0 0 1px rgba(255,255,255,.03), 0 0 18px rgba(0,217,255,.06)",
 };
 
-const button = {
-  width: "100%",
-  padding: 14,
-  borderRadius: 10,
-  border: "none",
+const primaryButton = {
+  border: "1px solid #00d9ff",
+  borderRadius: 16,
+  padding: "14px 16px",
   background:
-    "linear-gradient(90deg, #00b7ff, #ff2fd0)",
-  color: "#fff",
-  fontWeight: "bold",
+    "linear-gradient(135deg, rgba(0,217,255,.94), rgba(0,132,255,.88))",
+  color: "#04111b",
+  fontWeight: 1000,
+  letterSpacing: ".08em",
+  textTransform: "uppercase" as const,
+  boxShadow: "0 0 24px rgba(0,217,255,.35)",
+};
+
+const messageBox = {
+  marginTop: 16,
+  padding: "14px 16px",
+  borderRadius: 14,
+  fontSize: 14,
+  lineHeight: 1.55,
+  fontWeight: 700,
+};
+
+const messageSuccess = {
+  border: "1px solid rgba(0,255,153,.45)",
+  background: "rgba(0,255,153,.10)",
+  color: "#92ffd0",
+  boxShadow: "0 0 18px rgba(0,255,153,.14)",
+};
+
+const messageError = {
+  border: "1px solid rgba(255,88,130,.42)",
+  background: "rgba(255,88,130,.10)",
+  color: "#ffb0c1",
+  boxShadow: "0 0 18px rgba(255,88,130,.12)",
+};
+
+const footerRow = {
+  display: "flex",
+  gap: 14,
+  flexWrap: "wrap" as const,
+  justifyContent: "space-between",
+  alignItems: "center",
+};
+
+const footerLink = {
+  color: "#86f6ff",
+  textDecoration: "none",
+  fontWeight: 800,
+};
+
+const footerLinkSecondary = {
+  color: "#ff87e9",
+  textDecoration: "none",
+  fontWeight: 800,
 };
