@@ -37,29 +37,29 @@ export default function InventoryManagerPage() {
               from one workspace.
             </p>
           </div>
-
-          <div style={headerActions}>
-            <button
-              type="button"
-              onClick={() =>
-                admin.setShowAddProduct((current) => !current)
-              }
-              style={primaryButton}
-            >
-              + New Product
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                admin.setShowDeleted((current) => !current)
-              }
-              style={secondaryButton}
-            >
-              Archived Products
-            </button>
-          </div>
         </header>
+
+        <div style={headerActions}>
+          <button
+            type="button"
+            onClick={() =>
+              admin.setShowAddProduct((current) => !current)
+            }
+            style={primaryButton}
+          >
+            + New Product
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              admin.setShowDeleted((current) => !current)
+            }
+            style={secondaryButton}
+          >
+            Archived Products
+          </button>
+        </div>
 
         {admin.notice && (
           <div style={noticeBanner}>
@@ -168,6 +168,7 @@ const subtitle = {
 };
 
 const headerActions = {
+  marginTop: 18,
   display: "flex",
   gap: 12,
   flexWrap: "wrap" as const,
