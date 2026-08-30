@@ -205,6 +205,66 @@ async function loadTaxSettings(
   return data as unknown as SalesTaxSettingsRow;
 }
 
+type StateNexusCheckoutStatus = {
+  state_code?: string | null;
+  state_name?: string | null;
+  has_general_sales_tax?: boolean;
+  threshold_met?: boolean;
+  registered_to_collect?: boolean;
+  tax_collection_enabled?: boolean;
+  auto_enable_when_registered_and_threshold_met?: boolean;
+  effective_tax_collection?: boolean;
+  nexus_status?: string | null;
+  overall_progress_percent?: number | null;
+};
+
+async function loadStateNexusCheckoutStatus({
+  supabase,
+  stateCode,
+}: {
+  supabase: SupabaseClient;
+  stateCode: string | null | undefined;
+}): Promise<StateNexusCheckoutStatus | null> {
+  const normalizedState =
+    String(stateCode || "")
+      .trim()
+      .toUpperCase();
+
+  if (!normalizedState) {
+    return null;
+  }
+
+  const {
+    data,
+    error,
+  } = await supabase.rpc(
+    "get_state_nexus_checkout_status",
+    {
+      p_state_code:
+        normalizedState,
+    }
+  );
+
+  if (error) {
+    throw new Error(
+      `State nexus tax configuration could not be loaded for ${normalizedState}: ${error.message}`
+    );
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  if (Array.isArray(data)) {
+    return (
+      (data[0] ||
+        null) as StateNexusCheckoutStatus | null
+    );
+  }
+
+  return data as StateNexusCheckoutStatus;
+}
+
 async function loadCustomerTaxStatus({
   supabase,
   customerId,
@@ -520,6 +580,56 @@ export async function calculateTaxPricing({
       salesTaxAmount: 0,
 
       salesTaxJurisdiction: null,
+
+      taxExempt: false,
+      taxExemptionReason: null,
+
+      warnings,
+    };
+  }
+
+  const stateNexus =
+    await loadStateNexusCheckoutStatus({
+      supabase,
+      stateCode:
+        shippingAddress.stateCode,
+    });
+
+  /*
+   * Per-state nexus / registration gate.
+   *
+   * The global sales_tax_settings.tax_enabled flag remains the master switch.
+   * This second gate determines whether PugPep is currently authorized/configured
+   * to collect in the customer's destination state.
+   *
+   * Tax is collected only when the state configuration reports
+   * effective_tax_collection = true.
+   *
+   * That can happen through:
+   *   - an explicit state-level tax_collection_enabled override, or
+   *   - threshold met + registered_to_collect +
+   *     auto_enable_when_registered_and_threshold_met.
+   *
+   * Historical tax snapshots are not changed by later address edits.
+   */
+  if (
+    !stateNexus ||
+    stateNexus.has_general_sales_tax ===
+      false ||
+    !stateNexus.effective_tax_collection
+  ) {
+    return {
+      enabled: false,
+
+      ...baseResult,
+
+      taxableSubtotal: 0,
+      salesTaxRate: 0,
+      salesTaxAmount: 0,
+
+      salesTaxJurisdiction:
+        shippingAddress.stateCode ||
+        null,
 
       taxExempt: false,
       taxExemptionReason: null,

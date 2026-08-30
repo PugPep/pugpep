@@ -57,6 +57,31 @@ type Order = {
   status_before_cancel?: string | null;
   closed_at?: string | null;
   closed_by?: string | null;
+  sales_tax_amount?: number | null;
+  sales_tax_rate?: number | null;
+  sales_tax_state?: string | null;
+  sales_tax_postal_code?: string | null;
+};
+
+type NexusSummary = {
+  state_code: string;
+  state_name: string;
+  sales_threshold: number | null;
+  transaction_threshold: number | null;
+  qualifying_sales: number;
+  qualifying_transactions: number;
+  revenue: number;
+  cost: number;
+  profit: number;
+  margin_percent: number;
+  sales_tax_collected: number;
+  overall_progress_percent: number;
+  remaining_sales: number | null;
+  threshold_met: boolean;
+  nexus_status: string;
+  registered_to_collect: boolean;
+  tax_collection_enabled: boolean;
+  effective_tax_collection: boolean;
 };
 
 function getOrderRevenue(order: Order) {
@@ -101,6 +126,9 @@ export default function AdminPage() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
+  const [nexusRows, setNexusRows] = useState<NexusSummary[]>([]);
+  const [stateFilter, setStateFilter] = useState("all");
+  const [nexusFilter, setNexusFilter] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -128,17 +156,30 @@ export default function AdminPage() {
     useState(false);
 
   async function loadOrders() {
-    const { data, error } = await supabase
-      .from("orders")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const [ordersResult, nexusResult] = await Promise.all([
+      supabase
+        .from("orders")
+        .select("*")
+        .order("created_at", { ascending: false }),
+      supabase.rpc("admin_get_state_nexus_summary"),
+    ]);
 
-    if (error) {
-      alert(error.message);
+    if (ordersResult.error) {
+      alert(ordersResult.error.message);
       return;
     }
 
-    setOrders(data || []);
+    if (nexusResult.error) {
+      console.error("State nexus summary could not be loaded:", nexusResult.error);
+      setNexusRows([]);
+      setNotice(
+        "Orders loaded, but state nexus monitoring is unavailable. Run the nexus SQL setup if it has not been installed yet."
+      );
+    } else {
+      setNexusRows((nexusResult.data || []) as NexusSummary[]);
+    }
+
+    setOrders((ordersResult.data || []) as Order[]);
   }
 
   useEffect(() => {
@@ -1149,11 +1190,60 @@ export default function AdminPage() {
     (order) => Boolean(order.closed_at)
   ).length;
 
+  const nexusByState = new Map(
+    nexusRows.map((row) => [String(row.state_code || "").toUpperCase(), row])
+  );
+
+  const availableStates = Array.from(
+    new Set(
+      orders
+        .map((order) => String(order.state || "").trim().toUpperCase())
+        .filter(Boolean)
+    )
+  ).sort();
+
+  function matchesNexusFilter(order: Order) {
+    if (nexusFilter === "all") return true;
+
+    const row = nexusByState.get(
+      String(order.state || "").trim().toUpperCase()
+    );
+
+    if (!row) return nexusFilter === "unconfigured";
+    if (nexusFilter === "safe") return row.nexus_status === "safe";
+    if (nexusFilter === "near") return row.nexus_status === "near";
+    if (nexusFilter === "critical") return row.nexus_status === "critical";
+    if (nexusFilter === "near_or_critical") {
+      return row.nexus_status === "near" || row.nexus_status === "critical";
+    }
+    if (nexusFilter === "passed") return Boolean(row.threshold_met);
+    if (nexusFilter === "review_required") {
+      return Boolean(row.threshold_met) && !row.effective_tax_collection;
+    }
+    if (nexusFilter === "tax_active") return Boolean(row.effective_tax_collection);
+
+    return true;
+  }
+
   const filteredOrders = monthScopedOrders.filter((order) => {
     const query = search.trim().toLowerCase();
-    const matchesSearch = !query || order.order_number?.toLowerCase().includes(query) || order.customer_name?.toLowerCase().includes(query) || order.customer_email?.toLowerCase().includes(query) || order.promo_code?.toLowerCase().includes(query) || order.payment_method?.toLowerCase().includes(query) ||
-      order.tracking_number?.toLowerCase().includes(query);
+    const matchesSearch =
+      !query ||
+      order.order_number?.toLowerCase().includes(query) ||
+      order.customer_name?.toLowerCase().includes(query) ||
+      order.customer_email?.toLowerCase().includes(query) ||
+      order.promo_code?.toLowerCase().includes(query) ||
+      order.payment_method?.toLowerCase().includes(query) ||
+      order.tracking_number?.toLowerCase().includes(query) ||
+      order.state?.toLowerCase().includes(query) ||
+      order.city?.toLowerCase().includes(query) ||
+      order.zip?.toLowerCase().includes(query);
+
     if (!matchesSearch) return false;
+
+    const orderState = String(order.state || "").trim().toUpperCase();
+    if (stateFilter !== "all" && orderState !== stateFilter) return false;
+    if (!matchesNexusFilter(order)) return false;
     if (filter === "deleted") return Boolean(order.deleted_at);
     if (order.deleted_at) return false;
     if (filter === "all") return true;
@@ -1217,6 +1307,12 @@ export default function AdminPage() {
       0
     );
 
+  const visibleSalesTax =
+    visibleFinancialOrders.reduce(
+      (sum, order) => sum + Number(order.sales_tax_amount || 0),
+      0
+    );
+
   const visibleMargin =
     visibleRevenue > 0
       ? (visibleProfit / visibleRevenue) * 100
@@ -1273,6 +1369,10 @@ export default function AdminPage() {
           </div>
 
           <div style={headerLinks}>
+            <Link href="/admin/nexus" style={secondaryLink}>
+              State Nexus
+            </Link>
+
             <Link href="/admin/promos" style={secondaryLink}>
               Promo Codes
             </Link>
@@ -1350,7 +1450,7 @@ export default function AdminPage() {
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Order number, customer, email, promo, payment, or tracking number..."
+              placeholder="Order, customer, state, city, ZIP, promo, payment, or tracking..."
               style={searchInput}
             />
           </div>
@@ -1411,6 +1511,76 @@ export default function AdminPage() {
               <span style={monthSummaryMeta}>
                 {monthScopedOrders.length} order{monthScopedOrders.length === 1 ? "" : "s"} in this view
               </span>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 12,
+              marginTop: 16,
+              marginBottom: 16,
+            }}
+          >
+            <label style={{ display: "grid", gap: 7 }}>
+              <span style={monthLabel}>DELIVERY STATE</span>
+              <select
+                value={stateFilter}
+                onChange={(event) => setStateFilter(event.target.value)}
+                style={monthSelect}
+              >
+                <option value="all">All States</option>
+                {availableStates.map((stateCode) => {
+                  const row = nexusByState.get(stateCode);
+                  const suffix = row
+                    ? ` · ${String(row.nexus_status || "").replaceAll("_", " ").toUpperCase()}`
+                    : " · UNCONFIGURED";
+
+                  return (
+                    <option key={stateCode} value={stateCode}>
+                      {stateCode}{suffix}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+
+            <label style={{ display: "grid", gap: 7 }}>
+              <span style={monthLabel}>NEXUS RISK</span>
+              <select
+                value={nexusFilter}
+                onChange={(event) => setNexusFilter(event.target.value)}
+                style={monthSelect}
+              >
+                <option value="all">All Nexus Statuses</option>
+                <option value="safe">Safe · under 75%</option>
+                <option value="near">Near · 75–89.99%</option>
+                <option value="critical">Critical · 90–99.99%</option>
+                <option value="near_or_critical">Near + Critical</option>
+                <option value="passed">Threshold Passed</option>
+                <option value="review_required">Passed · Tax Review Required</option>
+                <option value="tax_active">Tax Collection Active</option>
+                <option value="unconfigured">Unconfigured State</option>
+              </select>
+            </label>
+
+            <div
+              style={{
+                alignSelf: "end",
+                minHeight: 48,
+                padding: "10px 12px",
+                border: "1px solid rgba(0,217,255,.18)",
+                borderRadius: 10,
+                background: "rgba(0,217,255,.04)",
+                color: "#a9cbd4",
+                fontSize: 12,
+                lineHeight: 1.5,
+              }}
+            >
+              Revenue, cost, profit and nexus exposure follow the order&apos;s
+              current delivery state. Historical sales tax stays with the tax
+              snapshot collected on the order.
             </div>
           </div>
 
@@ -1488,6 +1658,12 @@ export default function AdminPage() {
             value={`$${averageOrderValue.toFixed(2)}`}
             accent="#7df9ff"
           />
+
+          <FinancialCard
+            label="Sales Tax Collected"
+            value={`$${visibleSalesTax.toFixed(2)}`}
+            accent="#9ea7ff"
+          />
         </section>
 
         <section style={ordersPanel}>
@@ -1505,12 +1681,14 @@ export default function AdminPage() {
               </p>
             </div>
 
-            {(search || filter !== "all") && (
+            {(search || filter !== "all" || stateFilter !== "all" || nexusFilter !== "all") && (
               <button
                 type="button"
                 onClick={() => {
                   setSearch("");
                   setFilter("all");
+                  setStateFilter("all");
+                  setNexusFilter("all");
                 }}
                 style={clearButton}
               >
@@ -1612,6 +1790,49 @@ export default function AdminPage() {
                     </div>
 
                     <div style={orderMetaGrid}>
+                      <MetaItem
+                        label="State"
+                        value={String(order.state || "—").toUpperCase()}
+                        accent="#7df9ff"
+                      />
+
+                      <MetaItem
+                        label="Nexus"
+                        value={(() => {
+                          const row = nexusByState.get(
+                            String(order.state || "").trim().toUpperCase()
+                          );
+                          if (!row) return "UNCONFIGURED";
+                          if (row.effective_tax_collection) return "TAX ACTIVE";
+                          if (row.threshold_met) return "PASSED · REVIEW";
+                          return `${String(row.nexus_status || "safe")
+                            .replaceAll("_", " ")
+                            .toUpperCase()} · ${Number(
+                            row.overall_progress_percent || 0
+                          ).toFixed(1)}%`;
+                        })()}
+                        accent={(() => {
+                          const row = nexusByState.get(
+                            String(order.state || "").trim().toUpperCase()
+                          );
+                          if (!row) return "#b8bcc4";
+                          if (row.threshold_met) return "#ff6f6f";
+                          if (row.nexus_status === "critical") return "#ff8a5b";
+                          if (row.nexus_status === "near") return "#ffcc00";
+                          return "#00ff99";
+                        })()}
+                      />
+
+                      <MetaItem
+                        label="Sales Tax Collected"
+                        value={`$${Number(order.sales_tax_amount || 0).toFixed(2)}`}
+                        accent={
+                          Number(order.sales_tax_amount || 0) > 0
+                            ? "#9ea7ff"
+                            : undefined
+                        }
+                      />
+
                       <MetaItem
                         label="Payment"
                         value={order.payment_method || "-"}

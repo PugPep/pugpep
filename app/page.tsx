@@ -2,13 +2,21 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "../lib/supabaseClient";
 import {
   getPrimaryStorefrontCampaign,
   loadStorefrontSales,
   type StorefrontSale,
 } from "../lib/storefrontCampaigns";
+
+const STOREFRONT_SALE_CACHE_KEY = "pugpep_storefront_sales_v1";
+const STOREFRONT_SALE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type StorefrontSaleCache = {
+  savedAt: number;
+  sales: Record<string, StorefrontSale>;
+};
 
 type Product = {
   id: string;
@@ -36,11 +44,14 @@ export default function HomePage() {
   const [sort, setSort] = useState("featured");
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [campaignLoading, setCampaignLoading] = useState(true);
+  const campaignLoadStartedRef = useRef(false);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     const accepted = localStorage.getItem("pugpep_age_verified");
     setAgeVerified(accepted === "yes");
-    void loadProducts();
 
     const mediaQuery = window.matchMedia("(max-width: 768px)");
 
@@ -51,10 +62,98 @@ export default function HomePage() {
     updateMobile();
     mediaQuery.addEventListener("change", updateMobile);
 
-    return () => {
-      mediaQuery.removeEventListener("change", updateMobile);
+    // Load the catalog immediately. Campaign pricing is deliberately
+    // separated so it cannot block the initial product render.
+    void loadProducts();
+
+    // Restore recent campaign data instantly when available.
+    const cachedSales = readCachedSales();
+    if (cachedSales) {
+      setSaleMap(cachedSales);
+      setCampaignLoading(false);
+    }
+
+    // Defer the heavier campaign lookup until after the page has had
+    // a chance to render. This keeps campaign RPC traffic off the
+    // critical path for the homepage.
+    const startCampaignLoad = () => {
+      void loadCampaignSales();
     };
-  }, []);
+
+    let idleId: number | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const browserWindow = window as Window & {
+      requestIdleCallback?: (
+        callback: () => void,
+        options?: { timeout: number }
+      ) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+    if (typeof browserWindow.requestIdleCallback === "function") {
+      idleId = browserWindow.requestIdleCallback(startCampaignLoad, {
+        timeout: 1200,
+      });
+    } else {
+      timeoutId = globalThis.setTimeout(startCampaignLoad, 250);
+    }
+
+    return () => {
+      mountedRef.current = false;
+      mediaQuery.removeEventListener("change", updateMobile);
+
+      if (
+        idleId !== null &&
+        typeof browserWindow.cancelIdleCallback === "function"
+      ) {
+        browserWindow.cancelIdleCallback(idleId);
+      }
+
+      if (timeoutId !== null) {
+        globalThis.clearTimeout(timeoutId);
+      }
+    };
+  }, [supabase]);
+
+  function readCachedSales() {
+    try {
+      const raw = sessionStorage.getItem(STOREFRONT_SALE_CACHE_KEY);
+      if (!raw) return null;
+
+      const parsed = JSON.parse(raw) as StorefrontSaleCache;
+
+      if (
+        !parsed ||
+        typeof parsed.savedAt !== "number" ||
+        !parsed.sales ||
+        Date.now() - parsed.savedAt > STOREFRONT_SALE_CACHE_TTL_MS
+      ) {
+        sessionStorage.removeItem(STOREFRONT_SALE_CACHE_KEY);
+        return null;
+      }
+
+      return parsed.sales;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeCachedSales(sales: Record<string, StorefrontSale>) {
+    try {
+      const payload: StorefrontSaleCache = {
+        savedAt: Date.now(),
+        sales,
+      };
+
+      sessionStorage.setItem(
+        STOREFRONT_SALE_CACHE_KEY,
+        JSON.stringify(payload)
+      );
+    } catch {
+      // Session storage is an optimization only.
+    }
+  }
 
   async function loadProducts() {
     const { data: productData, error: productError } = await supabase
@@ -65,23 +164,44 @@ export default function HomePage() {
       .eq("is_active", true)
       .order("name", { ascending: true });
 
+    if (!mountedRef.current) return;
+
     if (productError) {
       console.error("Product loading failed:", productError);
       setProducts([]);
-    } else {
-      setProducts((productData || []) as Product[]);
+      return;
     }
+
+    setProducts((productData || []) as Product[]);
+  }
+
+  async function loadCampaignSales() {
+    if (campaignLoadStartedRef.current) return;
+    campaignLoadStartedRef.current = true;
 
     setCampaignLoading(true);
 
     try {
       const effectiveSales = await loadStorefrontSales(supabase);
+
+      if (!mountedRef.current) return;
+
       setSaleMap(effectiveSales);
+      writeCachedSales(effectiveSales);
     } catch (error) {
       console.error("Storefront sale loading failed:", error);
-      setSaleMap({});
+
+      if (!mountedRef.current) return;
+
+      // Keep any valid cached sale map already on screen rather than
+      // clearing the UI because one campaign request failed.
+      setSaleMap((current) =>
+        Object.keys(current).length > 0 ? current : {}
+      );
     } finally {
-      setCampaignLoading(false);
+      if (mountedRef.current) {
+        setCampaignLoading(false);
+      }
     }
   }
 

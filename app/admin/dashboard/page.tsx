@@ -15,6 +15,7 @@ type DatePreset =
   | "this_quarter"
   | "this_year"
   | "all_time"
+  | "month_year"
   | "custom";
 
 type TopMetric = "units" | "revenue" | "profit";
@@ -41,6 +42,31 @@ type Order = {
   tracking_number?: string | null;
   closed_at?: string | null;
   deleted_at?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  sales_tax_amount?: number | null;
+  sales_tax_state?: string | null;
+  sales_tax_postal_code?: string | null;
+};
+
+type NexusSummary = {
+  state_code: string;
+  state_name: string;
+  sales_threshold: number | null;
+  transaction_threshold: number | null;
+  qualifying_sales: number;
+  qualifying_transactions: number;
+  revenue: number;
+  cost: number;
+  profit: number;
+  margin_percent: number;
+  sales_tax_collected: number;
+  overall_progress_percent: number;
+  remaining_sales: number | null;
+  threshold_met: boolean;
+  nexus_status: string;
+  registered_to_collect: boolean;
+  effective_tax_collection: boolean;
 };
 
 type OrderItem = {
@@ -153,7 +179,9 @@ function parseInputDate(value: string, end = false) {
 function getDateRange(
   preset: DatePreset,
   customStart: string,
-  customEnd: string
+  customEnd: string,
+  selectedMonth: number,
+  selectedYear: number
 ): DateRange {
   const now = new Date();
 
@@ -223,6 +251,20 @@ function getDateRange(
       start: startOfDay(new Date(now.getFullYear(), 0, 1)),
       end: endOfDay(now),
       label: String(now.getFullYear()),
+    };
+  }
+
+  if (preset === "month_year") {
+    const start = new Date(selectedYear, selectedMonth, 1);
+    const end = new Date(selectedYear, selectedMonth + 1, 0);
+
+    return {
+      start: startOfDay(start),
+      end: endOfDay(end),
+      label: start.toLocaleDateString(undefined, {
+        month: "long",
+        year: "numeric",
+      }),
     };
   }
 
@@ -430,8 +472,15 @@ export default function AdminDashboardPage() {
   const [inventory, setInventory] = useState<InventoryRow[]>([]);
   const [options, setOptions] = useState<ProductOption[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [nexusRows, setNexusRows] = useState<NexusSummary[]>([]);
 
   const [preset, setPreset] = useState<DatePreset>("this_month");
+  const [selectedMonth, setSelectedMonth] = useState(() =>
+    new Date().getMonth()
+  );
+  const [selectedYear, setSelectedYear] = useState(() =>
+    new Date().getFullYear()
+  );
   const [customStart, setCustomStart] = useState(() =>
     formatInputDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
   );
@@ -441,14 +490,52 @@ export default function AdminDashboardPage() {
   const [topMetric, setTopMetric] = useState<TopMetric>("revenue");
 
   const selectedRange = useMemo(
-    () => getDateRange(preset, customStart, customEnd),
-    [preset, customStart, customEnd]
+    () =>
+      getDateRange(
+        preset,
+        customStart,
+        customEnd,
+        selectedMonth,
+        selectedYear
+      ),
+    [
+      preset,
+      customStart,
+      customEnd,
+      selectedMonth,
+      selectedYear,
+    ]
   );
 
   const previousRange = useMemo(
     () => getPreviousRange(selectedRange),
     [selectedRange]
   );
+
+  const availableYears = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const orderYears = orders
+      .map((order) => new Date(order.created_at).getFullYear())
+      .filter((year) => Number.isFinite(year));
+
+    const earliestYear =
+      orderYears.length > 0
+        ? Math.min(...orderYears)
+        : currentYear - 3;
+
+    const latestYear = Math.max(
+      currentYear,
+      ...(orderYears.length > 0 ? orderYears : [currentYear])
+    );
+
+    const years: number[] = [];
+
+    for (let year = latestYear; year >= earliestYear; year -= 1) {
+      years.push(year);
+    }
+
+    return years;
+  }, [orders]);
 
   useEffect(() => {
     async function loadDashboard() {
@@ -479,6 +566,7 @@ export default function AdminDashboardPage() {
         inventoryResult,
         optionsResult,
         productsResult,
+        nexusResult,
       ] = await Promise.all([
         supabase.from("orders").select("*"),
         supabase.from("order_items").select("*"),
@@ -492,6 +580,7 @@ export default function AdminDashboardPage() {
         supabase
           .from("products")
           .select("slug,name,is_active,deleted_at"),
+        supabase.rpc("admin_get_state_nexus_summary"),
       ]);
 
       const errors = [
@@ -501,6 +590,7 @@ export default function AdminDashboardPage() {
         inventoryResult.error,
         optionsResult.error,
         productsResult.error,
+        nexusResult.error,
       ].filter(Boolean);
 
       if (errors.length > 0) {
@@ -516,6 +606,7 @@ export default function AdminDashboardPage() {
       setInventory((inventoryResult.data || []) as InventoryRow[]);
       setOptions((optionsResult.data || []) as ProductOption[]);
       setProducts((productsResult.data || []) as Product[]);
+      setNexusRows((nexusResult.data || []) as NexusSummary[]);
 
       setLoading(false);
     }
@@ -595,6 +686,64 @@ export default function AdminDashboardPage() {
       ),
     [paidPeriodOrders]
   );
+
+  const salesTaxCollected = paidPeriodOrders.reduce(
+    (sum, order) => sum + safeNumber(order.sales_tax_amount),
+    0
+  );
+
+  const statePerformance = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        state: string;
+        orders: number;
+        revenue: number;
+        costs: number;
+        profit: number;
+        salesTax: number;
+      }
+    >();
+
+    paidPeriodOrders.forEach((order) => {
+      const state = String(order.state || "Unknown").trim().toUpperCase() || "Unknown";
+      const current = map.get(state) || {
+        state,
+        orders: 0,
+        revenue: 0,
+        costs: 0,
+        profit: 0,
+        salesTax: 0,
+      };
+
+      current.orders += 1;
+      current.revenue += getOrderRevenue(order);
+      current.costs += getOrderCost(order);
+      current.profit += getOrderProfit(order);
+      current.salesTax += safeNumber(order.sales_tax_amount);
+      map.set(state, current);
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
+  }, [paidPeriodOrders]);
+
+  const passedNexusStates = nexusRows.filter((row) => row.threshold_met);
+  const criticalNexusStates = nexusRows.filter((row) => row.nexus_status === "critical");
+  const nearNexusStates = nexusRows.filter((row) => row.nexus_status === "near");
+  const taxActiveStates = nexusRows.filter((row) => row.effective_tax_collection);
+
+  const nexusAttention = nexusRows
+    .filter(
+      (row) =>
+        row.threshold_met ||
+        row.nexus_status === "critical" ||
+        row.nexus_status === "near"
+    )
+    .sort(
+      (a, b) =>
+        safeNumber(b.overall_progress_percent) -
+        safeNumber(a.overall_progress_percent)
+    );
 
   const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
   const aov =
@@ -915,6 +1064,7 @@ export default function AdminDashboardPage() {
       ["Margin %", Number(margin.toFixed(2))],
       ["Average Order Value", Number(aov.toFixed(2))],
       ["Discounts", Number(discounts.toFixed(2))],
+      ["Sales Tax Collected", Number(salesTaxCollected.toFixed(2))],
       ["New Customers", newCustomers],
       ["Repeat Customer %", Number(repeatCustomerPercent.toFixed(2))],
       [
@@ -1129,6 +1279,44 @@ export default function AdminDashboardPage() {
       .replace(/^-+|-+$/g, "")
       .toLowerCase();
 
+    const stateRows = statePerformance.map((row) => ({
+      State: row.state,
+      Orders: row.orders,
+      Revenue: Number(row.revenue.toFixed(2)),
+      Costs: Number(row.costs.toFixed(2)),
+      Profit: Number(row.profit.toFixed(2)),
+      "Margin %":
+        row.revenue > 0
+          ? Number(((row.profit / row.revenue) * 100).toFixed(2))
+          : 0,
+      "Sales Tax Collected": Number(row.salesTax.toFixed(2)),
+    }));
+
+    const stateSheet = XLSX.utils.json_to_sheet(stateRows);
+    XLSX.utils.book_append_sheet(workbook, stateSheet, "State Performance");
+
+    const nexusExportRows = nexusRows.map((row) => ({
+      State: row.state_code,
+      Name: row.state_name,
+      "Qualifying Sales": Number(safeNumber(row.qualifying_sales).toFixed(2)),
+      Transactions: safeNumber(row.qualifying_transactions),
+      "Sales Threshold": row.sales_threshold == null ? "" : Number(row.sales_threshold),
+      "Progress %": Number(safeNumber(row.overall_progress_percent).toFixed(2)),
+      Status: row.nexus_status,
+      "Threshold Met": row.threshold_met ? "Yes" : "No",
+      "Registered": row.registered_to_collect ? "Yes" : "No",
+      "Tax Collection Active": row.effective_tax_collection ? "Yes" : "No",
+      Revenue: Number(safeNumber(row.revenue).toFixed(2)),
+      Cost: Number(safeNumber(row.cost).toFixed(2)),
+      Profit: Number(safeNumber(row.profit).toFixed(2)),
+      "Historical Sales Tax Collected": Number(
+        safeNumber(row.sales_tax_collected).toFixed(2)
+      ),
+    }));
+
+    const nexusSheet = XLSX.utils.json_to_sheet(nexusExportRows);
+    XLSX.utils.book_append_sheet(workbook, nexusSheet, "State Nexus");
+
     XLSX.writeFile(
       workbook,
       `PugPep-Business-Intelligence-${safeLabel || "report"}.xlsx`
@@ -1181,6 +1369,10 @@ export default function AdminDashboardPage() {
           </div>
 
           <div style={headerActions}>
+            <Link href="/admin/nexus" style={secondaryLink}>
+              State Nexus
+            </Link>
+
             <Link href="/admin" style={secondaryLink}>
               Orders
             </Link>
@@ -1230,8 +1422,56 @@ export default function AdminDashboardPage() {
               <option value="this_quarter">This Quarter</option>
               <option value="this_year">This Year</option>
               <option value="all_time">All Time</option>
+              <option value="month_year">Select Month & Year</option>
               <option value="custom">Custom Range</option>
             </select>
+
+            {preset === "month_year" && (
+              <>
+                <select
+                  value={selectedMonth}
+                  onChange={(event) =>
+                    setSelectedMonth(Number(event.target.value))
+                  }
+                  style={selectInput}
+                  aria-label="Reporting month"
+                >
+                  {[
+                    "January",
+                    "February",
+                    "March",
+                    "April",
+                    "May",
+                    "June",
+                    "July",
+                    "August",
+                    "September",
+                    "October",
+                    "November",
+                    "December",
+                  ].map((month, index) => (
+                    <option key={month} value={index}>
+                      {month}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={selectedYear}
+                  onChange={(event) =>
+                    setSelectedYear(Number(event.target.value))
+                  }
+                  style={selectInput}
+                  aria-label="Reporting year"
+                >
+                  {availableYears.map((year) => (
+                    <option key={year} value={year}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
 
             {preset === "custom" && (
               <>
@@ -1297,7 +1537,93 @@ export default function AdminDashboardPage() {
             value={String(newCustomers)}
             accent="#9ea7ff"
           />
+
+          <KpiCard
+            label="Sales Tax Collected"
+            value={money(salesTaxCollected)}
+            accent="#9ea7ff"
+          />
         </section>
+
+        <div style={mainGrid}>
+          <section style={panel}>
+            <div style={panelHeader}>
+              <div>
+                <p style={sectionEyebrow}>STATE NEXUS MONITOR</p>
+                <h2 style={sectionTitle}>Threshold Exposure</h2>
+              </div>
+
+              <Link href="/admin/nexus" style={primaryLink}>
+                Manage Nexus
+              </Link>
+            </div>
+
+            <div style={healthGrid}>
+              <HealthCard label="Near 75–89.99%" value={nearNexusStates.length} accent="#ffcc00" href="/admin/nexus" />
+              <HealthCard label="Critical 90–99.99%" value={criticalNexusStates.length} accent="#ff8a5b" href="/admin/nexus" />
+              <HealthCard label="Threshold Passed" value={passedNexusStates.length} accent="#ff6f6f" href="/admin/nexus" />
+              <HealthCard label="Tax Collection Active" value={taxActiveStates.length} accent="#00ff99" href="/admin/nexus" />
+            </div>
+
+            {nexusAttention.length === 0 ? (
+              <EmptyState text="No states are currently near or above their configured nexus threshold." />
+            ) : (
+              <div style={attentionList}>
+                {nexusAttention.slice(0, 8).map((row) => (
+                  <div key={row.state_code} style={attentionRow}>
+                    <span><strong>{row.state_code}</strong> · {row.state_name}</span>
+                    <strong
+                      style={{
+                        color: row.threshold_met
+                          ? "#ff6f6f"
+                          : row.nexus_status === "critical"
+                          ? "#ff8a5b"
+                          : "#ffcc00",
+                      }}
+                    >
+                      {safeNumber(row.overall_progress_percent).toFixed(1)}%
+                      {row.threshold_met
+                        ? row.effective_tax_collection
+                          ? " · TAX ACTIVE"
+                          : " · REVIEW"
+                        : ""}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section style={panel}>
+            <div style={panelHeader}>
+              <div>
+                <p style={sectionEyebrow}>STATE PERFORMANCE</p>
+                <h2 style={sectionTitle}>Revenue, Cost & Profit</h2>
+              </div>
+              <span style={periodBadge}>{selectedRange.label}</span>
+            </div>
+
+            {statePerformance.length === 0 ? (
+              <EmptyState text="No paid orders are available by state for this period." />
+            ) : (
+              <div style={attentionList}>
+                {statePerformance.slice(0, 10).map((row) => (
+                  <div key={row.state} style={attentionRow}>
+                    <span><strong>{row.state}</strong> · {row.orders} order{row.orders === 1 ? "" : "s"}</span>
+                    <span style={{ textAlign: "right" }}>
+                      <strong style={{ color: "#00d9ff" }}>{money(row.revenue)}</strong>
+                      {" · "}<span>{money(row.costs)} cost</span>
+                      {" · "}<strong style={{ color: row.profit >= 0 ? "#00ff99" : "#ff6f6f" }}>{money(row.profit)} profit</strong>
+                      {row.salesTax > 0 && (
+                        <> · <span style={{ color: "#9ea7ff" }}>{money(row.salesTax)} tax</span></>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
 
         <div style={mainGrid}>
           <section style={panel}>

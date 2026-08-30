@@ -153,6 +153,22 @@ export default function OrderDetailsPage() {
   const [addQuantity, setAddQuantity] = useState(1);
   const [netRevenueManuallyEdited, setNetRevenueManuallyEdited] = useState(false);
 
+  const [editingDeliveryAddress, setEditingDeliveryAddress] = useState(false);
+  const [savingDeliveryAddress, setSavingDeliveryAddress] = useState(false);
+  const [deliveryAddressNotice, setDeliveryAddressNotice] = useState("");
+  const [deliveryAddressDraft, setDeliveryAddressDraft] = useState({
+    shipping_address: "",
+    city: "",
+    state: "",
+    zip: "",
+  });
+
+  const [editingAdjustmentId, setEditingAdjustmentId] = useState<string | null>(null);
+  const [adjustmentReasonDraft, setAdjustmentReasonDraft] = useState("");
+  const [savingAdjustmentLogId, setSavingAdjustmentLogId] = useState<string | null>(null);
+  const [deletingAdjustmentLogId, setDeletingAdjustmentLogId] = useState<string | null>(null);
+  const [currentStateNexus, setCurrentStateNexus] = useState<any>(null);
+
   useEffect(() => {
     if (id) loadOrder();
   }, [id]);
@@ -185,6 +201,23 @@ export default function OrderDetailsPage() {
 
     if (adjustmentError && adjustmentError.code !== "42P01") {
       console.error("Unable to load manual adjustment history:", adjustmentError);
+    }
+
+    const { data: nexusData, error: nexusError } = await supabase.rpc(
+      "admin_get_state_nexus_summary"
+    );
+
+    if (nexusError) {
+      console.error("Unable to load state nexus summary:", nexusError);
+      setCurrentStateNexus(null);
+    } else {
+      const stateCode = String(orderData.state || "").trim().toUpperCase();
+      setCurrentStateNexus(
+        (nexusData || []).find(
+          (row: any) =>
+            String(row.state_code || "").trim().toUpperCase() === stateCode
+        ) || null
+      );
     }
 
     let profileData: any = null;
@@ -261,6 +294,161 @@ export default function OrderDetailsPage() {
     setTrackingNumber(orderData.tracking_number || "");
     setShippingCost(Number(orderData.estimated_shipping_cost || 0));
     setPackagingCost(Number(orderData.estimated_packaging_cost || 0));
+
+    if (!editingDeliveryAddress) {
+      setDeliveryAddressDraft({
+        shipping_address: String(orderData.shipping_address || ""),
+        city: String(orderData.city || ""),
+        state: String(orderData.state || ""),
+        zip: String(orderData.zip || ""),
+      });
+    }
+  }
+
+  function startDeliveryAddressEdit() {
+    if (!order) return;
+
+    setDeliveryAddressDraft({
+      shipping_address: String(order.shipping_address || ""),
+      city: String(order.city || ""),
+      state: String(order.state || ""),
+      zip: String(order.zip || ""),
+    });
+    setDeliveryAddressNotice("");
+    setEditingDeliveryAddress(true);
+  }
+
+  function cancelDeliveryAddressEdit() {
+    if (order) {
+      setDeliveryAddressDraft({
+        shipping_address: String(order.shipping_address || ""),
+        city: String(order.city || ""),
+        state: String(order.state || ""),
+        zip: String(order.zip || ""),
+      });
+    }
+
+    setDeliveryAddressNotice("");
+    setEditingDeliveryAddress(false);
+  }
+
+  async function saveDeliveryAddress() {
+    if (!order || savingDeliveryAddress) return;
+
+    const shippingAddress = deliveryAddressDraft.shipping_address.trim();
+    const city = deliveryAddressDraft.city.trim();
+    const state = deliveryAddressDraft.state.trim().toUpperCase();
+    const zip = deliveryAddressDraft.zip.trim();
+
+    if (!shippingAddress || !city || !state || !zip) {
+      setDeliveryAddressNotice(
+        "Street address, city, state, and ZIP are required."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Update the delivery address for order ${order.order_number}?\n\n` +
+        "This changes this order only. The customer's saved/default address will NOT be changed. No address-change log will be created."
+    );
+
+    if (!confirmed) return;
+
+    setSavingDeliveryAddress(true);
+    setDeliveryAddressNotice("");
+
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          shipping_address: shippingAddress,
+          city,
+          state,
+          zip,
+        })
+        .eq("id", order.id);
+
+      if (error) throw error;
+
+      setDeliveryAddressNotice(
+        "Order delivery address updated. Customer default address was not changed, no address-change log was created, and state revenue/cost/profit/nexus attribution now follows the new delivery state."
+      );
+      setEditingDeliveryAddress(false);
+      await loadOrder();
+    } catch (error) {
+      setDeliveryAddressNotice(getErrorMessage(error));
+    } finally {
+      setSavingDeliveryAddress(false);
+    }
+  }
+
+  function startAdjustmentLogEdit(adjustment: any) {
+    setEditingAdjustmentId(String(adjustment.id));
+    setAdjustmentReasonDraft(String(adjustment.reason || ""));
+  }
+
+  function cancelAdjustmentLogEdit() {
+    setEditingAdjustmentId(null);
+    setAdjustmentReasonDraft("");
+  }
+
+  async function saveAdjustmentLog(adjustmentId: string) {
+    const reason = adjustmentReasonDraft.trim();
+
+    if (!reason) {
+      alert("The log reason cannot be blank.");
+      return;
+    }
+
+    setSavingAdjustmentLogId(adjustmentId);
+
+    try {
+      const { error } = await supabase.rpc("admin_update_order_log", {
+        p_adjustment_id: adjustmentId,
+        p_reason: reason,
+      });
+
+      if (error) throw error;
+
+      setEditingAdjustmentId(null);
+      setAdjustmentReasonDraft("");
+      await loadOrder();
+    } catch (error) {
+      alert(getErrorMessage(error));
+    } finally {
+      setSavingAdjustmentLogId(null);
+    }
+  }
+
+  async function deleteAdjustmentLog(adjustmentId: string) {
+    if (!order) return;
+
+    const confirmed = window.confirm(
+      `Delete this audit log from order ${order.order_number}?\n\n` +
+        "This removes the log entry only. It does not reverse the order correction."
+    );
+
+    if (!confirmed) return;
+
+    setDeletingAdjustmentLogId(adjustmentId);
+
+    try {
+      const { error } = await supabase.rpc("admin_delete_order_log", {
+        p_adjustment_id: adjustmentId,
+      });
+
+      if (error) throw error;
+
+      if (editingAdjustmentId === adjustmentId) {
+        cancelAdjustmentLogEdit();
+      }
+
+      await loadOrder();
+    } catch (error) {
+      alert(getErrorMessage(error));
+    } finally {
+      setDeletingAdjustmentLogId(null);
+    }
   }
 
   async function saveShippingInfo() {
@@ -1095,16 +1283,234 @@ export default function OrderDetailsPage() {
             </section>
 
             <section style={card}>
+              <div style={contentsHeader}>
+                <SectionHeader
+                  eyebrow="DELIVERY"
+                  title="Delivery Address"
+                />
+
+                {!editingDeliveryAddress && (
+                  <button
+                    type="button"
+                    onClick={startDeliveryAddressEdit}
+                    style={editOrderButton}
+                  >
+                    ✏️ Edit Address
+                  </button>
+                )}
+              </div>
+
+              <div
+                style={{
+                  marginBottom: 14,
+                  padding: "10px 12px",
+                  border: "1px solid rgba(0,217,255,.22)",
+                  borderRadius: 10,
+                  background: "rgba(0,217,255,.045)",
+                  color: "#9ccbd8",
+                  fontSize: 12,
+                  lineHeight: 1.55,
+                }}
+              >
+                This is the address for this order only. Editing it does not
+                change the customer&apos;s saved/default address and does not create
+                an address-change log.
+              </div>
+
+              {editingDeliveryAddress ? (
+                <div style={{ display: "grid", gap: 12 }}>
+                  <label style={{ display: "grid", gap: 6 }}>
+                    <span style={label}>Street Address</span>
+                    <input
+                      value={deliveryAddressDraft.shipping_address}
+                      onChange={(event) =>
+                        setDeliveryAddressDraft((previous) => ({
+                          ...previous,
+                          shipping_address: event.target.value,
+                        }))
+                      }
+                      style={input}
+                      autoComplete="off"
+                    />
+                  </label>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                      gap: 12,
+                    }}
+                  >
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span style={label}>City</span>
+                      <input
+                        value={deliveryAddressDraft.city}
+                        onChange={(event) =>
+                          setDeliveryAddressDraft((previous) => ({
+                            ...previous,
+                            city: event.target.value,
+                          }))
+                        }
+                        style={input}
+                        autoComplete="off"
+                      />
+                    </label>
+
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span style={label}>State</span>
+                      <input
+                        value={deliveryAddressDraft.state}
+                        maxLength={2}
+                        onChange={(event) =>
+                          setDeliveryAddressDraft((previous) => ({
+                            ...previous,
+                            state: event.target.value.toUpperCase(),
+                          }))
+                        }
+                        style={input}
+                        autoComplete="off"
+                      />
+                    </label>
+
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span style={label}>ZIP</span>
+                      <input
+                        value={deliveryAddressDraft.zip}
+                        onChange={(event) =>
+                          setDeliveryAddressDraft((previous) => ({
+                            ...previous,
+                            zip: event.target.value,
+                          }))
+                        }
+                        style={input}
+                        autoComplete="off"
+                      />
+                    </label>
+                  </div>
+
+                  {deliveryAddressNotice && (
+                    <div
+                      style={{
+                        color: deliveryAddressNotice
+                          .toLowerCase()
+                          .includes("updated")
+                          ? "#00ff99"
+                          : "#ffcc66",
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {deliveryAddressNotice}
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => void saveDeliveryAddress()}
+                      disabled={savingDeliveryAddress}
+                      style={{
+                        ...saveCorrectionButton,
+                        opacity: savingDeliveryAddress ? 0.55 : 1,
+                      }}
+                    >
+                      {savingDeliveryAddress ? "Saving..." : "Save Order Address"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={cancelDeliveryAddressEdit}
+                      disabled={savingDeliveryAddress}
+                      style={cancelButton}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p style={addressText}>
+                  {order.shipping_address}
+                  <br />
+                  {order.city}, {order.state} {order.zip}
+                </p>
+              )}
+            </section>
+
+            <section style={card}>
               <SectionHeader
-                eyebrow="DELIVERY"
-                title="Delivery Address"
+                eyebrow="STATE ATTRIBUTION"
+                title="Nexus & State Reporting"
               />
 
-              <p style={addressText}>
-                {order.shipping_address}
-                <br />
-                {order.city}, {order.state} {order.zip}
-              </p>
+              {currentStateNexus ? (
+                <>
+                  <InfoGrid>
+                    <Info
+                      label="Current Delivery State"
+                      value={`${currentStateNexus.state_code} · ${currentStateNexus.state_name}`}
+                      accent="#7df9ff"
+                    />
+                    <Info
+                      label="Nexus Status"
+                      value={
+                        currentStateNexus.effective_tax_collection
+                          ? "TAX COLLECTION ACTIVE"
+                          : currentStateNexus.threshold_met
+                          ? "THRESHOLD PASSED · REVIEW"
+                          : String(currentStateNexus.nexus_status || "safe")
+                              .replaceAll("_", " ")
+                              .toUpperCase()
+                      }
+                      accent={
+                        currentStateNexus.threshold_met
+                          ? "#ff6f6f"
+                          : currentStateNexus.nexus_status === "critical"
+                          ? "#ff8a5b"
+                          : currentStateNexus.nexus_status === "near"
+                          ? "#ffcc00"
+                          : "#00ff99"
+                      }
+                    />
+                    <Info
+                      label="Threshold Progress"
+                      value={`${Number(
+                        currentStateNexus.overall_progress_percent || 0
+                      ).toFixed(1)}%`}
+                    />
+                    <Info
+                      label="Qualifying Sales"
+                      value={money(currentStateNexus.qualifying_sales || 0)}
+                    />
+                    <Info
+                      label="Configured Sales Threshold"
+                      value={
+                        currentStateNexus.sales_threshold == null
+                          ? "N/A"
+                          : money(currentStateNexus.sales_threshold)
+                      }
+                    />
+                    <Info
+                      label="State Profit"
+                      value={money(currentStateNexus.profit || 0)}
+                      accent={
+                        Number(currentStateNexus.profit || 0) >= 0
+                          ? "#00ff99"
+                          : "#ff6f6f"
+                      }
+                    />
+                  </InfoGrid>
+
+                  <p style={{ ...warningText, marginTop: 12 }}>
+                    Revenue, cost, profit and nexus exposure follow this order&apos;s
+                    current delivery state. Historical tax collected remains tied
+                    to the original tax snapshot even if this address is changed.
+                  </p>
+                </>
+              ) : (
+                <p style={warningText}>
+                  No nexus configuration is available for the current delivery state.
+                </p>
+              )}
             </section>
 
             <section style={card}>
@@ -1809,7 +2215,29 @@ export default function OrderDetailsPage() {
                 <Info label="PugPoints Earned" value={points(order.rewards_points_earned || 0)} accent="#00ff99" />
                 <Info label="Total Discount" value={`-$${Number(order.total_discount || 0).toFixed(2)}`} accent="#00ff99" />
                 <Info label="Delivery Charged" value={`$${Number(order.shipping || 0).toFixed(2)}`} />
-                <Info label="Sales Tax" value={`$${Number(order.sales_tax_amount || 0).toFixed(2)}`} />
+                <Info
+                  label="Sales Tax Collected"
+                  value={`$${Number(order.sales_tax_amount || 0).toFixed(2)}`}
+                  accent={Number(order.sales_tax_amount || 0) > 0 ? "#9ea7ff" : undefined}
+                />
+                <Info
+                  label="Tax Rate Used"
+                  value={`${(Number(order.sales_tax_rate || 0) * 100)
+                    .toFixed(3)
+                    .replace(/\.000$/, "")}%`}
+                />
+                <Info
+                  label="Historical Tax State"
+                  value={order.sales_tax_state || "No tax collected"}
+                />
+                <Info
+                  label="Historical Tax ZIP"
+                  value={order.sales_tax_postal_code || "—"}
+                />
+                <Info
+                  label="Tax Jurisdiction"
+                  value={order.sales_tax_jurisdiction || "—"}
+                />
                 <Info label="Payment Method" value={order.payment_method || "Not recorded"} />
               </InfoGrid>
 
@@ -1819,119 +2247,178 @@ export default function OrderDetailsPage() {
               </div>
             </section>
 
-            {adjustments.length > 0 && (
-              <section style={card}>
-                <SectionHeader
-                  eyebrow="AUDIT"
-                  title="Manual Adjustment History"
-                />
+            <section style={card}>
+              <SectionHeader
+                eyebrow="AUDIT"
+                title="Manual Adjustment History"
+              />
 
+              <p
+                style={{
+                  margin: "0 0 14px",
+                  color: "#8f8f98",
+                  fontSize: 12,
+                  lineHeight: 1.55,
+                }}
+              >
+                Edit the admin note/reason or delete a log entry. The recorded
+                before/after financial values stay read-only historical data.
+              </p>
+
+              {adjustments.length === 0 ? (
+                <p style={warningText}>
+                  No manual adjustment logs have been recorded for this order.
+                </p>
+              ) : (
                 <div style={auditList}>
-                  {adjustments.map((adjustment) => (
-                    <article key={adjustment.id} style={auditCard}>
-                      <div style={auditHeader}>
-                        <strong style={{ color: "#ffcc66" }}>
-                          {new Date(
-                            adjustment.adjusted_at
-                          ).toLocaleString()}
-                        </strong>
+                  {adjustments.map((adjustment) => {
+                    const adjustmentId = String(adjustment.id);
+                    const isEditing = editingAdjustmentId === adjustmentId;
+                    const isSaving = savingAdjustmentLogId === adjustmentId;
+                    const isDeleting = deletingAdjustmentLogId === adjustmentId;
 
-                        <span style={{ color: "#888", fontSize: 12 }}>
-                          {adjustment.adjusted_by_email || "Admin"}
-                        </span>
-                      </div>
+                    return (
+                      <article key={adjustment.id} style={auditCard}>
+                        <div style={auditHeader}>
+                          <div>
+                            <strong style={{ color: "#ffcc66" }}>
+                              {new Date(adjustment.adjusted_at).toLocaleString()}
+                            </strong>
+                            <span
+                              style={{
+                                display: "block",
+                                marginTop: 3,
+                                color: "#888",
+                                fontSize: 12,
+                              }}
+                            >
+                              {adjustment.adjusted_by_email || "Admin"}
+                            </span>
+                          </div>
 
-                      <p style={auditReason}>
-                        {adjustment.reason}
-                      </p>
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            {!isEditing ? (
+                              <button
+                                type="button"
+                                onClick={() => startAdjustmentLogEdit(adjustment)}
+                                disabled={isDeleting}
+                                style={{ ...cancelButton, padding: "7px 10px", fontSize: 12 }}
+                              >
+                                Edit Log
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={cancelAdjustmentLogEdit}
+                                disabled={isSaving}
+                                style={{ ...cancelButton, padding: "7px 10px", fontSize: 12 }}
+                              >
+                                Cancel
+                              </button>
+                            )}
 
-                      <div style={auditMetrics}>
-                        <span>
-                          Merchandise{" "}
-                          {money(adjustment.merchandise_revenue_before)}
-                          {" → "}
-                          {money(adjustment.merchandise_revenue_after)}
-                        </span>
+                            <button
+                              type="button"
+                              onClick={() => void deleteAdjustmentLog(adjustmentId)}
+                              disabled={isSaving || isDeleting}
+                              style={{
+                                ...removeItemButton,
+                                padding: "7px 10px",
+                                fontSize: 12,
+                                opacity: isSaving || isDeleting ? 0.55 : 1,
+                              }}
+                            >
+                              {isDeleting ? "Deleting..." : "Delete Log"}
+                            </button>
+                          </div>
+                        </div>
 
-                        <span>
-                          Total{" "}
-                          {money(adjustment.customer_total_before)}
-                          {" → "}
-                          {money(adjustment.customer_total_after)}
-                        </span>
+                        {isEditing ? (
+                          <div style={{ display: "grid", gap: 9, marginTop: 12 }}>
+                            <label style={{ display: "grid", gap: 6 }}>
+                              <span style={label}>Log Note / Reason</span>
+                              <textarea
+                                value={adjustmentReasonDraft}
+                                onChange={(event) =>
+                                  setAdjustmentReasonDraft(event.target.value)
+                                }
+                                rows={4}
+                                style={{ ...textarea, minHeight: 92 }}
+                              />
+                            </label>
 
-                        <span>
-                          Profit{" "}
-                          {money(adjustment.profit_before)}
-                          {" → "}
-                          {money(adjustment.profit_after)}
-                        </span>
+                            <button
+                              type="button"
+                              onClick={() => void saveAdjustmentLog(adjustmentId)}
+                              disabled={isSaving}
+                              style={{
+                                ...saveCorrectionButton,
+                                width: "fit-content",
+                                opacity: isSaving ? 0.55 : 1,
+                              }}
+                            >
+                              {isSaving ? "Saving..." : "Save Log"}
+                            </button>
+                          </div>
+                        ) : (
+                          <p style={auditReason}>{adjustment.reason}</p>
+                        )}
 
-                        {adjustment.reward_points_earned_before != null && (
+                        <div style={auditMetrics}>
                           <span>
-                            PugPoints{" "}
-                            {points(
-                              adjustment.reward_points_earned_before
-                            )}
-                            {" → "}
-                            {points(
-                              adjustment.reward_points_earned_after
-                            )}
+                            Merchandise {money(adjustment.merchandise_revenue_before)}
+                            {" → "}{money(adjustment.merchandise_revenue_after)}
                           </span>
-                        )}
-
-                        {safeNumber(
-                          adjustment.reward_balance_adjustment
-                        ) !== 0 && (
-                          <span
-                            style={{
-                              color:
-                                safeNumber(
-                                  adjustment.reward_balance_adjustment
-                                ) < 0
-                                  ? "#ffcc66"
-                                  : "#00ff99",
-                            }}
-                          >
-                            Balance{" "}
-                            {safeNumber(
-                              adjustment.reward_balance_adjustment
-                            ) > 0
-                              ? "+"
-                              : ""}
-                            {points(
-                              adjustment.reward_balance_adjustment
-                            )}
-                          </span>
-                        )}
-
-                        {adjustment.lifetime_spend_before_adjustment != null && (
                           <span>
-                            Lifetime Spend{" "}
-                            {money(
-                              adjustment.lifetime_spend_before_adjustment
-                            )}
-                            {" → "}
-                            {money(
-                              adjustment.lifetime_spend_after_adjustment
-                            )}
+                            Total {money(adjustment.customer_total_before)}
+                            {" → "}{money(adjustment.customer_total_after)}
                           </span>
-                        )}
-
-                        {adjustment.vip_tier_before && (
                           <span>
-                            VIP{" "}
-                            {adjustment.vip_tier_before}
-                            {" → "}
-                            {adjustment.vip_tier_after}
+                            Profit {money(adjustment.profit_before)}
+                            {" → "}{money(adjustment.profit_after)}
                           </span>
-                        )}
-                      </div>
-                    </article>
-                  ))}
+
+                          {adjustment.reward_points_earned_before != null && (
+                            <span>
+                              PugPoints {points(adjustment.reward_points_earned_before)}
+                              {" → "}{points(adjustment.reward_points_earned_after)}
+                            </span>
+                          )}
+
+                          {safeNumber(adjustment.reward_balance_adjustment) !== 0 && (
+                            <span
+                              style={{
+                                color:
+                                  safeNumber(adjustment.reward_balance_adjustment) < 0
+                                    ? "#ffcc66"
+                                    : "#00ff99",
+                              }}
+                            >
+                              Balance {safeNumber(adjustment.reward_balance_adjustment) > 0 ? "+" : ""}
+                              {points(adjustment.reward_balance_adjustment)}
+                            </span>
+                          )}
+
+                          {adjustment.lifetime_spend_before_adjustment != null && (
+                            <span>
+                              Lifetime Spend {money(adjustment.lifetime_spend_before_adjustment)}
+                              {" → "}{money(adjustment.lifetime_spend_after_adjustment)}
+                            </span>
+                          )}
+
+                          {adjustment.vip_tier_before && (
+                            <span>
+                              VIP {adjustment.vip_tier_before}{" → "}{adjustment.vip_tier_after}
+                            </span>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
-              </section>
-            )}
+              )}
+            </section>
+
           </section>
 
           <aside className="order-actions" style={stack}>
