@@ -622,7 +622,7 @@ export default function HomePage() {
         <section style={saleShowcaseSection}>
           <div style={showcaseHeader}>
             <div>
-              <span style={saleShowcaseEyebrow}>CURRENT OFFERS</span>
+              <span style={saleShowcaseEyebrow}></span>
               <h2 style={showcaseTitle}>Current Offers</h2>
               <p style={showcaseText}>
                 Discounted products available now.
