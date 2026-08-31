@@ -1,4 +1,4 @@
-"use client";
+
 
 import { useEffect, useMemo, useState } from "react";
 import type { useAdminInventory } from "../../../hooks/admin/useAdminInventory";
@@ -23,6 +23,10 @@ export default function DosageAccordion({
     selectedProduct,
     options,
     setShowAddOption,
+    showHiddenDosages,
+    setShowHiddenDosages,
+    deleteDosage,
+    restoreDosage,
   } = admin;
 
   const [expandedDosage, setExpandedDosage] = useState<string | null>(null);
@@ -54,6 +58,27 @@ export default function DosageAccordion({
       }));
   }, [options]);
 
+  const activeGroups =
+    grouped.filter(
+      (group) =>
+        group.options.some(
+          (option) =>
+            !option.archived_at
+        )
+    );
+
+  const hiddenGroups =
+    grouped.filter(
+      (group) =>
+        group.options.length > 0 &&
+        group.options.every(
+          (option) =>
+            Boolean(
+              option.archived_at
+            )
+        )
+    );
+
   return (
     <section style={panel}>
       <div style={panelHeader}>
@@ -64,18 +89,54 @@ export default function DosageAccordion({
           </h2>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowAddOption((current) => !current)}
-          disabled={!selectedSlug}
-          style={{
-            ...primaryButton,
-            opacity: selectedSlug ? 1 : 0.5,
-            cursor: selectedSlug ? "pointer" : "not-allowed",
-          }}
-        >
-          + Add Dosage
-        </button>
+        <div style={headerButtonRow}>
+          <button
+            type="button"
+            onClick={() => setShowAddOption((current) => !current)}
+            disabled={!selectedSlug}
+            style={{
+              ...primaryButton,
+              opacity: selectedSlug ? 1 : 0.5,
+              cursor: selectedSlug ? "pointer" : "not-allowed",
+            }}
+          >
+            + Add Dosage
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setShowHiddenDosages(
+                (current) =>
+                  !current
+              )
+            }
+            disabled={
+              !selectedSlug ||
+              hiddenGroups.length ===
+                0
+            }
+            style={{
+              ...hiddenToggleButton,
+              opacity:
+                selectedSlug &&
+                hiddenGroups.length >
+                  0
+                  ? 1
+                  : 0.45,
+              cursor:
+                selectedSlug &&
+                hiddenGroups.length >
+                  0
+                  ? "pointer"
+                  : "not-allowed",
+            }}
+          >
+            {showHiddenDosages
+              ? "HIDE ARCHIVED"
+              : `SHOW HIDDEN (${hiddenGroups.length})`}
+          </button>
+        </div>
       </div>
 
       {!selectedSlug ? (
@@ -94,13 +155,13 @@ export default function DosageAccordion({
             option cards are not mounted until you open that dosage.
           </p>
 
-          {grouped.length === 0 ? (
+          {activeGroups.length === 0 ? (
             <div style={emptyState}>
               <p style={muted}>No pricing options found.</p>
             </div>
           ) : (
             <div style={dosageList}>
-              {grouped.map((group) => {
+              {activeGroups.map((group) => {
                 const expanded = expandedDosage === group.dosage;
 
                 return (
@@ -130,16 +191,36 @@ export default function DosageAccordion({
                         </span>
                       </div>
 
-                      <span
-                        style={{
-                          ...chevron,
-                          transform: expanded
-                            ? "rotate(180deg)"
-                            : "rotate(0deg)",
-                        }}
-                      >
-                        ▼
-                      </span>
+                      <div style={dosageActions}>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+
+                            setExpandedDosage(null);
+                            setSelectedOptionId(null);
+
+                            void deleteDosage(
+                              group.dosage
+                            );
+                          }}
+                          style={deleteDosageButton}
+                          title={`Delete ${group.dosage} dosage`}
+                        >
+                          DELETE DOSAGE
+                        </button>
+
+                        <span
+                          style={{
+                            ...chevron,
+                            transform: expanded
+                              ? "rotate(180deg)"
+                              : "rotate(0deg)",
+                          }}
+                        >
+                          ▼
+                        </span>
+                      </div>
                     </button>
 
                     {expanded && (
@@ -212,6 +293,65 @@ export default function DosageAccordion({
               })}
             </div>
           )}
+
+          {showHiddenDosages &&
+            hiddenGroups.length > 0 && (
+              <section style={hiddenPanel}>
+                <div style={hiddenPanelHeader}>
+                  <div>
+                    <p style={hiddenEyebrow}>
+                      HIDDEN / ARCHIVED
+                    </p>
+                    <h3 style={hiddenTitle}>
+                      Restore a Dosage
+                    </h3>
+                  </div>
+
+                  <span style={hiddenCount}>
+                    {hiddenGroups.length} HIDDEN
+                  </span>
+                </div>
+
+                <div style={hiddenList}>
+                  {hiddenGroups.map(
+                    (group) => (
+                      <div
+                        key={`hidden-${group.dosage}`}
+                        style={hiddenRow}
+                      >
+                        <div>
+                          <strong style={hiddenDosageTitle}>
+                            {group.dosage}
+                          </strong>
+
+                          <div style={hiddenMeta}>
+                            {group.options.length}{" "}
+                            {group.options.length === 1
+                              ? "archived option"
+                              : "archived options"}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpandedDosage(null);
+                            setSelectedOptionId(null);
+
+                            void restoreDosage(
+                              group.dosage
+                            );
+                          }}
+                          style={restoreDosageButton}
+                        >
+                          RESTORE DOSAGE
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
+              </section>
+            )}
         </>
       )}
     </section>
@@ -259,6 +399,107 @@ const primaryButton = {
   background: "linear-gradient(180deg, #2eea6f, #19b857)",
   color: "#ffffff",
   fontWeight: 900,
+  cursor: "pointer",
+};
+
+const headerButtonRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap" as const,
+};
+
+const hiddenToggleButton = {
+  minHeight: 54,
+  padding: "13px 16px",
+  border: "1px solid rgba(255,204,0,.42)",
+  borderRadius: 9,
+  background: "rgba(255,204,0,.06)",
+  color: "#ffcc00",
+  fontSize: 13,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+};
+
+const hiddenPanel = {
+  marginTop: 18,
+  padding: 16,
+  border: "1px solid rgba(255,204,0,.28)",
+  borderRadius: 14,
+  background: "rgba(255,204,0,.035)",
+};
+
+const hiddenPanelHeader = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap" as const,
+  marginBottom: 12,
+};
+
+const hiddenEyebrow = {
+  margin: 0,
+  color: "#ffcc00",
+  fontSize: 11,
+  fontWeight: 950,
+  letterSpacing: ".12em",
+};
+
+const hiddenTitle = {
+  margin: "3px 0 0",
+  color: "#ffffff",
+  fontSize: 20,
+};
+
+const hiddenCount = {
+  padding: "5px 9px",
+  border: "1px solid rgba(255,204,0,.35)",
+  borderRadius: 999,
+  color: "#ffcc00",
+  fontSize: 10,
+  fontWeight: 950,
+};
+
+const hiddenList = {
+  display: "grid",
+  gap: 9,
+};
+
+const hiddenRow = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "12px 13px",
+  border: "1px solid rgba(255,255,255,.10)",
+  borderRadius: 10,
+  background: "rgba(0,0,0,.22)",
+  flexWrap: "wrap" as const,
+};
+
+const hiddenDosageTitle = {
+  color: "#ff75df",
+  fontSize: 18,
+};
+
+const hiddenMeta = {
+  marginTop: 3,
+  color: "#9699a3",
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const restoreDosageButton = {
+  minHeight: 38,
+  padding: "8px 12px",
+  border: "1px solid rgba(0,255,153,.48)",
+  borderRadius: 8,
+  background: "rgba(0,255,153,.08)",
+  color: "#00ff99",
+  fontSize: 11,
+  fontWeight: 950,
+  letterSpacing: ".05em",
   cursor: "pointer",
 };
 
@@ -334,6 +575,26 @@ const optionCount = {
   color: "#7df9ff",
   fontSize: 10,
   fontWeight: 900,
+};
+
+const dosageActions = {
+  display: "flex",
+  alignItems: "center",
+  gap: 12,
+  flexShrink: 0,
+};
+
+const deleteDosageButton = {
+  minHeight: 36,
+  padding: "8px 11px",
+  border: "1px solid rgba(255,93,93,.55)",
+  borderRadius: 8,
+  background: "rgba(255,93,93,.08)",
+  color: "#ff8585",
+  fontSize: 11,
+  fontWeight: 950,
+  letterSpacing: ".06em",
+  cursor: "pointer",
 };
 
 const chevron = {

@@ -214,6 +214,14 @@ export default function CheckoutPage() {
   const sharedPromoApplyingRef =
     useRef(false);
 
+  /*
+   * React development mode may invoke mount effects more than once.
+   * Keep checkout initialization intact, but record only one
+   * checkout_started analytics event per mounted checkout visit.
+   */
+  const checkoutStartedTrackedRef =
+    useRef(false);
+
   const [
     rewardPoints,
     setRewardPoints,
@@ -572,13 +580,20 @@ export default function CheckoutPage() {
     );
 
   useEffect(() => {
-    void trackEvent({
-      event_type:
-        "checkout_started",
+    if (
+      !checkoutStartedTrackedRef.current
+    ) {
+      checkoutStartedTrackedRef.current =
+        true;
 
-      page_path:
-        "/checkout",
-    });
+      void trackEvent({
+        event_type:
+          "checkout_started",
+
+        page_path:
+          "/checkout",
+      });
+    }
 
     async function loadCustomer() {
       setInitializing(

@@ -28,6 +28,7 @@ export function useAdminInventory() {
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [showDeleted, setShowDeleted] = useState(false);
   const [showAddOption, setShowAddOption] = useState(false);
+  const [showHiddenDosages, setShowHiddenDosages] = useState(false);
 
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
@@ -758,6 +759,289 @@ export function useAdminInventory() {
     );
   }
 
+  async function deleteDosage(
+    dosage: string
+  ) {
+    if (
+      !selectedSlug ||
+      !dosage
+    ) {
+      alert(
+        "Select a product and dosage first."
+      );
+      return;
+    }
+
+    const dosageOptions =
+      options.filter(
+        (option) =>
+          option.product_slug ===
+            selectedSlug &&
+          option.dosage ===
+            dosage &&
+          !option.archived_at
+      );
+
+    if (
+      dosageOptions.length ===
+      0
+    ) {
+      alert(
+        "No active options were found for this dosage."
+      );
+      return;
+    }
+
+    const optionLabels =
+      dosageOptions
+        .map(
+          (option) =>
+            option.purchase_type ===
+            "kit"
+              ? "Kit"
+              : "Single Vial"
+        )
+        .join(", ");
+
+    const confirmed =
+      window.confirm(
+        `Delete the ${dosage} dosage?\n\n` +
+          `This will remove ${optionLabels} from the active inventory and storefront. ` +
+          "Historical order records will be preserved."
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const archivedAt =
+      new Date().toISOString();
+
+    const {
+      error:
+        optionError,
+    } =
+      await supabase
+        .from(
+          "product_options"
+        )
+        .update({
+          is_active:
+            false,
+          archived_at:
+            archivedAt,
+          sale_active:
+            false,
+        })
+        .eq(
+          "product_slug",
+          selectedSlug
+        )
+        .eq(
+          "dosage",
+          dosage
+        )
+        .is(
+          "archived_at",
+          null
+        );
+
+    if (
+      optionError
+    ) {
+      alert(
+        optionError.message
+      );
+      return;
+    }
+
+    const {
+      error:
+        inventoryError,
+    } =
+      await supabase
+        .from(
+          "inventory"
+        )
+        .update({
+          quantity:
+            0,
+          status:
+            "out of stock",
+          updated_at:
+            new Date().toISOString(),
+        })
+        .eq(
+          "product_slug",
+          selectedSlug
+        )
+        .eq(
+          "dosage",
+          dosage
+        );
+
+    if (
+      inventoryError
+    ) {
+      console.warn(
+        "Dosage options were archived, but the matching inventory row could not be reset:",
+        inventoryError
+      );
+    }
+
+    setOptions(
+      (previous) =>
+        previous.map(
+          (option) =>
+            option.product_slug ===
+              selectedSlug &&
+            option.dosage ===
+              dosage
+              ? {
+                  ...option,
+                  is_active:
+                    false,
+                  archived_at:
+                    archivedAt,
+                  sale_active:
+                    false,
+                }
+              : option
+        )
+    );
+
+    setInventory(
+      (previous) =>
+        previous.map(
+          (row) =>
+            row.product_slug ===
+              selectedSlug &&
+            row.dosage ===
+              dosage
+              ? {
+                  ...row,
+                  quantity:
+                    0,
+                  status:
+                    "out of stock",
+                }
+              : row
+        )
+    );
+
+    setNotice(
+      `${dosage} dosage deleted from active inventory. Historical order records were preserved.`
+    );
+  }
+
+  async function restoreDosage(
+    dosage: string
+  ) {
+    if (
+      !selectedSlug ||
+      !dosage
+    ) {
+      alert(
+        "Select a product and dosage first."
+      );
+      return;
+    }
+
+    const archivedOptions =
+      options.filter(
+        (option) =>
+          option.product_slug ===
+            selectedSlug &&
+          option.dosage ===
+            dosage &&
+          Boolean(
+            option.archived_at
+          )
+      );
+
+    if (
+      archivedOptions.length ===
+      0
+    ) {
+      alert(
+        "No archived options were found for this dosage."
+      );
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `Restore the ${dosage} dosage?\n\n` +
+          "The dosage will return to Admin Inventory, but its options will remain inactive until you choose to activate them."
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const {
+      error,
+    } =
+      await supabase
+        .from(
+          "product_options"
+        )
+        .update({
+          archived_at:
+            null,
+          is_active:
+            false,
+          sale_active:
+            false,
+        })
+        .eq(
+          "product_slug",
+          selectedSlug
+        )
+        .eq(
+          "dosage",
+          dosage
+        )
+        .not(
+          "archived_at",
+          "is",
+          null
+        );
+
+    if (error) {
+      alert(
+        error.message
+      );
+      return;
+    }
+
+    setOptions(
+      (previous) =>
+        previous.map(
+          (option) =>
+            option.product_slug ===
+              selectedSlug &&
+            option.dosage ===
+              dosage &&
+            option.archived_at
+              ? {
+                  ...option,
+                  archived_at:
+                    null,
+                  is_active:
+                    false,
+                  sale_active:
+                    false,
+                }
+              : option
+        )
+    );
+
+    setNotice(
+      `${dosage} dosage restored to Admin Inventory. Its options are inactive until you activate them.`
+    );
+  }
+
   async function updateOption(
     id: string,
     field: string,
@@ -966,6 +1250,8 @@ export function useAdminInventory() {
     setShowDeleted,
     showAddOption,
     setShowAddOption,
+    showHiddenDosages,
+    setShowHiddenDosages,
     search,
     setSearch,
     notice,
@@ -1002,6 +1288,8 @@ export function useAdminInventory() {
     setOptionActive,
     archiveOption,
     restoreOption,
+    deleteDosage,
+    restoreDosage,
     updateOption,
     updateInventory,
     addOptionAndInventory,

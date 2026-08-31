@@ -8,6 +8,8 @@ import {
   useState,
 } from "react";
 
+import { trackEvent } from "../lib/trackEvent";
+
 export type CartItem = {
   /*
    * Stable database identifier used by the unified pricing engine.
@@ -308,6 +310,39 @@ export function CartProvider({
         ...item,
         quantity: safeQuantity,
       });
+
+    void trackEvent({
+      event_type: "add_to_cart",
+      page_path:
+        typeof window !== "undefined"
+          ? window.location.pathname
+          : undefined,
+      product_slug:
+        normalizedIncoming.slug ||
+        undefined,
+      metadata: {
+        product_name:
+          normalizedIncoming.name,
+        product_option_id:
+          normalizedIncoming.productOptionId ||
+          null,
+        dosage:
+          normalizedIncoming.dosage,
+        purchase_type:
+          normalizedIncoming.purchaseType,
+        quantity: safeQuantity,
+        unit_price:
+          normalizedIncoming.price,
+        regular_unit_price:
+          normalizedIncoming.regularPrice,
+        sale_unit_price:
+          normalizedIncoming.salePrice,
+        was_on_sale:
+          normalizedIncoming.wasOnSale,
+        sale_percent:
+          normalizedIncoming.salePercent,
+      },
+    });
 
     setCart(
       (previousCart) => {

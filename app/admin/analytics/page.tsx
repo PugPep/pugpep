@@ -74,24 +74,35 @@ export default function AnalyticsPage() {
         return;
       }
 
-      if (error) {
+      if (error || !data.user) {
         setNotice(
-          error.message
+          error?.message ||
+            "You must be signed in to view site analytics."
         );
+        setAuthorized(false);
+        setLoading(false);
+        return;
       }
 
-            const {
-              data: adminAccess,
-              error: adminAccessError,
-            } = await supabase.rpc("is_pugpep_admin");
+      const {
+        data: adminAccess,
+        error: adminAccessError,
+      } = await supabase.rpc("is_pugpep_admin");
 
-            if (adminAccessError || !adminAccess) {
-              setAuthorized(false);
-              setLoading(false);
-              return;
-            }
+      if (
+        adminAccessError ||
+        !adminAccess
+      ) {
+        setNotice(
+          adminAccessError?.message ||
+            "Admin access is required."
+        );
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
 
-            setAuthorized(true);
+      setAuthorized(true);
       await loadEvents();
 
       if (!cancelled) {
@@ -446,11 +457,11 @@ export default function AnalyticsPage() {
           <div style={loadingRing} />
 
           <h1 style={pageTitle}>
-            Loading Analytics
+            Loading Site Analytics
           </h1>
 
           <p style={muted}>
-            Preparing the analytics workspace...
+            Checking your site-event tracking and preparing the analytics workspace...
           </p>
         </div>
       </main>
@@ -470,7 +481,7 @@ export default function AnalyticsPage() {
           </h1>
 
           <p style={muted}>
-            You must be logged in as the administrator.
+            You must be signed in with an admin or super-admin account.
           </p>
         </div>
       </main>
@@ -480,30 +491,41 @@ export default function AnalyticsPage() {
   return (
     <main style={page}>
       <div style={container}>
-        <header style={header}>
-          <div>
+        <header style={heroPanel}>
+          <div style={heroGlowPink} />
+          <div style={heroGlowCyan} />
+
+          <div style={heroCopy}>
+            <div style={heroTopline}>
+              <span style={heroPill}>PUGPEP ADMIN</span>
+              <span style={heroLiveDot}>● SITE BEHAVIOR</span>
+            </div>
+
             <p style={eyebrow}>
-              CONTROL CENTER
+              CUSTOMER JOURNEY
             </p>
 
             <h1 style={pageTitle}>
-              Analytics Dashboard
+              Site Analytics
             </h1>
 
             <p style={subtitle}>
-              Review customer behavior, checkout activity, payment interest, promo usage, and recent site events.
+              Understand how visitors move from product views to cart, checkout,
+              payment selection, and confirmed orders.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              void loadEvents();
-            }}
-            style={refreshButton}
-          >
-            Refresh Analytics
-          </button>
+          <div style={heroActions}>
+            <button
+              type="button"
+              onClick={() => {
+                void loadEvents();
+              }}
+              style={refreshButton}
+            >
+              Refresh Events
+            </button>
+          </div>
         </header>
 
         {notice && (
@@ -524,7 +546,57 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        <section style={statsGrid}>
+        <section style={healthPanel}>
+          <div style={healthCopy}>
+            <p style={sectionEyebrow}>TRACKING STATUS</p>
+            <h2 style={sectionTitle}>
+              {events.length > 0
+                ? "Analytics Events Connected"
+                : "No Analytics Events Found"}
+            </h2>
+            <p style={healthText}>
+              {events.length > 0
+                ? `${events.length} recent site events are available in analytics_events.`
+                : "The page is connected, but analytics_events returned no rows. This usually means event tracking has not written data yet, or database access is preventing rows from being returned."}
+            </p>
+          </div>
+
+          <span
+            style={{
+              ...healthBadge,
+              color:
+                events.length > 0
+                  ? "#00ff99"
+                  : "#ffcc00",
+              borderColor:
+                events.length > 0
+                  ? "rgba(0,255,153,.38)"
+                  : "rgba(255,204,0,.38)",
+              background:
+                events.length > 0
+                  ? "rgba(0,255,153,.08)"
+                  : "rgba(255,204,0,.08)",
+            }}
+          >
+            {events.length > 0
+              ? "TRACKING ACTIVE"
+              : "NO EVENT DATA"}
+          </span>
+        </section>
+
+        <section style={statsPanel}>
+          <div style={panelHeading}>
+            <div>
+              <p style={sectionEyebrow}>FUNNEL ACTIVITY</p>
+              <h2 style={sectionTitle}>Event Overview</h2>
+            </div>
+
+            <span style={resultBadge}>
+              Latest {events.length} events
+            </span>
+          </div>
+
+          <div style={statsGrid}>
           <StatCard
             label="Total Events"
             value={String(
@@ -580,9 +652,18 @@ export default function AnalyticsPage() {
             )}
             accent="#ff75df"
           />
+          </div>
         </section>
 
-        <section style={conversionGrid}>
+        <section style={conversionPanel}>
+          <div style={panelHeading}>
+            <div>
+              <p style={sectionEyebrow}>CONVERSION FUNNEL</p>
+              <h2 style={sectionTitle}>Journey Conversion</h2>
+            </div>
+          </div>
+
+          <div style={conversionGrid}>
           <ConversionCard
             label="Product View → Cart"
             value={`${stats.cartConversion.toFixed(
@@ -609,6 +690,7 @@ export default function AnalyticsPage() {
             description="Confirmed orders divided by checkout starts."
             accent="#00ff99"
           />
+          </div>
         </section>
 
         <div style={summaryLayout}>
@@ -1050,12 +1132,10 @@ function Meta({
 
 const page = {
   minHeight: "100vh",
-  padding:
-    "clamp(18px, 4vw, 34px)",
+  padding: "clamp(18px, 3vw, 34px)",
   background:
-    "radial-gradient(circle at 12% 0%, rgba(255,47,208,.14), transparent 27%), radial-gradient(circle at 88% 4%, rgba(0,217,255,.14), transparent 30%), #000",
+    "radial-gradient(circle at 12% 0%, rgba(255,69,216,.055), transparent 26%), radial-gradient(circle at 88% 4%, rgba(0,217,255,.055), transparent 26%), #030305",
   color: "#ffffff",
-  fontSize: 16,
 };
 
 const container = {
@@ -1064,15 +1144,82 @@ const container = {
   margin: "0 auto",
 };
 
-const header = {
+const heroPanel = {
+  position: "relative" as const,
+  overflow: "hidden",
   display: "flex",
-  justifyContent:
-    "space-between",
-  alignItems:
-    "flex-start",
-  gap: 20,
-  flexWrap:
-    "wrap" as const,
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 24,
+  padding: "clamp(22px, 3vw, 30px)",
+  border: "1px solid rgba(255,255,255,.10)",
+  borderRadius: 22,
+  background:
+    "linear-gradient(135deg, rgba(255,69,216,.10), rgba(0,217,255,.065) 46%, rgba(0,255,153,.055))",
+  boxShadow:
+    "0 24px 70px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.04)",
+  flexWrap: "wrap" as const,
+};
+
+const heroGlowPink = {
+  position: "absolute" as const,
+  width: 260,
+  height: 260,
+  top: -150,
+  left: -70,
+  borderRadius: "50%",
+  background: "rgba(255,69,216,.14)",
+  filter: "blur(55px)",
+  pointerEvents: "none" as const,
+};
+
+const heroGlowCyan = {
+  position: "absolute" as const,
+  width: 280,
+  height: 280,
+  right: -90,
+  bottom: -175,
+  borderRadius: "50%",
+  background: "rgba(0,217,255,.13)",
+  filter: "blur(60px)",
+  pointerEvents: "none" as const,
+};
+
+const heroCopy = {
+  position: "relative" as const,
+  zIndex: 1,
+  minWidth: 0,
+};
+
+const heroTopline = {
+  marginBottom: 10,
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap" as const,
+};
+
+const heroPill = {
+  padding: "5px 8px",
+  border: "1px solid rgba(255,69,216,.34)",
+  borderRadius: 999,
+  background: "rgba(255,69,216,.08)",
+  color: "#ff75df",
+  fontSize: 9,
+  fontWeight: 1000,
+  letterSpacing: ".10em",
+};
+
+const heroLiveDot = {
+  color: "#00ff99",
+  fontSize: 9,
+  fontWeight: 1000,
+  letterSpacing: ".08em",
+};
+
+const heroActions = {
+  position: "relative" as const,
+  zIndex: 1,
 };
 
 const eyebrow = {
@@ -1084,34 +1231,32 @@ const eyebrow = {
 };
 
 const pageTitle = {
-  margin: "7px 0 0",
-  color: "#ff45d8",
-  fontSize:
-    "clamp(44px, 7vw, 64px)",
-  letterSpacing: "-.035em",
-  textShadow:
-    "0 0 18px rgba(255,69,216,.22)",
+  margin: "5px 0 0",
+  color: "#ffffff",
+  fontSize: "clamp(34px, 4.4vw, 52px)",
+  letterSpacing: "-.04em",
+  lineHeight: .98,
 };
 
 const subtitle = {
-  maxWidth: 840,
-  margin: "12px 0 0",
-  color: "#c1c1c9",
-  fontSize: 18,
-  lineHeight: 1.7,
+  maxWidth: 760,
+  margin: "11px 0 0",
+  color: "#9aa0aa",
+  fontSize: 14,
+  lineHeight: 1.55,
 };
 
 const refreshButton = {
-  minHeight: 52,
-  padding: "13px 18px",
-  border:
-    "1px solid rgba(0,217,255,.48)",
-  borderRadius: 10,
+  minHeight: 40,
+  padding: "9px 14px",
+  border: "1px solid rgba(0,255,153,.50)",
+  borderRadius: 11,
   background:
-    "rgba(0,217,255,.06)",
-  color: "#7df9ff",
-  fontSize: 16,
-  fontWeight: 900,
+    "linear-gradient(135deg, rgba(0,255,153,.18), rgba(0,217,255,.10))",
+  color: "#00ff99",
+  boxShadow: "0 0 22px rgba(0,255,153,.08)",
+  fontSize: 12,
+  fontWeight: 950,
   cursor: "pointer",
 };
 
@@ -1142,12 +1287,88 @@ const noticeClose = {
   cursor: "pointer",
 };
 
+const healthPanel = {
+  marginTop: 18,
+  padding: 18,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 16,
+  border: "1px solid rgba(255,255,255,.09)",
+  borderRadius: 18,
+  background:
+    "linear-gradient(145deg, rgba(10,10,15,.97), rgba(5,5,8,.99))",
+  flexWrap: "wrap" as const,
+};
+
+const healthCopy = {
+  minWidth: 0,
+};
+
+const healthText = {
+  maxWidth: 800,
+  margin: "7px 0 0",
+  color: "#858b95",
+  fontSize: 12,
+  lineHeight: 1.55,
+};
+
+const healthBadge = {
+  padding: "7px 10px",
+  border: "1px solid",
+  borderRadius: 999,
+  fontSize: 9,
+  fontWeight: 1000,
+  letterSpacing: ".06em",
+  whiteSpace: "nowrap" as const,
+};
+
+const statsPanel = {
+  marginTop: 18,
+  padding: 18,
+  border: "1px solid rgba(255,255,255,.09)",
+  borderRadius: 18,
+  background:
+    "linear-gradient(145deg, rgba(10,10,15,.97), rgba(5,5,8,.99))",
+};
+
+const conversionPanel = {
+  marginTop: 18,
+  padding: 18,
+  border: "1px solid rgba(255,255,255,.09)",
+  borderRadius: 18,
+  background:
+    "linear-gradient(145deg, rgba(10,10,15,.97), rgba(5,5,8,.99))",
+};
+
+const panelHeading = {
+  marginBottom: 13,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap" as const,
+};
+
+const sectionEyebrow = {
+  margin: 0,
+  color: "#ff75df",
+  fontSize: 9,
+  fontWeight: 1000,
+  letterSpacing: ".12em",
+};
+
+const sectionTitle = {
+  margin: "4px 0 0",
+  color: "#ffffff",
+  fontSize: 20,
+  lineHeight: 1.1,
+};
+
 const statsGrid = {
-  marginTop: 22,
   display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: 15,
+  gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))",
+  gap: 10,
 };
 
 const statCard = {
@@ -1215,16 +1436,12 @@ const summaryLayout = {
 };
 
 const panel = {
-  marginTop: 22,
-  padding:
-    "clamp(18px, 3vw, 24px)",
-  border:
-    "1px solid rgba(0,217,255,.32)",
+  padding: 18,
+  border: "1px solid rgba(255,255,255,.09)",
   borderRadius: 18,
   background:
-    "linear-gradient(145deg, rgba(8,8,12,.96), rgba(15,8,18,.94))",
-  boxShadow:
-    "0 0 20px rgba(0,217,255,.07)",
+    "linear-gradient(145deg, rgba(10,10,15,.97), rgba(5,5,8,.99))",
+  boxShadow: "0 18px 52px rgba(0,0,0,.20)",
 };
 
 const panelHeader = {
@@ -1238,19 +1455,9 @@ const panelHeader = {
   marginBottom: 18,
 };
 
-const sectionEyebrow = {
-  margin: 0,
-  color: "#00d9ff",
-  fontSize: 12,
-  fontWeight: 900,
-  letterSpacing: ".13em",
-};
 
-const sectionTitle = {
-  margin: "5px 0 0",
-  color: "#7df9ff",
-  fontSize: 31,
-};
+
+
 
 const resultBadge = {
   padding: "7px 11px",

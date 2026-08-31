@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createClient,
   enforceAuthPersistencePolicy,
@@ -12,6 +12,7 @@ import {
   type StorefrontSale,
 } from "../../../lib/storefrontCampaigns";
 import { useCart } from "../../cartContext";
+import { trackEvent } from "../../../lib/trackEvent";
 
 type Product = {
   id: string;
@@ -99,6 +100,13 @@ export default function ProductDetailPage() {
 
   const supabase = useMemo(() => createClient(), []);
   const { addToCart } = useCart();
+
+  /*
+   * React development mode may invoke effects more than once.
+   * Keep one product-view event per mounted product page.
+   */
+  const trackedProductViewRef =
+    useRef<string | null>(null);
 
   const [product, setProduct] = useState<Product | null>(null);
   const [options, setOptions] = useState<ProductOption[]>([]);
@@ -522,6 +530,30 @@ export default function ProductDetailPage() {
       setProduct(
         loadedProduct
       );
+
+      if (
+        trackedProductViewRef.current !==
+        loadedProduct.slug
+      ) {
+        trackedProductViewRef.current =
+          loadedProduct.slug;
+
+        void trackEvent({
+          event_type:
+            "product_view",
+          page_path:
+            `/products/${loadedProduct.slug}`,
+          product_slug:
+            loadedProduct.slug,
+          metadata: {
+            product_name:
+              loadedProduct.name,
+            category:
+              loadedProduct.category ||
+              null,
+          },
+        });
+      }
 
       saveRecentlyViewed(
         loadedProduct
