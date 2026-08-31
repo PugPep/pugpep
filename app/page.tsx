@@ -1,7 +1,5 @@
 ﻿"use client";
 
-
-
 import Image from "next/image";
 import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -343,8 +341,8 @@ export default function HomePage() {
   const catalogGroups = [
     {
       key: "compounds",
-      eyebrow: "RESEARCH COMPOUNDS",
-      title: "Compounds",
+      eyebrow: "",
+      title: "",
       products: visibleProducts.filter((product) => {
         const category = String(product.category || "").toLowerCase().trim();
         return (
@@ -365,7 +363,7 @@ export default function HomePage() {
     },
     {
       key: "materials",
-      eyebrow: "LAB SUPPORT",
+      eyebrow: "",
       title: "Lab Materials",
       products: visibleProducts.filter((product) => {
         const category = String(product.category || "").toLowerCase().trim();
@@ -534,7 +532,7 @@ export default function HomePage() {
         <section style={showcaseSection}>
           <div style={showcaseHeader}>
             <div>
-              <span style={showcaseEyebrow}>LAB HIGHLIGHTS</span>
+              <span style={showcaseEyebrow}></span>
               <h2 style={showcaseTitle}>Featured &amp; New</h2>
               <p style={showcaseText}>
                 A compact look at highlighted and recently added research products.
@@ -709,7 +707,7 @@ export default function HomePage() {
       <section id="catalog" style={catalogShell}>
         <div style={catalogHeader}>
           <div>
-            <span style={catalogEyebrow}>RESEARCH CATALOG</span>
+            <span style={catalogEyebrow}></span>
             <h2 style={catalogTitle}>Browse the Full Catalog</h2>
           </div>
 
