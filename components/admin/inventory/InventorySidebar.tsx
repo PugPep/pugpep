@@ -15,6 +15,7 @@ export default function InventorySidebar({
     search,
     setSearch,
     selectProduct,
+    unhideProduct,
   } = admin;
 
   return (
@@ -78,20 +79,47 @@ export default function InventorySidebar({
                         <small>{product.slug}</small>
                       </span>
 
-                      <span
-                        style={{
-                          ...productCategory,
-                          color: product.is_active
-                            ? "#8f8f98"
-                            : "#ffcc00",
-                        }}
-                      >
-                        {product.is_active
-                          ? product.category === "lab-material"
+                      {product.is_active ? (
+                        <span
+                          style={{
+                            ...productCategory,
+                            color: "#8f8f98",
+                          }}
+                        >
+                          {product.category === "lab-material"
                             ? "Material"
-                            : "Compound"
-                          : "HIDDEN"}
-                      </span>
+                            : "Compound"}
+                        </span>
+                      ) : (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(event) => {
+                            event.stopPropagation();
+
+                            void unhideProduct(
+                              product.id
+                            );
+                          }}
+                          onKeyDown={(event) => {
+                            if (
+                              event.key === "Enter" ||
+                              event.key === " "
+                            ) {
+                              event.preventDefault();
+                              event.stopPropagation();
+
+                              void unhideProduct(
+                                product.id
+                              );
+                            }
+                          }}
+                          style={hiddenProductButton}
+                          title="Click to unhide this product"
+                        >
+                          UNHIDE
+                        </span>
+                      )}
                     </button>
                   );
                 })
@@ -186,6 +214,19 @@ const productListCopy = {
   minWidth: 0,
   display: "grid",
   gap: 3,
+};
+
+const hiddenProductButton = {
+  flexShrink: 0,
+  padding: "6px 9px",
+  border: "1px solid rgba(255,204,0,.48)",
+  borderRadius: 999,
+  background: "rgba(255,204,0,.08)",
+  color: "#ffcc00",
+  fontSize: 10,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+  cursor: "pointer",
 };
 
 const productCategory = {

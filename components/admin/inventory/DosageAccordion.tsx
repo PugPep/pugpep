@@ -1,4 +1,4 @@
-
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import type { useAdminInventory } from "../../../hooks/admin/useAdminInventory";
@@ -27,6 +27,8 @@ export default function DosageAccordion({
     setShowHiddenDosages,
     deleteDosage,
     restoreDosage,
+    archiveOption,
+    restoreOption,
   } = admin;
 
   const [expandedDosage, setExpandedDosage] = useState<string | null>(null);
@@ -226,50 +228,128 @@ export default function DosageAccordion({
                     {expanded && (
                       <div style={dosageBody}>
                         <div style={optionChoiceGrid}>
-                          {group.options.map((option) => {
+                          {group.options
+                          .filter((option) => !option.archived_at)
+                          .map((option) => {
                             const selected =
                               selectedOptionId === option.id;
 
                             return (
-                              <button
+                              <div
                                 key={option.id}
-                                type="button"
-                                onClick={() =>
-                                  setSelectedOptionId((current) =>
-                                    current === option.id
-                                      ? null
-                                      : option.id
-                                  )
-                                }
-                                style={{
-                                  ...optionChoiceButton,
-                                  borderColor: selected
-                                    ? "#00ff99"
-                                    : "rgba(255,255,255,.14)",
-                                  background: selected
-                                    ? "rgba(0,255,153,.08)"
-                                    : "rgba(255,255,255,.025)",
-                                  color: selected
-                                    ? "#00ff99"
-                                    : "#ffffff",
-                                }}
-                                aria-expanded={selected}
+                                style={optionChoiceRow}
                               >
-                                <span style={optionChoiceTitle}>
-                                  {option.purchase_type === "kit"
-                                    ? "Kit"
-                                    : "Single Vial"}
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setSelectedOptionId((current) =>
+                                      current === option.id
+                                        ? null
+                                        : option.id
+                                    )
+                                  }
+                                  style={{
+                                    ...optionChoiceButton,
+                                    borderColor: selected
+                                      ? "#00ff99"
+                                      : "rgba(255,255,255,.14)",
+                                    background: selected
+                                      ? "rgba(0,255,153,.08)"
+                                      : "rgba(255,255,255,.025)",
+                                    color: selected
+                                      ? "#00ff99"
+                                      : "#ffffff",
+                                  }}
+                                  aria-expanded={selected}
+                                >
+                                  <span style={optionChoiceTitle}>
+                                    {option.purchase_type === "kit"
+                                      ? "Kit"
+                                      : "Single Vial"}
+                                  </span>
 
-                                <span style={optionChoiceChevron}>
-                                  {selected ? "▲" : "▼"}
-                                </span>
-                              </button>
+                                  <span style={optionChoiceChevron}>
+                                    {selected ? "▲" : "▼"}
+                                  </span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (
+                                      selectedOptionId ===
+                                      option.id
+                                    ) {
+                                      setSelectedOptionId(
+                                        null
+                                      );
+                                    }
+
+                                    void archiveOption(
+                                      option.id
+                                    );
+                                  }}
+                                  style={deleteOptionButton}
+                                  title={`Delete ${group.dosage} ${
+                                    option.purchase_type === "kit"
+                                      ? "Kit"
+                                      : "Single Vial"
+                                  }`}
+                                >
+                                  DELETE
+                                </button>
+                              </div>
                             );
                           })}
                         </div>
 
-                        {group.options.map((option) =>
+                        {group.options.some(
+                          (option) =>
+                            Boolean(
+                              option.archived_at
+                            )
+                        ) && (
+                          <div style={hiddenOptionList}>
+                            {group.options
+                              .filter(
+                                (option) =>
+                                  Boolean(
+                                    option.archived_at
+                                  )
+                              )
+                              .map(
+                                (option) => (
+                                  <div
+                                    key={`archived-${option.id}`}
+                                    style={hiddenOptionRow}
+                                  >
+                                    <span style={hiddenOptionLabel}>
+                                      {option.purchase_type === "kit"
+                                        ? "Kit"
+                                        : "Single Vial"}{" "}
+                                      — hidden
+                                    </span>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void restoreOption(
+                                          option.id
+                                        );
+                                      }}
+                                      style={restoreOptionButton}
+                                    >
+                                      RESTORE
+                                    </button>
+                                  </div>
+                                )
+                              )}
+                          </div>
+                        )}
+
+                        {group.options
+                          .filter((option) => !option.archived_at)
+                          .map((option) =>
                           selectedOptionId === option.id ? (
                             <div key={option.id} style={optionShell}>
                               <div style={optionHeading}>
@@ -614,6 +694,62 @@ const optionChoiceGrid = {
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 10,
+};
+
+const optionChoiceRow = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  gap: 8,
+  alignItems: "stretch",
+};
+
+const deleteOptionButton = {
+  minWidth: 76,
+  padding: "9px 10px",
+  border: "1px solid rgba(255,93,93,.55)",
+  borderRadius: 10,
+  background: "rgba(255,93,93,.08)",
+  color: "#ff8585",
+  fontSize: 10,
+  fontWeight: 950,
+  letterSpacing: ".05em",
+  cursor: "pointer",
+};
+
+const hiddenOptionList = {
+  display: "grid",
+  gap: 8,
+  padding: 10,
+  border: "1px solid rgba(255,204,0,.22)",
+  borderRadius: 10,
+  background: "rgba(255,204,0,.035)",
+};
+
+const hiddenOptionRow = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  flexWrap: "wrap" as const,
+};
+
+const hiddenOptionLabel = {
+  color: "#ffcc00",
+  fontSize: 12,
+  fontWeight: 850,
+};
+
+const restoreOptionButton = {
+  minHeight: 34,
+  padding: "7px 10px",
+  border: "1px solid rgba(0,255,153,.46)",
+  borderRadius: 8,
+  background: "rgba(0,255,153,.08)",
+  color: "#00ff99",
+  fontSize: 10,
+  fontWeight: 950,
+  letterSpacing: ".05em",
+  cursor: "pointer",
 };
 
 const optionChoiceButton = {
