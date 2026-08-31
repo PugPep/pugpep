@@ -9,9 +9,6 @@ import {
 
 import { createClient } from "../lib/supabaseClient";
 
-const ADMIN_EMAIL =
-  "pugpep99@gmail.com";
-
 export default function AdminMenu() {
   const supabase = useMemo(
     () => createClient(),
@@ -19,6 +16,9 @@ export default function AdminMenu() {
   );
 
   const [isAdmin, setIsAdmin] =
+    useState(false);
+
+  const [isSuperAdmin, setIsSuperAdmin] =
     useState(false);
 
   const [open, setOpen] =
@@ -37,15 +37,45 @@ export default function AdminMenu() {
         return;
       }
 
-      const email =
-        session?.user?.email;
+      if (!session?.user) {
+        setIsAdmin(false);
+        setIsSuperAdmin(false);
+        setOpen(false);
+        return;
+      }
 
-      setIsAdmin(
-        Boolean(
-          email &&
-            email.toLowerCase() ===
-              ADMIN_EMAIL.toLowerCase()
-        )
+      const [
+        adminResult,
+        superAdminResult,
+      ] = await Promise.all([
+        supabase.rpc("is_pugpep_admin"),
+        supabase.rpc("is_pugpep_super_admin"),
+      ]);
+
+      if (!mounted) {
+        return;
+      }
+
+      if (adminResult.error) {
+        console.error(
+          "Admin menu role check failed:",
+          adminResult.error
+        );
+        setIsAdmin(false);
+        setIsSuperAdmin(false);
+        return;
+      }
+
+      if (superAdminResult.error) {
+        console.error(
+          "Super admin menu role check failed:",
+          superAdminResult.error
+        );
+      }
+
+      setIsAdmin(Boolean(adminResult.data));
+      setIsSuperAdmin(
+        Boolean(superAdminResult.data)
       );
     }
 
@@ -60,20 +90,14 @@ export default function AdminMenu() {
             return;
           }
 
-          const email =
-            session?.user?.email;
-
-          setIsAdmin(
-            Boolean(
-              email &&
-                email.toLowerCase() ===
-                  ADMIN_EMAIL.toLowerCase()
-            )
-          );
-
           if (!session) {
+            setIsAdmin(false);
+            setIsSuperAdmin(false);
             setOpen(false);
+            return;
           }
+
+          void checkAdmin();
         }
       );
 
@@ -149,6 +173,17 @@ export default function AdminMenu() {
           >
             Orders
           </Link>
+
+          {isSuperAdmin && (
+            <Link
+              href="/admin/users"
+              style={item}
+              onClick={closeMenu}
+              role="menuitem"
+            >
+              Admin Users
+            </Link>
+          )}
 
           <Link
             href="/admin/customers"

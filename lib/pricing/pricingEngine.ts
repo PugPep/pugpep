@@ -30,8 +30,6 @@ import {
   uniqueWarnings,
 } from "./utils";
 
-const ADMIN_EMAIL =
-  "pugpep99@gmail.com";
 
 type MarketingRulesRow =
   MarketingRulesRecord & {
@@ -109,9 +107,14 @@ async function requireMatchingCustomer({
     );
   }
 
+  const {
+    data: adminAccess,
+    error: adminAccessError,
+  } = await supabase.rpc("is_pugpep_admin");
+
   const isAdmin =
-    user.email?.toLowerCase() ===
-    ADMIN_EMAIL.toLowerCase();
+    !adminAccessError &&
+    Boolean(adminAccess);
 
   if (
     user.id !== customerId &&

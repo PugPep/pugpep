@@ -9,7 +9,6 @@ import {
 
 import { createClient } from "../../../../lib/supabaseClient";
 
-const ADMIN_EMAIL = "pugpep99@gmail.com";
 
 type CampaignType =
   | "percent"
@@ -175,20 +174,18 @@ export default function CampaignsPage() {
       } =
         await supabase.auth.getSession();
 
-      const email =
-        session?.user?.email;
+            const {
+              data: adminAccess,
+              error: adminAccessError,
+            } = await supabase.rpc("is_pugpep_admin");
 
-      if (
-        !email ||
-        email.toLowerCase() !==
-          ADMIN_EMAIL.toLowerCase()
-      ) {
-        setAuthorized(false);
-        setLoading(false);
-        return;
-      }
+            if (adminAccessError || !adminAccess) {
+              setAuthorized(false);
+              setLoading(false);
+              return;
+            }
 
-      setAuthorized(true);
+            setAuthorized(true);
 
       await loadCampaigns();
       setLoading(false);

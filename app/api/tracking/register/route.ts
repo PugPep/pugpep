@@ -5,8 +5,6 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ADMIN_EMAIL =
-  "pugpep99@gmail.com";
 
 const AFTERSHIP_BASE_URL =
   process.env.AFTERSHIP_API_BASE_URL ||
@@ -72,11 +70,23 @@ async function verifyAdmin(
       token
     );
 
+  if (error || !data.user) {
+    return null;
+  }
+
+  const {
+    data: roleRow,
+    error: roleError,
+  } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", data.user.id)
+    .maybeSingle();
+
   if (
-    error ||
-    !data.user?.email ||
-    data.user.email.toLowerCase() !==
-      ADMIN_EMAIL.toLowerCase()
+    roleError ||
+    !roleRow ||
+    !["admin", "super_admin"].includes(roleRow.role)
   ) {
     return null;
   }

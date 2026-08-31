@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../../../lib/supabaseClient";
 
-const ADMIN_EMAIL = "pugpep99@gmail.com";
 
 type NexusRow = {
   state_code: string;
@@ -126,19 +125,18 @@ export default function AdminNexusPage() {
   useEffect(() => {
     async function init() {
       const { data, error } = await supabase.auth.getUser();
-      const email = data.user?.email;
+            const {
+              data: adminAccess,
+              error: adminAccessError,
+            } = await supabase.rpc("is_pugpep_admin");
 
-      if (
-        error ||
-        !email ||
-        email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()
-      ) {
-        setAuthorized(false);
-        setLoading(false);
-        return;
-      }
+            if (adminAccessError || !adminAccess) {
+              setAuthorized(false);
+              setLoading(false);
+              return;
+            }
 
-      setAuthorized(true);
+            setAuthorized(true);
       await loadNexus();
       setLoading(false);
     }

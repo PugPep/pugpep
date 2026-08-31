@@ -9,7 +9,6 @@ import type {
   InventoryItem,
 } from "../../lib/admin/inventoryTypes";
 
-const ADMIN_EMAIL = "pugpep99@gmail.com";
 
 export function useAdminInventory() {
   const supabase = useMemo(() => createClient(), []);
@@ -71,15 +70,18 @@ export function useAdminInventory() {
   useEffect(() => {
     async function init() {
       const { data } = await supabase.auth.getUser();
-      const email = data.user?.email;
+            const {
+              data: adminAccess,
+              error: adminAccessError,
+            } = await supabase.rpc("is_pugpep_admin");
 
-      if (!email || email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
-        setAuthorized(false);
-        setLoading(false);
-        return;
-      }
+            if (adminAccessError || !adminAccess) {
+              setAuthorized(false);
+              setLoading(false);
+              return;
+            }
 
-      setAuthorized(true);
+            setAuthorized(true);
       await loadProducts();
       await loadDeletedProducts();
       setLoading(false);

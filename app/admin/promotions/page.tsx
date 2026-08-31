@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../../../lib/supabaseClient";
 
-const ADMIN_EMAIL = "pugpep99@gmail.com";
 
 type HubCard = {
   title: string;
@@ -86,20 +85,26 @@ export default function PromotionCenterHubPage() {
         data: { session },
       } = await supabase.auth.getSession();
 
-      if (!mounted) {
+      if (!mounted) return;
+
+      if (!session?.user) {
+        setAuthorized(false);
+        setLoading(false);
         return;
       }
 
-      const email = session?.user?.email;
+      const {
+        data: adminAccess,
+        error: adminAccessError,
+      } = await supabase.rpc("is_pugpep_admin");
 
-      setAuthorized(
-        Boolean(
-          email &&
-            email.toLowerCase() ===
-              ADMIN_EMAIL.toLowerCase()
-        )
-      );
+      if (!mounted) return;
 
+      if (adminAccessError) {
+        console.error("Admin role check failed:", adminAccessError);
+      }
+
+      setAuthorized(!adminAccessError && Boolean(adminAccess));
       setLoading(false);
     }
 
@@ -107,25 +112,15 @@ export default function PromotionCenterHubPage() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (!mounted) {
-          return;
-        }
-
-        const email = session?.user?.email;
-
-        setAuthorized(
-          Boolean(
-            email &&
-              email.toLowerCase() ===
-                ADMIN_EMAIL.toLowerCase()
-          )
-        );
-
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      if (!session) {
+        setAuthorized(false);
         setLoading(false);
+        return;
       }
-    );
+      void verifyAdmin();
+    });
 
     return () => {
       mounted = false;

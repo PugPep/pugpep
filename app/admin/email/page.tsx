@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import emailjs from "emailjs-com";
 import { createClient } from "../../../lib/supabaseClient";
 
-const ADMIN_EMAIL = "pugpep99@gmail.com";
 
 const EMAILJS_SERVICE_ID = "service_quxnkin";
 const EMAILJS_PUBLIC_KEY = "yc_0cE0Mcl3tfzc11";
@@ -26,13 +25,17 @@ export default function AdminEmailPage() {
   useEffect(() => {
     async function checkAdmin() {
       const { data } = await supabase.auth.getUser();
-      const email = data.user?.email;
+            const {
+              data: adminAccess,
+              error: adminAccessError,
+            } = await supabase.rpc("is_pugpep_admin");
 
-      if (email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-        setAuthorized(true);
-      }
+            setAuthorized(
+              !adminAccessError &&
+              Boolean(adminAccess)
+            );
 
-      setLoading(false);
+            setLoading(false);
     }
 
     checkAdmin();

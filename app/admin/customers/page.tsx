@@ -9,8 +9,6 @@ import {
 
 import { createClient } from "../../../lib/supabaseClient";
 
-const ADMIN_EMAIL =
-  "pugpep99@gmail.com";
 
 type Customer = {
   id: string;
@@ -241,20 +239,18 @@ export default function AdminCustomersPage() {
         );
       }
 
-      const email =
-        user?.email;
+            const {
+              data: adminAccess,
+              error: adminAccessError,
+            } = await supabase.rpc("is_pugpep_admin");
 
-      if (
-        !email ||
-        email.toLowerCase() !==
-          ADMIN_EMAIL.toLowerCase()
-      ) {
-        setAuthorized(false);
-        setLoading(false);
-        return;
-      }
+            if (adminAccessError || !adminAccess) {
+              setAuthorized(false);
+              setLoading(false);
+              return;
+            }
 
-      setAuthorized(true);
+            setAuthorized(true);
       await loadAll();
 
       if (

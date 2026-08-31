@@ -1,12 +1,12 @@
 "use client";
 
+
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import emailjs from "emailjs-com";
 import { createClient } from "../../lib/supabaseClient";
 import { Html5QrcodeScanner } from "html5-qrcode";
-
-const ADMIN_EMAIL = "pugpep99@gmail.com";
 
 const EMAILJS_SERVICE_ID =
   "service_quxnkin";
@@ -61,28 +61,10 @@ type Order = {
   sales_tax_rate?: number | null;
   sales_tax_state?: string | null;
   sales_tax_postal_code?: string | null;
+  is_internal_order?: boolean;
 };
 
-type NexusSummary = {
-  state_code: string;
-  state_name: string;
-  sales_threshold: number | null;
-  transaction_threshold: number | null;
-  qualifying_sales: number;
-  qualifying_transactions: number;
-  revenue: number;
-  cost: number;
-  profit: number;
-  margin_percent: number;
-  sales_tax_collected: number;
-  overall_progress_percent: number;
-  remaining_sales: number | null;
-  threshold_met: boolean;
-  nexus_status: string;
-  registered_to_collect: boolean;
-  tax_collection_enabled: boolean;
-  effective_tax_collection: boolean;
-};
+
 
 function getOrderRevenue(order: Order) {
   // Historical snapshot only. Never query or recalculate from current product prices.
@@ -126,9 +108,7 @@ export default function AdminPage() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
-  const [nexusRows, setNexusRows] = useState<NexusSummary[]>([]);
   const [stateFilter, setStateFilter] = useState("all");
-  const [nexusFilter, setNexusFilter] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -156,30 +136,17 @@ export default function AdminPage() {
     useState(false);
 
   async function loadOrders() {
-    const [ordersResult, nexusResult] = await Promise.all([
-      supabase
-        .from("orders")
-        .select("*")
-        .order("created_at", { ascending: false }),
-      supabase.rpc("admin_get_state_nexus_summary"),
-    ]);
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-    if (ordersResult.error) {
-      alert(ordersResult.error.message);
+    if (error) {
+      alert(error.message);
       return;
     }
 
-    if (nexusResult.error) {
-      console.error("State nexus summary could not be loaded:", nexusResult.error);
-      setNexusRows([]);
-      setNotice(
-        "Orders loaded, but state nexus monitoring is unavailable. Run the nexus SQL setup if it has not been installed yet."
-      );
-    } else {
-      setNexusRows((nexusResult.data || []) as NexusSummary[]);
-    }
-
-    setOrders((ordersResult.data || []) as Order[]);
+    setOrders((data || []) as Order[]);
   }
 
   useEffect(() => {
@@ -193,9 +160,30 @@ export default function AdminPage() {
         return;
       }
 
-      const email = userData.user?.email;
+      if (!userData.user) {
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
 
-      if (!email || email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+      const {
+        data: adminAccess,
+        error: adminAccessError,
+      } = await supabase.rpc(
+        "is_pugpep_admin"
+      );
+
+      if (
+        adminAccessError ||
+        !adminAccess
+      ) {
+        if (adminAccessError) {
+          console.error(
+            "Admin role check failed:",
+            adminAccessError
+          );
+        }
+
         setAuthorized(false);
         setLoading(false);
         return;
@@ -1190,40 +1178,17 @@ export default function AdminPage() {
     (order) => Boolean(order.closed_at)
   ).length;
 
-  const nexusByState = new Map(
-    nexusRows.map((row) => [String(row.state_code || "").toUpperCase(), row])
-  );
-
   const availableStates = Array.from(
     new Set(
-      orders
-        .map((order) => String(order.state || "").trim().toUpperCase())
+      activeOrders
+        .map((order) =>
+          String(order.state || "")
+            .trim()
+            .toUpperCase()
+        )
         .filter(Boolean)
     )
-  ).sort();
-
-  function matchesNexusFilter(order: Order) {
-    if (nexusFilter === "all") return true;
-
-    const row = nexusByState.get(
-      String(order.state || "").trim().toUpperCase()
-    );
-
-    if (!row) return nexusFilter === "unconfigured";
-    if (nexusFilter === "safe") return row.nexus_status === "safe";
-    if (nexusFilter === "near") return row.nexus_status === "near";
-    if (nexusFilter === "critical") return row.nexus_status === "critical";
-    if (nexusFilter === "near_or_critical") {
-      return row.nexus_status === "near" || row.nexus_status === "critical";
-    }
-    if (nexusFilter === "passed") return Boolean(row.threshold_met);
-    if (nexusFilter === "review_required") {
-      return Boolean(row.threshold_met) && !row.effective_tax_collection;
-    }
-    if (nexusFilter === "tax_active") return Boolean(row.effective_tax_collection);
-
-    return true;
-  }
+  ).sort((a, b) => a.localeCompare(b));
 
   const filteredOrders = monthScopedOrders.filter((order) => {
     const query = search.trim().toLowerCase();
@@ -1241,9 +1206,18 @@ export default function AdminPage() {
 
     if (!matchesSearch) return false;
 
-    const orderState = String(order.state || "").trim().toUpperCase();
-    if (stateFilter !== "all" && orderState !== stateFilter) return false;
-    if (!matchesNexusFilter(order)) return false;
+    const orderState = String(
+      order.state || ""
+    )
+      .trim()
+      .toUpperCase();
+
+    if (
+      stateFilter !== "all" &&
+      orderState !== stateFilter
+    ) {
+      return false;
+    }
     if (filter === "deleted") return Boolean(order.deleted_at);
     if (order.deleted_at) return false;
     if (filter === "all") return true;
@@ -1269,7 +1243,8 @@ export default function AdminPage() {
     filteredOrders.filter(
       (order) =>
         order.status === "paid" &&
-        !order.deleted_at
+        !order.deleted_at &&
+        !order.is_internal_order
     );
 
   const visibleRevenue =
@@ -1335,6 +1310,7 @@ export default function AdminPage() {
 
       return (
         order.status === "paid" &&
+        !order.is_internal_order &&
         created.getDate() === now.getDate() &&
       created.getMonth() === now.getMonth() &&
         created.getFullYear() ===
@@ -1355,24 +1331,27 @@ export default function AdminPage() {
   return (
     <main style={pageStyle}>
       <div style={container}>
-        <header style={pageHeader}>
-          <div>
-            <p style={eyebrow}>CONTROL CENTER</p>
+        <header style={heroPanel}>
+          <div style={heroGlowPink} />
+          <div style={heroGlowCyan} />
 
-            <h1 style={pageTitle}>
-              Operations Center
-            </h1>
+          <div style={heroCopy}>
+            <div style={heroTopline}>
+              <span style={heroPill}>PUGPEP ADMIN</span>
+              <span style={heroLiveDot}>● LIVE OPERATIONS</span>
+            </div>
+
+            <p style={eyebrow}>ORDERS &amp; FULFILLMENT</p>
+
+            <h1 style={pageTitle}>Operations Center</h1>
 
             <p style={subtitle}>
-              Manage payments, fulfillment, revenue, profit, and order activity from one place.
+              Manage payment status, fulfillment, shipping, and order history
+              from one streamlined workspace.
             </p>
           </div>
 
-          <div style={headerLinks}>
-            <Link href="/admin/nexus" style={secondaryLink}>
-              State Nexus
-            </Link>
-
+          <div style={heroActions}>
             <Link href="/admin/promos" style={secondaryLink}>
               Promo Codes
             </Link>
@@ -1397,67 +1376,95 @@ export default function AdminPage() {
           </div>
         )}
 
-        <section style={statsGrid}>
-          <StatCard
-            label="Revenue Today"
-            value={`$${todayRevenue.toFixed(2)}`}
-            accent="#00d9ff"
-          />
+        <section style={overviewPanel}>
+          <div style={overviewHeader}>
+            <div>
+              <p style={sectionEyebrow}>LIVE OPERATIONS</p>
+              <h2 style={sectionTitle}>Today at a Glance</h2>
+            </div>
 
-          <StatCard
-            label="Profit Today"
-            value={`$${todayProfit.toFixed(2)}`}
-            accent={todayProfit >= 0 ? "#00ff99" : "#ff6f6f"}
-          />
+            <span style={overviewBadge}>
+              {activeOrders.length} ACTIVE ORDERS
+            </span>
+          </div>
 
-          <StatCard
-            label="Pending Payment"
-            value={String(pendingCount)}
-            accent="#ff6f6f"
-          />
+          <div style={statsGrid}>
+            <StatCard
+              label="Revenue"
+              value={`$${todayRevenue.toFixed(2)}`}
+              accent="#00d9ff"
+            />
 
-          <StatCard
-            label="Ready to Ship"
-            value={String(paidCount)}
-            accent="#ffcc00"
-          />
+            <StatCard
+              label="Profit"
+              value={`$${todayProfit.toFixed(2)}`}
+              accent={todayProfit >= 0 ? "#00ff99" : "#ff6f6f"}
+            />
 
-          <StatCard
-            label="Shipped"
-            value={String(shippedCount)}
-            accent="#00d9ff"
-          />
+            <StatCard
+              label="Pending"
+              value={String(pendingCount)}
+              accent="#ff6f6f"
+            />
 
-          <StatCard
-            label="Delivered"
-            value={String(deliveredCount)}
-            accent="#00ff99"
-          />
+            <StatCard
+              label="Ready"
+              value={String(paidCount)}
+              accent="#ffcc00"
+            />
 
-          <StatCard label="Cancelled" value={String(cancelledCount)} accent="#ff6f6f" />
-          <StatCard label="Closed" value={String(closedCount)} accent="#9ea7ff" />
-          <StatCard label="Recently Deleted" value={String(deletedOrders.length)} accent="#b8bcc4" />
+            <StatCard
+              label="Shipped"
+              value={String(shippedCount)}
+              accent="#00d9ff"
+            />
+
+            <StatCard
+              label="Delivered"
+              value={String(deliveredCount)}
+              accent="#00ff99"
+            />
+
+            <StatCard label="Cancelled" value={String(cancelledCount)} accent="#ff6f6f" />
+            <StatCard label="Closed" value={String(closedCount)} accent="#9ea7ff" />
+            <StatCard label="Deleted" value={String(deletedOrders.length)} accent="#b8bcc4" />
+          </div>
         </section>
 
         <section style={toolbarPanel}>
-          <div style={searchGroup}>
-            <label htmlFor="order-search" style={searchLabel}>
-              Search Orders
-            </label>
+          <div style={toolbarHeadingRow}>
+            <div>
+              <p style={sectionEyebrow}>ORDER CONTROLS</p>
+              <h2 style={sectionTitle}>Find and Filter Orders</h2>
+            </div>
 
-            <input
-              id="order-search"
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Order, customer, state, city, ZIP, promo, payment, or tracking..."
-              style={searchInput}
-            />
+            <div style={currentViewBadge}>
+              <span style={currentViewLabel}>CURRENT VIEW</span>
+              <strong>{formatMonthLabel(selectedMonth)}</strong>
+              <span>
+                {monthScopedOrders.length} order{monthScopedOrders.length === 1 ? "" : "s"}
+              </span>
+            </div>
           </div>
 
-          <div style={monthToolbar}>
-            <div style={monthPickerGroup}>
-              <span style={monthLabel}>VIEW ORDERS BY MONTH</span>
+          <div style={controlGrid}>
+            <div style={searchGroup}>
+              <label htmlFor="order-search" style={searchLabel}>
+                Search
+              </label>
+
+              <input
+                id="order-search"
+                type="search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Order, customer, state, ZIP, promo, payment, tracking..."
+                style={searchInput}
+              />
+            </div>
+
+            <div style={compactControlGroup}>
+              <span style={monthLabel}>MONTH</span>
 
               <div style={monthControls}>
                 <button
@@ -1503,85 +1510,21 @@ export default function AdminPage() {
               </div>
             </div>
 
-            <div style={monthSummary}>
-              <span style={monthSummaryEyebrow}>CURRENT VIEW</span>
-              <strong style={monthSummaryTitle}>
-                {formatMonthLabel(selectedMonth)}
-              </strong>
-              <span style={monthSummaryMeta}>
-                {monthScopedOrders.length} order{monthScopedOrders.length === 1 ? "" : "s"} in this view
-              </span>
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 12,
-              marginTop: 16,
-              marginBottom: 16,
-            }}
-          >
-            <label style={{ display: "grid", gap: 7 }}>
-              <span style={monthLabel}>DELIVERY STATE</span>
+            <label style={compactControlGroup}>
+              <span style={monthLabel}>STATE</span>
               <select
                 value={stateFilter}
                 onChange={(event) => setStateFilter(event.target.value)}
                 style={monthSelect}
               >
                 <option value="all">All States</option>
-                {availableStates.map((stateCode) => {
-                  const row = nexusByState.get(stateCode);
-                  const suffix = row
-                    ? ` · ${String(row.nexus_status || "").replaceAll("_", " ").toUpperCase()}`
-                    : " · UNCONFIGURED";
-
-                  return (
-                    <option key={stateCode} value={stateCode}>
-                      {stateCode}{suffix}
-                    </option>
-                  );
-                })}
+                {availableStates.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
               </select>
             </label>
-
-            <label style={{ display: "grid", gap: 7 }}>
-              <span style={monthLabel}>NEXUS RISK</span>
-              <select
-                value={nexusFilter}
-                onChange={(event) => setNexusFilter(event.target.value)}
-                style={monthSelect}
-              >
-                <option value="all">All Nexus Statuses</option>
-                <option value="safe">Safe · under 75%</option>
-                <option value="near">Near · 75–89.99%</option>
-                <option value="critical">Critical · 90–99.99%</option>
-                <option value="near_or_critical">Near + Critical</option>
-                <option value="passed">Threshold Passed</option>
-                <option value="review_required">Passed · Tax Review Required</option>
-                <option value="tax_active">Tax Collection Active</option>
-                <option value="unconfigured">Unconfigured State</option>
-              </select>
-            </label>
-
-            <div
-              style={{
-                alignSelf: "end",
-                minHeight: 48,
-                padding: "10px 12px",
-                border: "1px solid rgba(0,217,255,.18)",
-                borderRadius: 10,
-                background: "rgba(0,217,255,.04)",
-                color: "#a9cbd4",
-                fontSize: 12,
-                lineHeight: 1.5,
-              }}
-            >
-              Revenue, cost, profit and nexus exposure follow the order&apos;s
-              current delivery state. Historical sales tax stays with the tax
-              snapshot collected on the order.
-            </div>
           </div>
 
           <div style={filterRow}>
@@ -1593,7 +1536,7 @@ export default function AdminPage() {
               { key: "delivered", label: `Delivered (${deliveredCount})` },
               { key: "cancelled", label: `Cancelled (${cancelledCount})` },
               { key: "closed", label: `Closed (${closedCount})` },
-              { key: "deleted", label: `Recently Deleted (${deletedOrders.length})` },
+              { key: "deleted", label: `Deleted (${deletedOrders.length})` },
             ].map((item) => {
               const active = filter === item.key;
 
@@ -1606,19 +1549,24 @@ export default function AdminPage() {
                     ...filterButton,
                     borderColor: active
                       ? "#00ff99"
-                      : "rgba(255,255,255,.14)",
+                      : "rgba(255,255,255,.10)",
                     background: active
                       ? "rgba(0,255,153,.10)"
-                      : "rgba(255,255,255,.035)",
+                      : "transparent",
                     color: active
                       ? "#00ff99"
-                      : "#d0d0d6",
+                      : "#a9abb3",
                   }}
                 >
                   {item.label}
                 </button>
               );
             })}
+          </div>
+
+          <div style={toolbarFootnote}>
+            Search and filter the operational order record by month, state,
+            and fulfillment status. Historical sales-tax snapshots remain unchanged.
           </div>
         </section>
 
@@ -1681,15 +1629,14 @@ export default function AdminPage() {
               </p>
             </div>
 
-            {(search || filter !== "all" || stateFilter !== "all" || nexusFilter !== "all") && (
+            {(search || filter !== "all" || stateFilter !== "all") && (
               <button
                 type="button"
                 onClick={() => {
                   setSearch("");
                   setFilter("all");
                   setStateFilter("all");
-                  setNexusFilter("all");
-                }}
+                              }}
                 style={clearButton}
               >
                 Reset View
@@ -1790,37 +1737,18 @@ export default function AdminPage() {
                     </div>
 
                     <div style={orderMetaGrid}>
+                      {order.is_internal_order && (
+                        <MetaItem
+                          label="Order Type"
+                          value="INTERNAL · EXCLUDED"
+                          accent="#ff75df"
+                        />
+                      )}
+
                       <MetaItem
                         label="State"
                         value={String(order.state || "—").toUpperCase()}
                         accent="#7df9ff"
-                      />
-
-                      <MetaItem
-                        label="Nexus"
-                        value={(() => {
-                          const row = nexusByState.get(
-                            String(order.state || "").trim().toUpperCase()
-                          );
-                          if (!row) return "UNCONFIGURED";
-                          if (row.effective_tax_collection) return "TAX ACTIVE";
-                          if (row.threshold_met) return "PASSED · REVIEW";
-                          return `${String(row.nexus_status || "safe")
-                            .replaceAll("_", " ")
-                            .toUpperCase()} · ${Number(
-                            row.overall_progress_percent || 0
-                          ).toFixed(1)}%`;
-                        })()}
-                        accent={(() => {
-                          const row = nexusByState.get(
-                            String(order.state || "").trim().toUpperCase()
-                          );
-                          if (!row) return "#b8bcc4";
-                          if (row.threshold_met) return "#ff6f6f";
-                          if (row.nexus_status === "critical") return "#ff8a5b";
-                          if (row.nexus_status === "near") return "#ffcc00";
-                          return "#00ff99";
-                        })()}
                       />
 
                       <MetaItem
@@ -2466,11 +2394,10 @@ function MetaItem({
 
 const pageStyle = {
   minHeight: "100vh",
-  padding: "clamp(18px, 4vw, 34px)",
+  padding: "clamp(18px, 3vw, 34px)",
   background:
-    "radial-gradient(circle at 12% 0%, rgba(255,47,208,.14), transparent 27%), radial-gradient(circle at 88% 4%, rgba(0,217,255,.14), transparent 30%), #000",
+    "radial-gradient(circle at 12% 0%, rgba(255,69,216,.055), transparent 26%), radial-gradient(circle at 88% 4%, rgba(0,217,255,.055), transparent 26%), #030305",
   color: "#ffffff",
-  fontSize: 16,
 };
 
 const container = {
@@ -2479,11 +2406,84 @@ const container = {
   margin: "0 auto",
 };
 
-const pageHeader = {
+const heroPanel = {
+  position: "relative" as const,
+  overflow: "hidden",
   display: "flex",
   justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 20,
+  alignItems: "center",
+  gap: 24,
+  padding: "clamp(22px, 3vw, 30px)",
+  border: "1px solid rgba(255,255,255,.10)",
+  borderRadius: 22,
+  background:
+    "linear-gradient(135deg, rgba(255,69,216,.10), rgba(0,217,255,.065) 46%, rgba(0,255,153,.055))",
+  boxShadow:
+    "0 24px 70px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.04)",
+  flexWrap: "wrap" as const,
+};
+
+const heroGlowPink = {
+  position: "absolute" as const,
+  width: 260,
+  height: 260,
+  top: -150,
+  left: -70,
+  borderRadius: "50%",
+  background: "rgba(255,69,216,.14)",
+  filter: "blur(55px)",
+  pointerEvents: "none" as const,
+};
+
+const heroGlowCyan = {
+  position: "absolute" as const,
+  width: 280,
+  height: 280,
+  right: -90,
+  bottom: -175,
+  borderRadius: "50%",
+  background: "rgba(0,217,255,.13)",
+  filter: "blur(60px)",
+  pointerEvents: "none" as const,
+};
+
+const heroCopy = {
+  position: "relative" as const,
+  zIndex: 1,
+  minWidth: 0,
+};
+
+const heroTopline = {
+  marginBottom: 10,
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  flexWrap: "wrap" as const,
+};
+
+const heroPill = {
+  padding: "5px 8px",
+  border: "1px solid rgba(255,69,216,.34)",
+  borderRadius: 999,
+  background: "rgba(255,69,216,.08)",
+  color: "#ff75df",
+  fontSize: 9,
+  fontWeight: 1000,
+  letterSpacing: ".10em",
+};
+
+const heroLiveDot = {
+  color: "#00ff99",
+  fontSize: 9,
+  fontWeight: 1000,
+  letterSpacing: ".08em",
+};
+
+const heroActions = {
+  position: "relative" as const,
+  zIndex: 1,
+  display: "flex",
+  gap: 9,
   flexWrap: "wrap" as const,
 };
 
@@ -2496,19 +2496,20 @@ const eyebrow = {
 };
 
 const pageTitle = {
-  margin: "7px 0 0",
-  color: "#ff45d8",
-  fontSize: "clamp(44px, 7vw, 64px)",
-  letterSpacing: "-.035em",
-  textShadow: "0 0 18px rgba(255,69,216,.22)",
+  margin: "5px 0 0",
+  color: "#ffffff",
+  fontSize: "clamp(34px, 4.4vw, 52px)",
+  letterSpacing: "-.04em",
+  lineHeight: .98,
+  textShadow: "0 0 28px rgba(0,217,255,.08)",
 };
 
 const subtitle = {
-  maxWidth: 800,
-  margin: "12px 0 0",
-  color: "#c1c1c9",
-  fontSize: 18,
-  lineHeight: 1.7,
+  maxWidth: 760,
+  margin: "11px 0 0",
+  color: "#9aa0aa",
+  fontSize: 14,
+  lineHeight: 1.55,
 };
 
 const headerLinks = {
@@ -2518,30 +2519,33 @@ const headerLinks = {
 };
 
 const primaryLink = {
-  minHeight: 52,
-  padding: "13px 18px",
+  minHeight: 40,
+  padding: "9px 14px",
   display: "grid",
   placeItems: "center",
-  border: "1px solid #45d97a",
-  borderRadius: 10,
-  background: "linear-gradient(180deg, #2eea6f, #19b857)",
-  color: "#ffffff",
+  border: "1px solid rgba(0,255,153,.50)",
+  borderRadius: 11,
+  background:
+    "linear-gradient(135deg, rgba(0,255,153,.18), rgba(0,217,255,.10))",
+  color: "#00ff99",
+  boxShadow: "0 0 22px rgba(0,255,153,.08)",
   textDecoration: "none",
-  fontSize: 16,
-  fontWeight: 900,
+  fontSize: 12,
+  fontWeight: 950,
 };
 
 const secondaryLink = {
-  minHeight: 52,
-  padding: "13px 18px",
+  minHeight: 40,
+  padding: "9px 14px",
   display: "grid",
   placeItems: "center",
-  border: "1px solid rgba(0,217,255,.46)",
-  borderRadius: 10,
-  background: "rgba(0,217,255,.06)",
+  border: "1px solid rgba(0,217,255,.28)",
+  borderRadius: 11,
+  background:
+    "linear-gradient(135deg, rgba(0,217,255,.08), rgba(255,69,216,.05))",
   color: "#7df9ff",
   textDecoration: "none",
-  fontSize: 16,
+  fontSize: 12,
   fontWeight: 900,
 };
 
@@ -2568,75 +2572,184 @@ const noticeClose = {
   cursor: "pointer",
 };
 
+const overviewPanel = {
+  marginTop: 18,
+  padding: 18,
+  border: "1px solid rgba(255,255,255,.09)",
+  borderRadius: 18,
+  background:
+    "linear-gradient(145deg, rgba(10,10,15,.97), rgba(5,5,8,.99))",
+  boxShadow: "0 18px 52px rgba(0,0,0,.24)",
+};
+
+const overviewHeader = {
+  marginBottom: 13,
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap" as const,
+};
+
+const overviewBadge = {
+  padding: "6px 9px",
+  border: "1px solid rgba(0,217,255,.24)",
+  borderRadius: 999,
+  background: "rgba(0,217,255,.055)",
+  color: "#7df9ff",
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".06em",
+};
+
 const statsGrid = {
-  marginTop: 22,
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-  gap: 15,
+  gridTemplateColumns: "repeat(9, minmax(0, 1fr))",
+  gap: 8,
 };
 
 const statCard = {
-  padding: 20,
+  position: "relative" as const,
+  overflow: "hidden",
+  minWidth: 0,
+  minHeight: 82,
+  padding: "11px 10px",
   display: "grid",
-  gap: 8,
+  alignContent: "center",
+  gap: 5,
   border: "1px solid",
-  borderRadius: 16,
+  borderRadius: 12,
   background:
-    "linear-gradient(145deg, rgba(12,12,17,.97), rgba(6,6,9,.98))",
+    "linear-gradient(145deg, rgba(255,255,255,.035), rgba(255,255,255,.012))",
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,.025)",
 };
 
 const statLabel = {
-  fontSize: 13,
-  fontWeight: 900,
-  letterSpacing: ".08em",
+  color: "#858b96",
+  fontSize: 8,
+  fontWeight: 950,
+  letterSpacing: ".05em",
+  lineHeight: 1.2,
   textTransform: "uppercase" as const,
 };
 
 const statValue = {
-  fontSize: 34,
+  fontSize: "clamp(18px, 1.6vw, 25px)",
+  lineHeight: 1,
+  whiteSpace: "nowrap" as const,
 };
 
 const toolbarPanel = {
-  marginTop: 22,
-  padding: 20,
+  marginTop: 18,
+  padding: 18,
   display: "grid",
-  gap: 16,
-  border: "1px solid rgba(0,217,255,.32)",
-  borderRadius: 16,
+  gap: 14,
+  border: "1px solid rgba(255,255,255,.09)",
+  borderRadius: 18,
   background:
-    "linear-gradient(145deg, rgba(8,8,12,.96), rgba(15,8,18,.94))",
+    "linear-gradient(145deg, rgba(10,10,15,.97), rgba(5,5,8,.99))",
+  boxShadow: "0 18px 52px rgba(0,0,0,.22)",
+};
+
+const toolbarHeadingRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap" as const,
+};
+
+const toolbarEyebrow = {
+  margin: 0,
+  color: "#ff75df",
+  fontSize: 9,
+  fontWeight: 1000,
+  letterSpacing: ".12em",
+};
+
+const toolbarTitle = {
+  margin: "3px 0 0",
+  color: "#ffffff",
+  fontSize: 18,
+};
+
+const currentViewBadge = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "6px 9px",
+  border: "1px solid rgba(255,255,255,.08)",
+  borderRadius: 9,
+  background: "rgba(255,255,255,.02)",
+  color: "#7f858f",
+  fontSize: 9,
+};
+
+const currentViewLabel = {
+  color: "#5f6570",
+  fontWeight: 1000,
+  letterSpacing: ".08em",
+};
+
+const controlGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "minmax(360px, 2.2fr) minmax(240px, 1fr) minmax(150px, .65fr)",
+  gap: 10,
+  alignItems: "end",
 };
 
 const searchGroup = {
+  minWidth: 0,
   display: "grid",
-  gap: 7,
+  gap: 6,
 };
 
 const searchLabel = {
-  color: "#d1d1d7",
-  fontSize: 14,
-  fontWeight: 900,
+  color: "#858b94",
+  fontSize: 9,
+  fontWeight: 1000,
+  letterSpacing: ".08em",
+  textTransform: "uppercase" as const,
 };
 
 const searchInput = {
   width: "100%",
-  minHeight: 54,
+  minHeight: 44,
   boxSizing: "border-box" as const,
-  padding: "14px 16px",
-  border: "1px solid rgba(255,255,255,.16)",
-  borderRadius: 10,
-  background: "#050507",
+  padding: "11px 13px",
+  border: "1px solid rgba(0,217,255,.20)",
+  borderRadius: 11,
+  outline: "none",
+  background:
+    "linear-gradient(145deg, rgba(0,217,255,.04), rgba(255,255,255,.015))",
   color: "#ffffff",
-  fontSize: 16,
+  fontSize: 13,
+  boxShadow: "inset 0 1px 0 rgba(255,255,255,.025)",
+};
+
+const compactControlGroup = {
+  minWidth: 0,
+  display: "grid",
+  gap: 6,
+};
+
+const toolbarFootnote = {
+  paddingTop: 9,
+  borderTop: "1px solid rgba(255,255,255,.055)",
+  color: "#5e646e",
+  fontSize: 9,
+  lineHeight: 1.45,
 };
 
 const monthToolbar = {
-  marginTop: 16,
-  padding: 16,
+  flex: "1 1 560px",
+  minWidth: 0,
+  padding: 12,
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  gap: 18,
+  gap: 14,
   flexWrap: "wrap" as const,
   border: "1px solid rgba(0,217,255,.24)",
   borderRadius: 14,
@@ -2657,33 +2770,34 @@ const monthLabel = {
 };
 
 const monthControls = {
-  display: "flex",
+  display: "grid",
+  gridTemplateColumns: "36px minmax(0, 1fr) 36px",
+  gap: 6,
   alignItems: "center",
-  gap: 8,
-  flexWrap: "wrap" as const,
 };
 
 const monthSelect = {
-  minWidth: 210,
-  minHeight: 48,
-  padding: "10px 13px",
-  border: "1px solid rgba(0,217,255,.45)",
-  borderRadius: 10,
-  background: "#050507",
+  width: "100%",
+  minHeight: 44,
+  boxSizing: "border-box" as const,
+  padding: "10px 11px",
+  border: "1px solid rgba(255,69,216,.18)",
+  borderRadius: 11,
+  background:
+    "linear-gradient(145deg, rgba(255,69,216,.035), rgba(255,255,255,.012))",
   color: "#ffffff",
-  fontSize: 16,
-  fontWeight: 900,
+  fontSize: 12,
+  fontWeight: 800,
 };
 
 const monthArrowButton = {
-  width: 48,
-  minHeight: 48,
-  border: "1px solid rgba(255,69,216,.42)",
-  borderRadius: 10,
-  background: "rgba(255,69,216,.07)",
-  color: "#ff75df",
-  fontSize: 20,
-  fontWeight: 900,
+  minHeight: 44,
+  border: "1px solid rgba(0,217,255,.20)",
+  borderRadius: 11,
+  background: "rgba(0,217,255,.04)",
+  color: "#7df9ff",
+  fontSize: 16,
+  fontWeight: 950,
 };
 
 const monthSummary = {
@@ -2719,18 +2833,20 @@ const ordersMonthCaption = {
 
 const filterRow = {
   display: "flex",
-  gap: 10,
+  gap: 6,
   flexWrap: "wrap" as const,
 };
 
 const filterButton = {
-  minHeight: 46,
-  padding: "11px 15px",
+  minHeight: 32,
+  padding: "6px 10px",
   border: "1px solid",
   borderRadius: 999,
-  fontSize: 15,
+  fontSize: 9,
   fontWeight: 900,
+  letterSpacing: ".02em",
   cursor: "pointer",
+  transition: "all .18s ease",
 };
 
 const financialGrid = {
@@ -2780,16 +2896,17 @@ const ordersHeader = {
 
 const sectionEyebrow = {
   margin: 0,
-  color: "#00d9ff",
-  fontSize: 12,
-  fontWeight: 900,
-  letterSpacing: ".13em",
+  color: "#ff75df",
+  fontSize: 9,
+  fontWeight: 1000,
+  letterSpacing: ".12em",
 };
 
 const sectionTitle = {
-  margin: "5px 0 0",
-  color: "#7df9ff",
-  fontSize: 31,
+  margin: "4px 0 0",
+  color: "#ffffff",
+  fontSize: 20,
+  lineHeight: 1.1,
 };
 
 const clearButton = {

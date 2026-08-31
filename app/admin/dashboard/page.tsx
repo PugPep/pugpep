@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { createClient } from "../../../lib/supabaseClient";
 
-const ADMIN_EMAIL = "pugpep99@gmail.com";
 
 type DatePreset =
   | "today"
@@ -42,6 +41,7 @@ type Order = {
   tracking_number?: string | null;
   closed_at?: string | null;
   deleted_at?: string | null;
+  is_internal_order?: boolean | null;
   state?: string | null;
   zip?: string | null;
   sales_tax_amount?: number | null;
@@ -545,13 +545,21 @@ export default function AdminDashboardPage() {
       const { data: userData, error: userError } =
         await supabase.auth.getUser();
 
-      const email = userData.user?.email;
+            if (userError || !userData.user) {
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
 
-      if (
-        userError ||
-        !email ||
-        email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()
-      ) {
+      const {
+        data: adminAccess,
+        error: adminAccessError,
+      } = await supabase.rpc("is_pugpep_admin");
+
+      if (adminAccessError || !adminAccess) {
+        if (adminAccessError) {
+          console.error("Admin role check failed:", adminAccessError);
+        }
         setAuthorized(false);
         setLoading(false);
         return;
@@ -622,7 +630,9 @@ export default function AdminDashboardPage() {
   const paidOrdersAllTime = useMemo(
     () =>
       activeOrders.filter(
-        (order) => order.status === "paid"
+        (order) =>
+          order.status === "paid" &&
+          !order.is_internal_order
       ),
     [activeOrders]
   );
@@ -638,7 +648,9 @@ export default function AdminDashboardPage() {
   const paidPeriodOrders = useMemo(
     () =>
       periodOrders.filter(
-        (order) => order.status === "paid"
+        (order) =>
+          order.status === "paid" &&
+          !order.is_internal_order
       ),
     [periodOrders]
   );
@@ -732,18 +744,18 @@ export default function AdminDashboardPage() {
   const nearNexusStates = nexusRows.filter((row) => row.nexus_status === "near");
   const taxActiveStates = nexusRows.filter((row) => row.effective_tax_collection);
 
-  const nexusAttention = nexusRows
+  const topNexusRisk = nexusRows
     .filter(
       (row) =>
-        row.threshold_met ||
-        row.nexus_status === "critical" ||
-        row.nexus_status === "near"
+        safeNumber(row.qualifying_sales) > 0 ||
+        safeNumber(row.qualifying_transactions) > 0
     )
     .sort(
       (a, b) =>
         safeNumber(b.overall_progress_percent) -
         safeNumber(a.overall_progress_percent)
-    );
+    )
+    .slice(0, 5);
 
   const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
   const aov =
@@ -1363,7 +1375,7 @@ export default function AdminDashboardPage() {
             <h1 style={pageTitle}>Executive Dashboard</h1>
 
             <p style={subtitle}>
-              Revenue, profitability, fulfillment, customers, product performance,
+              Revenue, profitability, fulfillment, nexus risk, customers, product performance,
               and inventory health in one operating view.
             </p>
           </div>
@@ -1546,50 +1558,110 @@ export default function AdminDashboardPage() {
         </section>
 
         <div style={mainGrid}>
-          <section style={panel}>
-            <div style={panelHeader}>
+          <section style={nexusPanel}>
+            <div style={nexusHeader}>
               <div>
                 <p style={sectionEyebrow}>STATE NEXUS MONITOR</p>
-                <h2 style={sectionTitle}>Threshold Exposure</h2>
+                <h2 style={sectionTitle}>Top 5 Nexus Risk</h2>
               </div>
 
-              <Link href="/admin/nexus" style={primaryLink}>
-                Manage Nexus
-              </Link>
+              <div style={nexusHeaderActions}>
+                <div style={nexusPills}>
+                  <span style={nexusPill}>
+                    <strong style={{ color: "#ffcc00" }}>{nearNexusStates.length}</strong>
+                    Near
+                  </span>
+                  <span style={nexusPill}>
+                    <strong style={{ color: "#ff8a5b" }}>{criticalNexusStates.length}</strong>
+                    Critical
+                  </span>
+                  <span style={nexusPill}>
+                    <strong style={{ color: "#ff6f6f" }}>{passedNexusStates.length}</strong>
+                    Passed
+                  </span>
+                  <span style={nexusPill}>
+                    <strong style={{ color: "#00ff99" }}>{taxActiveStates.length}</strong>
+                    Tax Active
+                  </span>
+                </div>
+
+                <Link href="/admin/nexus" style={primaryLink}>
+                  Full Nexus →
+                </Link>
+              </div>
             </div>
 
-            <div style={healthGrid}>
-              <HealthCard label="Near 75–89.99%" value={nearNexusStates.length} accent="#ffcc00" href="/admin/nexus" />
-              <HealthCard label="Critical 90–99.99%" value={criticalNexusStates.length} accent="#ff8a5b" href="/admin/nexus" />
-              <HealthCard label="Threshold Passed" value={passedNexusStates.length} accent="#ff6f6f" href="/admin/nexus" />
-              <HealthCard label="Tax Collection Active" value={taxActiveStates.length} accent="#00ff99" href="/admin/nexus" />
-            </div>
-
-            {nexusAttention.length === 0 ? (
-              <EmptyState text="No states are currently near or above their configured nexus threshold." />
+            {topNexusRisk.length === 0 ? (
+              <EmptyState text="No paid-order nexus activity yet." />
             ) : (
-              <div style={attentionList}>
-                {nexusAttention.slice(0, 8).map((row) => (
-                  <div key={row.state_code} style={attentionRow}>
-                    <span><strong>{row.state_code}</strong> · {row.state_name}</span>
-                    <strong
-                      style={{
-                        color: row.threshold_met
-                          ? "#ff6f6f"
-                          : row.nexus_status === "critical"
-                          ? "#ff8a5b"
-                          : "#ffcc00",
-                      }}
-                    >
-                      {safeNumber(row.overall_progress_percent).toFixed(1)}%
-                      {row.threshold_met
-                        ? row.effective_tax_collection
-                          ? " · TAX ACTIVE"
-                          : " · REVIEW"
-                        : ""}
-                    </strong>
-                  </div>
-                ))}
+              <div style={nexusList}>
+                {topNexusRisk.map((row) => {
+                  const progress = Math.max(
+                    0,
+                    Math.min(100, safeNumber(row.overall_progress_percent))
+                  );
+
+                  const statusColor = row.threshold_met
+                    ? row.effective_tax_collection
+                      ? "#00ff99"
+                      : "#ff6f6f"
+                    : row.nexus_status === "critical"
+                    ? "#ff8a5b"
+                    : row.nexus_status === "near"
+                    ? "#ffcc00"
+                    : "#7df9ff";
+
+                  const statusLabel = row.threshold_met
+                    ? row.effective_tax_collection
+                      ? "TAX ACTIVE"
+                      : "THRESHOLD MET"
+                    : row.nexus_status === "critical"
+                    ? "CRITICAL"
+                    : row.nexus_status === "near"
+                    ? "NEAR"
+                    : "SAFE";
+
+                  return (
+                    <div key={row.state_code} style={nexusRow}>
+                      <div style={nexusStateCell}>
+                        <strong style={nexusStateName}>{row.state_name}</strong>
+                        <span style={nexusStateCode}>{row.state_code}</span>
+                      </div>
+
+                      <span
+                        style={{
+                          ...nexusStatus,
+                          color: statusColor,
+                          borderColor: `${statusColor}55`,
+                          background: `${statusColor}10`,
+                        }}
+                      >
+                        {statusLabel}
+                      </span>
+
+                      <strong style={nexusValue}>
+                        {money(safeNumber(row.qualifying_sales))}
+                      </strong>
+
+                      <strong style={nexusValue}>
+                        {safeNumber(row.qualifying_transactions)} txns
+                      </strong>
+
+                      <div style={nexusProgressCell}>
+                        <span style={nexusProgressLabel}>{progress.toFixed(1)}%</span>
+                        <div style={nexusProgressTrack}>
+                          <div
+                            style={{
+                              ...nexusProgressFill,
+                              width: `${progress}%`,
+                              background: statusColor,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>
@@ -2432,6 +2504,127 @@ const kpiChangeMuted = {
   color: "#777d86",
   fontSize: 11,
   fontWeight: 700,
+};
+
+const nexusPanel = {
+  padding: 18,
+  border: "1px solid rgba(255,255,255,.08)",
+  borderRadius: 16,
+  background:
+    "linear-gradient(145deg, rgba(10,10,14,.96), rgba(5,5,8,.98))",
+};
+
+const nexusHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 14,
+  flexWrap: "wrap" as const,
+};
+
+const nexusHeaderActions = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap" as const,
+};
+
+const nexusPills = {
+  display: "flex",
+  gap: 6,
+  flexWrap: "wrap" as const,
+};
+
+const nexusPill = {
+  minHeight: 28,
+  padding: "5px 8px",
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+  border: "1px solid rgba(255,255,255,.08)",
+  borderRadius: 999,
+  background: "rgba(255,255,255,.025)",
+  color: "#747a84",
+  fontSize: 9,
+  fontWeight: 850,
+};
+
+const nexusList = {
+  marginTop: 14,
+  display: "grid",
+  gap: 0,
+  borderTop: "1px solid rgba(255,255,255,.06)",
+};
+
+const nexusRow = {
+  padding: "10px 4px",
+  display: "grid",
+  gridTemplateColumns: "1.2fr .9fr .9fr .7fr 1.25fr",
+  gap: 12,
+  alignItems: "center",
+  borderBottom: "1px solid rgba(255,255,255,.055)",
+};
+
+const nexusStateCell = {
+  minWidth: 0,
+};
+
+const nexusStateName = {
+  display: "block",
+  color: "#ffffff",
+  fontSize: 12,
+};
+
+const nexusStateCode = {
+  display: "block",
+  marginTop: 2,
+  color: "#69707b",
+  fontSize: 9,
+  fontWeight: 900,
+};
+
+const nexusStatus = {
+  width: "fit-content",
+  padding: "4px 7px",
+  border: "1px solid",
+  borderRadius: 999,
+  fontSize: 8,
+  fontWeight: 1000,
+  letterSpacing: ".04em",
+  whiteSpace: "nowrap" as const,
+};
+
+const nexusValue = {
+  color: "#cfd3da",
+  fontSize: 11,
+  fontWeight: 850,
+  whiteSpace: "nowrap" as const,
+};
+
+const nexusProgressCell = {
+  minWidth: 110,
+};
+
+const nexusProgressLabel = {
+  display: "block",
+  marginBottom: 5,
+  color: "#858b94",
+  fontSize: 9,
+  fontWeight: 850,
+  textAlign: "right" as const,
+};
+
+const nexusProgressTrack = {
+  height: 5,
+  overflow: "hidden",
+  borderRadius: 999,
+  background: "rgba(255,255,255,.07)",
+};
+
+const nexusProgressFill = {
+  height: "100%",
+  minWidth: 2,
+  borderRadius: 999,
 };
 
 const mainGrid = {

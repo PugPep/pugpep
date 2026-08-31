@@ -5,7 +5,6 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
-const ADMIN_EMAIL = "pugpep99@gmail.com";
 
 type ShippingSmsRequest = {
   orderNumber?: unknown;
@@ -87,15 +86,19 @@ async function requireAdmin(
     };
   }
 
-  const email =
-    data.user.email
-      ?.trim()
-      .toLowerCase() ||
-    "";
+  const {
+    data: roleRow,
+    error: roleError,
+  } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", data.user.id)
+    .maybeSingle();
 
   if (
-    email !==
-    ADMIN_EMAIL.toLowerCase()
+    roleError ||
+    !roleRow ||
+    !["admin", "super_admin"].includes(roleRow.role)
   ) {
     return {
       authorized: false as const,
