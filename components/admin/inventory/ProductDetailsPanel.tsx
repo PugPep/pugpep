@@ -17,6 +17,7 @@ export default function ProductDetailsPanel({
     imageUploading,
     uploadProductImage,
     updateProductField,
+    setProductActive,
     saveProductChanges,
     archiveProduct,
   } = admin;
@@ -40,6 +41,66 @@ export default function ProductDetailsPanel({
                     View Live Page
                   </a>
                 </div>
+
+                <section
+                  style={{
+                    ...visibilityPanel,
+                    borderColor:
+                      selectedProduct.is_active === false
+                        ? "rgba(255,204,0,.42)"
+                        : "rgba(0,255,153,.38)",
+                    background:
+                      selectedProduct.is_active === false
+                        ? "linear-gradient(145deg, rgba(255,204,0,.07), rgba(255,69,216,.025))"
+                        : "linear-gradient(145deg, rgba(0,255,153,.07), rgba(0,217,255,.025))",
+                  }}
+                >
+                  <div>
+                    <p style={visibilityEyebrow}>
+                      PRODUCT VISIBILITY
+                    </p>
+
+                    <h3 style={visibilityTitle}>
+                      {selectedProduct.is_active === false
+                        ? "Hidden From Website"
+                        : "Visible On Website"}
+                    </h3>
+
+                    <p style={visibilityText}>
+                      {selectedProduct.is_active === false
+                        ? "This product remains in Admin Inventory but is hidden from customers."
+                        : "This product is active and can appear on the customer website."}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void setProductActive(
+                        selectedProduct.is_active === false
+                      );
+                    }}
+                    style={{
+                      ...visibilityButton,
+                      borderColor:
+                        selectedProduct.is_active === false
+                          ? "rgba(0,255,153,.55)"
+                          : "rgba(255,204,0,.55)",
+                      background:
+                        selectedProduct.is_active === false
+                          ? "rgba(0,255,153,.10)"
+                          : "rgba(255,204,0,.08)",
+                      color:
+                        selectedProduct.is_active === false
+                          ? "#00ff99"
+                          : "#ffcc00",
+                    }}
+                  >
+                    {selectedProduct.is_active === false
+                      ? "SHOW ON WEBSITE"
+                      : "HIDE FROM WEBSITE"}
+                  </button>
+                </section>
 
                 <div
                   style={{
@@ -557,6 +618,51 @@ const helperText = {
   color: "#b1b1ba",
   fontSize: 16,
   lineHeight: 1.7,
+};
+
+const visibilityPanel = {
+  marginBottom: 20,
+  padding: "16px 18px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 16,
+  flexWrap: "wrap" as const,
+  border: "1px solid",
+  borderRadius: 14,
+};
+
+const visibilityEyebrow = {
+  margin: 0,
+  color: "#7df9ff",
+  fontSize: 11,
+  fontWeight: 950,
+  letterSpacing: ".12em",
+};
+
+const visibilityTitle = {
+  margin: "4px 0 0",
+  color: "#ffffff",
+  fontSize: 20,
+};
+
+const visibilityText = {
+  margin: "6px 0 0",
+  maxWidth: 720,
+  color: "#aeb1b7",
+  fontSize: 14,
+  lineHeight: 1.55,
+};
+
+const visibilityButton = {
+  minHeight: 44,
+  padding: "10px 14px",
+  border: "1px solid",
+  borderRadius: 9,
+  fontSize: 12,
+  fontWeight: 950,
+  letterSpacing: ".05em",
+  cursor: "pointer",
 };
 
 const panel = {

@@ -428,6 +428,83 @@ export function useAdminInventory() {
     await loadProducts();
   }
 
+  async function setProductActive(
+    nextActive: boolean
+  ) {
+    if (!selectedProduct.id) {
+      alert(
+        "Select a product first."
+      );
+      return;
+    }
+
+    const previousActive =
+      selectedProduct.is_active ??
+      true;
+
+    setSelectedProduct(
+      (previous) => ({
+        ...previous,
+        is_active:
+          nextActive,
+      })
+    );
+
+    setProducts(
+      (previous) =>
+        previous.map(
+          (row) =>
+            row.id ===
+              selectedProduct.id
+              ? {
+                  ...row,
+                  is_active:
+                    nextActive,
+                }
+              : row
+        )
+    );
+
+    const {
+      error,
+    } =
+      await supabase
+        .from(
+          "products"
+        )
+        .update({
+          is_active:
+            nextActive,
+        })
+        .eq(
+          "id",
+          selectedProduct.id
+        );
+
+    if (error) {
+      alert(
+        error.message
+      );
+
+      setSelectedProduct(
+        (previous) => ({
+          ...previous,
+          is_active:
+            previousActive,
+        })
+      );
+
+      await loadProducts();
+      return;
+    }
+
+    setNotice(
+      nextActive
+        ? "Product is visible on the website."
+        : "Product is hidden from the website."
+    );
+  }
+
   async function unhideProduct(
     productId: string
   ) {
@@ -1351,6 +1428,7 @@ export function useAdminInventory() {
     updateProductField,
     saveProductChanges,
     createProduct,
+    setProductActive,
     unhideProduct,
     archiveProduct,
     restoreProduct,
