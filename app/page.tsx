@@ -1,4 +1,4 @@
-﻿"use client";
+﻿
 
 import Image from "next/image";
 import Link from "next/link";
@@ -354,8 +354,8 @@ export default function HomePage() {
     },
     {
       key: "sprays",
-      eyebrow: "NASAL RESEARCH",
-      title: "Nasal Sprays",
+      eyebrow: "",
+      title: "Research Sprays",
       products: visibleProducts.filter((product) => {
         const category = String(product.category || "").toLowerCase().trim();
         return category === "spray" || category === "nasal-spray";
@@ -790,7 +790,9 @@ export default function HomePage() {
               <section key={group.key} style={catalogGroup}>
                 <div style={catalogGroupHeader}>
                   <div>
-                    <span style={catalogGroupEyebrow}>{group.eyebrow}</span>
+                    {group.eyebrow ? (
+                      <span style={catalogGroupEyebrow}>{group.eyebrow}</span>
+                    ) : null}
                     <h3 style={catalogGroupTitle}>{group.title}</h3>
                   </div>
 
@@ -1017,7 +1019,7 @@ function getCategoryLabel(category: string | null | undefined) {
   const normalized = String(category || "").toLowerCase().trim();
 
   if (normalized === "spray" || normalized === "nasal-spray") {
-    return "Nasal Spray";
+    return "Spray";
   }
 
   if (normalized === "lab-material") {
