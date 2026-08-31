@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -262,6 +262,31 @@ export default function HomePage() {
       return a.name.localeCompare(b.name);
     });
 
+
+  const featuredProducts = products
+    .filter(
+      (product) =>
+        product.feature_on_homepage &&
+        !product.is_coming_soon
+    )
+    .sort((a, b) => {
+      const aOrder = a.homepage_feature_order ?? 9999;
+      const bOrder = b.homepage_feature_order ?? 9999;
+
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return a.name.localeCompare(b.name);
+    })
+    .slice(0, 6);
+
+  const saleProducts = products
+    .filter(
+      (product) =>
+        !product.is_coming_soon &&
+        Boolean(saleMap[product.slug]?.isOnSale)
+    )
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, 6);
+
   const primaryCampaign = getPrimaryStorefrontCampaign(saleMap);
 
   const visibleProducts = products
@@ -311,6 +336,41 @@ export default function HomePage() {
   const saleCount = products.filter(
     (product) => saleMap[product.slug]?.isOnSale
   ).length;
+
+
+  const catalogGroups = [
+    {
+      key: "compounds",
+      eyebrow: "RESEARCH COMPOUNDS",
+      title: "Compounds",
+      products: visibleProducts.filter((product) => {
+        const category = String(product.category || "").toLowerCase().trim();
+        return (
+          category !== "spray" &&
+          category !== "nasal-spray" &&
+          category !== "lab-material"
+        );
+      }),
+    },
+    {
+      key: "sprays",
+      eyebrow: "NASAL RESEARCH",
+      title: "Nasal Sprays",
+      products: visibleProducts.filter((product) => {
+        const category = String(product.category || "").toLowerCase().trim();
+        return category === "spray" || category === "nasal-spray";
+      }),
+    },
+    {
+      key: "materials",
+      eyebrow: "LAB SUPPORT",
+      title: "Lab Materials",
+      products: visibleProducts.filter((product) => {
+        const category = String(product.category || "").toLowerCase().trim();
+        return category === "lab-material";
+      }),
+    },
+  ].filter((group) => group.products.length > 0);
 
   return (
     <main style={page}>
@@ -451,74 +511,6 @@ export default function HomePage() {
         </section>
       )}
 
-      {featuredNewProducts.length > 0 && (
-        <section style={newProductsSection}>
-          <div style={newProductsHeader}>
-            <div>
-              <span style={newProductsEyebrow}>NEW &amp; FEATURED</span>
-              <h2 style={newProductsTitle}>Latest Research Additions</h2>
-              <p style={newProductsText}>
-                Selected new additions to the PUGPEP research catalog.
-              </p>
-            </div>
-
-            <span style={newProductsCount}>
-              {featuredNewProducts.length} FEATURED
-            </span>
-          </div>
-
-          <div style={newProductsGrid}>
-            {featuredNewProducts.map((product) => (
-              <Link
-                key={`new-${product.slug}`}
-                href={`/products/${product.slug}`}
-                onClick={(event) => {
-                  void handleProductAccess(
-                    event,
-                    product.slug
-                  );
-                }}
-                style={{ textDecoration: "none" }}
-              >
-                <article
-                  style={{
-                    ...newProductCard,
-                    borderColor: product.color || "#ff45d8",
-                  }}
-                >
-                  {product.is_coming_soon ? (
-                    <span style={comingSoonBadge}>COMING SOON</span>
-                  ) : (
-                    <span style={newBadge}>NEW</span>
-                  )}
-
-                  <div style={newProductImageWrap}>
-                    <img
-                      src={product.image || "/pugpep-logo.png"}
-                      alt={product.name}
-                      style={productImage}
-                    />
-                  </div>
-
-                  <div style={newProductBody}>
-                    <strong
-                      style={{
-                        ...newProductName,
-                        color: product.color || "#ff45d8",
-                      }}
-                    >
-                      {product.name}
-                    </strong>
-
-                    <span style={newProductCta}>VIEW PRODUCT →</span>
-                  </div>
-                </article>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
       <section style={discoverBanner}>
         <div>
           <span style={discoverEyebrow}>WHY PUGPEP</span>
@@ -536,11 +528,187 @@ export default function HomePage() {
         </div>
       </section>
 
+      {(featuredProducts.length > 0 || featuredNewProducts.length > 0) && (
+        <section style={showcaseSection}>
+          <div style={showcaseHeader}>
+            <div>
+              <span style={showcaseEyebrow}>LAB HIGHLIGHTS</span>
+              <h2 style={showcaseTitle}>Featured &amp; New</h2>
+              <p style={showcaseText}>
+                A compact look at highlighted and recently added research products.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFilter("all");
+                document
+                  .getElementById("catalog")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              style={showcaseBrowseButton}
+            >
+              BROWSE FULL CATALOG →
+            </button>
+          </div>
+
+          <div style={showcaseGrid}>
+            {[...featuredProducts, ...featuredNewProducts]
+              .filter(
+                (product, index, array) =>
+                  array.findIndex((item) => item.slug === product.slug) === index
+              )
+              .slice(0, 8)
+              .map((product) => {
+                const effectiveSale = saleMap[product.slug];
+
+                return (
+                  <Link
+                    key={`highlight-${product.slug}`}
+                    href={`/products/${product.slug}`}
+                    onClick={(event) => {
+                      void handleProductAccess(event, product.slug);
+                    }}
+                    style={{ textDecoration: "none" }}
+                  >
+                    <article
+                      style={{
+                        ...showcaseCard,
+                        borderColor: `${product.color || "#00d9ff"}70`,
+                      }}
+                    >
+                      <div style={showcaseImageWrap}>
+                        {product.is_coming_soon ? (
+                          <span style={comingSoonBadge}>COMING SOON</span>
+                        ) : isProductNew(product) ? (
+                          <span style={newBadge}>NEW</span>
+                        ) : null}
+
+                        {!product.is_coming_soon &&
+                          effectiveSale?.isOnSale && (
+                            <span style={showcaseSaleBadge}>
+                              {effectiveSale.badgeText}
+                            </span>
+                          )}
+
+                        <img
+                          src={product.image || "/pugpep-logo.png"}
+                          alt={product.name}
+                          style={showcaseImage}
+                        />
+                      </div>
+
+                      <div style={showcaseBody}>
+                        <strong
+                          style={{
+                            ...showcaseName,
+                            color: product.color || "#7df9ff",
+                          }}
+                        >
+                          {product.name}
+                        </strong>
+
+                        </div>
+                    </article>
+                  </Link>
+                );
+              })}
+          </div>
+        </section>
+      )}
+
+      {saleProducts.length > 0 && (
+        <section style={saleShowcaseSection}>
+          <div style={showcaseHeader}>
+            <div>
+              <span style={saleShowcaseEyebrow}>CURRENT OFFERS</span>
+              <h2 style={showcaseTitle}>Current Offers</h2>
+              <p style={showcaseText}>
+                Discounted products available now.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setFilter("sale");
+                document
+                  .getElementById("catalog")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              style={saleBrowseButton}
+            >
+              VIEW ALL SALE ITEMS →
+            </button>
+          </div>
+
+          <div style={showcaseGrid}>
+            {saleProducts.map((product) => {
+              const effectiveSale = saleMap[product.slug];
+
+              return (
+                <Link
+                  key={`sale-${product.slug}`}
+                  href={`/products/${product.slug}`}
+                  onClick={(event) => {
+                    void handleProductAccess(event, product.slug);
+                  }}
+                  style={{ textDecoration: "none" }}
+                >
+                  <article
+                    style={{
+                      ...showcaseCard,
+                      borderColor: "rgba(0,255,153,.48)",
+                      boxShadow: "0 0 24px rgba(0,255,153,.10)",
+                    }}
+                  >
+                    <div style={showcaseImageWrap}>
+                      <span style={showcaseSaleBadge}>
+                        {effectiveSale?.badgeText || "SALE"}
+                      </span>
+
+                      <img
+                        src={product.image || "/pugpep-logo.png"}
+                        alt={product.name}
+                        style={showcaseImage}
+                      />
+                    </div>
+
+                    <div style={showcaseBody}>
+                      <span style={showcaseCategory}>
+                        {getCategoryLabel(product.category)}
+                      </span>
+
+                      <strong
+                        style={{
+                          ...showcaseName,
+                          color: product.color || "#00ff99",
+                        }}
+                      >
+                        {product.name}
+                      </strong>
+
+                      {effectiveSale?.campaignName && (
+                        <span style={showcaseCampaignName}>
+                          {effectiveSale.campaignName}
+                        </span>
+                      )}
+
+                    </div>
+                  </article>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       <section id="catalog" style={catalogShell}>
         <div style={catalogHeader}>
           <div>
             <span style={catalogEyebrow}>RESEARCH CATALOG</span>
-            <h2 style={catalogTitle}>Browse PUGPEP Products</h2>
+            <h2 style={catalogTitle}>Browse the Full Catalog</h2>
           </div>
 
           <div style={catalogStats}>
@@ -617,95 +785,92 @@ export default function HomePage() {
             </button>
           </div>
         ) : (
-          <section style={productsGrid}>
-            {visibleProducts.map((product) => {
-              const effectiveSale = saleMap[product.slug];
+          <div style={groupedCatalog}>
+            {catalogGroups.map((group) => (
+              <section key={group.key} style={catalogGroup}>
+                <div style={catalogGroupHeader}>
+                  <div>
+                    <span style={catalogGroupEyebrow}>{group.eyebrow}</span>
+                    <h3 style={catalogGroupTitle}>{group.title}</h3>
+                  </div>
 
-              return (
-                <Link
-                  key={product.slug}
-                  href={`/products/${product.slug}`}
-                  onClick={(event) => {
-                    void handleProductAccess(
-                      event,
-                      product.slug
-                    );
-                  }}
-                  style={{ textDecoration: "none" }}
-                >
-                  <article
-                    style={{
-                      ...productCard,
-                      borderColor: product.color || "#ff45d8",
-                    }}
-                  >
-                    <div style={productImageWrap}>
-                      {product.is_coming_soon ? (
-                        <div style={catalogComingSoonBadge}>COMING SOON</div>
-                      ) : isProductNew(product) ? (
-                        <div style={catalogNewBadge}>NEW</div>
-                      ) : null}
+                  <span style={catalogGroupCount}>
+                    {group.products.length}
+                  </span>
+                </div>
 
-                      {!product.is_coming_soon &&
-                        effectiveSale?.isOnSale && (
-                          <div style={saleBadge}>{effectiveSale.badgeText}</div>
-                        )}
+                <div style={productsGrid}>
+                  {group.products.map((product) => {
+                    const effectiveSale = saleMap[product.slug];
 
-                      <img
-                        src={
-                          typeof product.image === "string" &&
-                          product.image.length > 0
-                            ? product.image
-                            : "/pugpep-logo.png"
-                        }
-                        alt={product.name}
-                        style={productImage}
-                      />
-                    </div>
-
-                    <div style={productBody}>
-                      <h2
-                        style={{
-                          ...productName,
-                          color: product.color || "#ff45d8",
+                    return (
+                      <Link
+                        key={product.slug}
+                        href={`/products/${product.slug}`}
+                        onClick={(event) => {
+                          void handleProductAccess(event, product.slug);
                         }}
+                        style={{ textDecoration: "none" }}
                       >
-                        {product.name}
-                      </h2>
+                        <article
+                          style={{
+                            ...productCard,
+                            borderColor: `${product.color || "#ff45d8"}65`,
+                          }}
+                        >
+                          <div style={productImageWrap}>
+                            {product.is_coming_soon ? (
+                              <div style={catalogComingSoonBadge}>COMING SOON</div>
+                            ) : isProductNew(product) ? (
+                              <div style={catalogNewBadge}>NEW</div>
+                            ) : null}
 
-                      {!product.is_coming_soon &&
-                        effectiveSale?.source === "campaign" &&
-                        effectiveSale.campaignName && (
-                          <div style={campaignNameBadge}>
-                            {effectiveSale.campaignName}
+                            {!product.is_coming_soon &&
+                              effectiveSale?.isOnSale && (
+                                <div style={saleBadge}>
+                                  {effectiveSale.badgeText}
+                                </div>
+                              )}
+
+                            <img
+                              src={
+                                typeof product.image === "string" &&
+                                product.image.length > 0
+                                  ? product.image
+                                  : "/pugpep-logo.png"
+                              }
+                              alt={product.name}
+                              style={productImage}
+                            />
                           </div>
-                        )}
 
-                      {!product.is_coming_soon &&
-                        effectiveSale?.isOnSale && (
-                        <div style={saleDetail}>
-                          {effectiveSale.source === "campaign" &&
-                          effectiveSale.campaignName
-                            ? effectiveSale.campaignName
-                            : "PUGPEP SALE"}
-                        </div>
-                      )}
+                          <div style={productBody}>
+                            <h2
+                              style={{
+                                ...productName,
+                                color: product.color || "#ff45d8",
+                              }}
+                            >
+                              {product.name}
+                            </h2>
 
-                      <div
-                        style={{
-                          ...viewButton,
-                          borderColor: product.color || "#ff45d8",
-                          color: product.color || "#ff45d8",
-                        }}
-                      >
-                        VIEW PRODUCT →
-                      </div>
-                    </div>
-                  </article>
-                </Link>
-              );
-            })}
-          </section>
+                            {!product.is_coming_soon &&
+                              effectiveSale?.source === "campaign" &&
+                              effectiveSale.campaignName && (
+                                <div style={campaignNameBadge}>
+                                  {effectiveSale.campaignName}
+                                </div>
+                              )}
+
+                          </div>
+                        </article>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
         )}
       </section>
 
@@ -848,6 +1013,20 @@ export default function HomePage() {
   );
 }
 
+function getCategoryLabel(category: string | null | undefined) {
+  const normalized = String(category || "").toLowerCase().trim();
+
+  if (normalized === "spray" || normalized === "nasal-spray") {
+    return "Nasal Spray";
+  }
+
+  if (normalized === "lab-material") {
+    return "Lab Material";
+  }
+
+  return "Research Compound";
+}
+
 function QualityItem({
   icon,
   title,
@@ -946,6 +1125,172 @@ const shopSaleButton = {
   color: "#00ff99",
   fontWeight: 900,
   cursor: "pointer",
+};
+
+const showcaseSection = {
+  maxWidth: 1280,
+  margin: "34px auto 18px",
+  padding: "0 22px",
+};
+
+const saleShowcaseSection = {
+  ...showcaseSection,
+  marginTop: 38,
+  paddingTop: 22,
+  borderTop: "1px solid rgba(0,255,153,.30)",
+};
+
+const showcaseHeader = {
+  marginBottom: 18,
+  display: "flex",
+  alignItems: "flex-end",
+  justifyContent: "space-between",
+  gap: 18,
+  flexWrap: "wrap" as const,
+};
+
+const showcaseEyebrow = {
+  color: "#00d9ff",
+  fontSize: 10,
+  fontWeight: 950,
+  letterSpacing: ".13em",
+};
+
+const saleShowcaseEyebrow = {
+  ...showcaseEyebrow,
+  color: "#00ff99",
+};
+
+const showcaseTitle = {
+  margin: "5px 0 2px",
+  color: "#ffffff",
+  fontSize: "clamp(26px, 3vw, 34px)",
+  letterSpacing: "-.02em",
+  lineHeight: 1.08,
+};
+
+const showcaseText = {
+  maxWidth: 720,
+  margin: "6px 0 0",
+  color: "#b9bbc3",
+  fontSize: 14,
+  lineHeight: 1.55,
+};
+
+const showcaseBrowseButton = {
+  minHeight: 42,
+  padding: "9px 14px",
+  border: "1px solid rgba(0,217,255,.45)",
+  borderRadius: 999,
+  background: "rgba(0,217,255,.06)",
+  color: "#7df9ff",
+  fontSize: 11,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+  cursor: "pointer",
+};
+
+const saleBrowseButton = {
+  ...showcaseBrowseButton,
+  border: "1px solid rgba(0,255,153,.48)",
+  background: "rgba(0,255,153,.06)",
+  color: "#00ff99",
+};
+
+const showcaseGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fill, minmax(185px, 1fr))",
+  gap: 12,
+  justifyContent: "stretch",
+  alignItems: "stretch",
+};
+
+const showcaseCard = {
+  position: "relative" as const,
+  overflow: "hidden",
+  width: "100%",
+  height: "auto",
+  aspectRatio: "4 / 5",
+  minHeight: 0,
+  display: "block",
+  border: "1px solid",
+  borderRadius: 13,
+  background: "#050507",
+};
+
+const showcaseImageWrap = {
+  position: "absolute" as const,
+  inset: 0,
+  zIndex: 0,
+  overflow: "hidden",
+  display: "grid",
+  placeItems: "center",
+  background: "#050507",
+};
+
+const showcaseImage = {
+  width: "100%",
+  height: "100%",
+  objectFit: "contain" as const,
+  objectPosition: "center",
+  padding: 0,
+  boxSizing: "border-box" as const,
+  transform: "none",
+};
+
+const showcaseBody = {
+  position: "absolute" as const,
+  zIndex: 2,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  padding: "36px 12px 12px",
+  display: "grid",
+  alignContent: "end",
+  gap: 7,
+  background:
+    "linear-gradient(180deg, transparent 0%, rgba(0,0,0,.28) 18%, rgba(0,0,0,.86) 66%, rgba(0,0,0,.97) 100%)",
+};
+
+const showcaseCategory = {
+  width: "fit-content",
+  padding: "4px 7px",
+  border: "1px solid rgba(255,255,255,.14)",
+  borderRadius: 999,
+  color: "#989ba4",
+  fontSize: 9,
+  fontWeight: 900,
+  textTransform: "uppercase" as const,
+  letterSpacing: ".04em",
+};
+
+const showcaseName = {
+  display: "block",
+  minHeight: 34,
+  fontSize: 15,
+  lineHeight: 1.18,
+  textTransform: "uppercase" as const,
+};
+
+const showcaseSaleBadge = {
+  position: "absolute" as const,
+  top: 10,
+  right: 10,
+  zIndex: 5,
+  padding: "6px 9px",
+  borderRadius: 999,
+  background: "#00ff99",
+  color: "#001009",
+  fontSize: 10,
+  fontWeight: 1000,
+};
+
+const showcaseCampaignName = {
+  color: "#00ff99",
+  fontSize: 10,
+  fontWeight: 900,
+  textTransform: "uppercase" as const,
 };
 
 const newProductsSection = {
@@ -1163,18 +1508,24 @@ const catalogEyebrow = {
 };
 
 const catalogTitle = {
-  margin: "4px 0 0",
-  color: "#ff75df",
-  fontSize: "clamp(26px, 4vw, 36px)",
+  margin: "5px 0 0",
+  color: "#ffffff",
+  fontSize: "clamp(30px, 4vw, 42px)",
+  letterSpacing: "-.025em",
+  lineHeight: 1.08,
 };
 
 const catalogStats = {
   display: "flex",
-  gap: 7,
+  gap: 8,
   flexWrap: "wrap" as const,
+  padding: "8px 12px",
+  border: "1px solid rgba(255,255,255,.10)",
+  borderRadius: 999,
+  background: "rgba(255,255,255,.025)",
   color: "#b9bcc2",
   fontSize: 10,
-  fontWeight: 800,
+  fontWeight: 850,
 };
 
 const searchSection = {
@@ -1238,28 +1589,80 @@ const campaignLoadingText = {
   fontSize: 11,
 };
 
-const productsGrid = {
-  margin: "15px 0 0",
+const groupedCatalog = {
+  marginTop: 18,
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(205px, 1fr))",
+  gap: 28,
+};
+
+const catalogGroup = {
+  paddingTop: 4,
+};
+
+const catalogGroupHeader = {
+  paddingBottom: 10,
+  display: "flex",
+  alignItems: "end",
+  justifyContent: "space-between",
   gap: 14,
+  borderBottom: "1px solid rgba(255,255,255,.10)",
+};
+
+const catalogGroupEyebrow = {
+  color: "#00d9ff",
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".12em",
+};
+
+const catalogGroupTitle = {
+  margin: "3px 0 0",
+  color: "#ffffff",
+  fontSize: "clamp(21px, 3vw, 28px)",
+  lineHeight: 1.05,
+};
+
+const catalogGroupCount = {
+  minWidth: 30,
+  minHeight: 30,
+  display: "grid",
+  placeItems: "center",
+  border: "1px solid rgba(255,69,216,.32)",
+  borderRadius: 999,
+  color: "#ff75df",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const productsGrid = {
+  margin: "12px 0 0",
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fill, minmax(185px, 1fr))",
+  gap: 12,
 };
 
 const productCard = {
   position: "relative" as const,
   overflow: "hidden",
-  height: "100%",
-  display: "grid",
-  gridTemplateRows: "245px minmax(0, 1fr)",
+  width: "100%",
+  height: "auto",
+  aspectRatio: "4 / 5",
+  minHeight: 0,
+  display: "block",
   border: "1px solid",
   borderRadius: 13,
-  background: "#050505",
+  background: "#050507",
 };
 
 const productImageWrap = {
-  position: "relative" as const,
+  position: "absolute" as const,
+  inset: 0,
+  zIndex: 0,
   overflow: "hidden",
-  background: "#030303",
+  display: "grid",
+  placeItems: "center",
+  background: "#050507",
 };
 
 const productImage = {
@@ -1267,16 +1670,23 @@ const productImage = {
   height: "100%",
   objectFit: "contain" as const,
   objectPosition: "center",
-  padding: 12,
+  padding: 0,
   boxSizing: "border-box" as const,
-  background: "#030303",
+  transform: "none",
 };
 
 const productBody = {
-  padding: 13,
+  position: "absolute" as const,
+  zIndex: 2,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  padding: "36px 12px 12px",
   display: "grid",
   gap: 7,
-  alignContent: "start",
+  alignContent: "end",
+  background:
+    "linear-gradient(180deg, transparent 0%, rgba(0,0,0,.28) 18%, rgba(0,0,0,.86) 66%, rgba(0,0,0,.97) 100%)",
 };
 
 
@@ -1317,22 +1727,24 @@ const saleDetail = {
   textTransform: "uppercase" as const,
 };
 
+const catalogCategoryPill = {
+  width: "fit-content",
+  padding: "5px 8px",
+  border: "1px solid rgba(255,255,255,.13)",
+  borderRadius: 999,
+  background: "rgba(255,255,255,.025)",
+  color: "#9fa2aa",
+  fontSize: 9,
+  fontWeight: 900,
+  letterSpacing: ".05em",
+  textTransform: "uppercase" as const,
+};
+
 const productName = {
   margin: 0,
   fontSize: 19,
   textTransform: "uppercase" as const,
   lineHeight: 1.2,
-};
-
-const viewButton = {
-  marginTop: 3,
-  width: "fit-content",
-  padding: "7px 10px",
-  border: "1px solid",
-  borderRadius: 7,
-  background: "rgba(255,255,255,.015)",
-  fontWeight: 900,
-  fontSize: 10,
 };
 
 const emptyState = {
