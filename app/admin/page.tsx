@@ -1329,7 +1329,19 @@ export default function AdminPage() {
   );
 
   return (
-    <main style={pageStyle}>
+    <>
+      <style>{`
+        select {
+          color-scheme: dark;
+        }
+
+        select option {
+          background: #0b0b0d;
+          color: #ffffff;
+        }
+      `}</style>
+
+      <main style={pageStyle}>
       <div style={container}>
         <header style={heroPanel}>
           <div style={heroGlowPink} />
@@ -2257,7 +2269,8 @@ export default function AdminPage() {
           }
         `}</style>
       </div>
-    </main>
+      </main>
+    </>
   );
 }
 
@@ -2782,6 +2795,9 @@ const monthSelect = {
   boxSizing: "border-box" as const,
   padding: "10px 11px",
   border: "1px solid rgba(255,69,216,.18)",
+  background: "#0b0b0d",
+  color: "#ffffff",
+  colorScheme: "dark",
   borderRadius: 11,
   background:
     "linear-gradient(145deg, rgba(255,69,216,.035), rgba(255,255,255,.012))",
