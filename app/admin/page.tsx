@@ -109,10 +109,7 @@ export default function AdminPage() {
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
   const [stateFilter, setStateFilter] = useState("all");
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  });
+  const [selectedMonth, setSelectedMonth] = useState("all");
 
   const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [markingPaidOrderId, setMarkingPaidOrderId] = useState<string | null>(null);

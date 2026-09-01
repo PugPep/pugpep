@@ -646,23 +646,24 @@ const rightNav = {
 
 const floatingCart = {
   position:
-    "fixed" as const,
+    "sticky" as const,
   zIndex: 100001,
-  top: 18,
-  right: 18,
-  minWidth: 48,
-  minHeight: 48,
+  top: 14,
+  width: "max-content",
+  maxWidth: "calc(100vw - 36px)",
+  minWidth: 0,
+  minHeight: 0,
+  marginLeft: "auto",
+  marginRight: 18,
+  marginTop: 14,
+  marginBottom: 10,
   placeItems: "center",
-  padding: 6,
-  border:
-    "1px solid rgba(0,217,255,.46)",
-  borderRadius: 12,
-  background:
-    "rgba(0,0,0,.86)",
-  boxShadow:
-    "0 0 20px rgba(0,217,255,.18)",
-  backdropFilter:
-    "blur(10px)",
+  padding: 0,
+  border: "none",
+  borderRadius: 0,
+  background: "transparent",
+  boxShadow: "none",
+  backdropFilter: "none",
 };
 
 const mobileMenuButton = {
