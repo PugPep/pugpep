@@ -1329,19 +1329,7 @@ export default function AdminPage() {
   );
 
   return (
-    <>
-      <style>{`
-        select {
-          color-scheme: dark;
-        }
-
-        select option {
-          background: #0b0b0d;
-          color: #ffffff;
-        }
-      `}</style>
-
-      <main style={pageStyle}>
+    <main style={pageStyle}>
       <div style={container}>
         <header style={heroPanel}>
           <div style={heroGlowPink} />
@@ -1495,12 +1483,30 @@ export default function AdminPage() {
 
                 <select
                   value={selectedMonth}
-                  onChange={(event) => setSelectedMonth(event.target.value)}
+                  onChange={(event) => {
+                    const nextMonth = event.target.value;
+                    setSelectedMonth(nextMonth);
+
+                    if (nextMonth === "all") {
+                      setSearch("");
+                      setFilter("all");
+                      setStateFilter("all");
+                    }
+                  }}
                   style={monthSelect}
                 >
-                  <option value="all">All Months</option>
+                  <option
+                    value="all"
+                    style={{ background: "#0b0b0d", color: "#ffffff" }}
+                  >
+                    All Months
+                  </option>
                   {monthOptions.map((monthKey) => (
-                    <option key={monthKey} value={monthKey}>
+                    <option
+                      key={monthKey}
+                      value={monthKey}
+                      style={{ background: "#0b0b0d", color: "#ffffff" }}
+                    >
                       {formatMonthLabel(monthKey)}
                     </option>
                   ))}
@@ -1529,9 +1535,18 @@ export default function AdminPage() {
                 onChange={(event) => setStateFilter(event.target.value)}
                 style={monthSelect}
               >
-                <option value="all">All States</option>
+                <option
+                  value="all"
+                  style={{ background: "#0b0b0d", color: "#ffffff" }}
+                >
+                  All States
+                </option>
                 {availableStates.map((state) => (
-                  <option key={state} value={state}>
+                  <option
+                    key={state}
+                    value={state}
+                    style={{ background: "#0b0b0d", color: "#ffffff" }}
+                  >
                     {state}
                   </option>
                 ))}
@@ -2269,8 +2284,7 @@ export default function AdminPage() {
           }
         `}</style>
       </div>
-      </main>
-    </>
+    </main>
   );
 }
 
@@ -2795,15 +2809,14 @@ const monthSelect = {
   boxSizing: "border-box" as const,
   padding: "10px 11px",
   border: "1px solid rgba(255,69,216,.18)",
-  background: "#0b0b0d",
-  color: "#ffffff",
-  colorScheme: "dark",
   borderRadius: 11,
   background:
     "linear-gradient(145deg, rgba(255,69,216,.035), rgba(255,255,255,.012))",
   color: "#ffffff",
+  colorScheme: "dark",
   fontSize: 12,
   fontWeight: 800,
+  outline: "none",
 };
 
 const monthArrowButton = {
