@@ -15,30 +15,31 @@ export async function deductRewardPoints({
     return 0;
   }
 
-  const remainingPoints =
-    Math.max(
-      0,
-      rewardPointsBefore -
-        pointsUsed
+  if (pointsUsed > rewardPointsBefore) {
+    throw new Error(
+      "Insufficient reward points."
     );
+  }
 
-  const { error } =
-    await supabase
-      .from("customer_profiles")
-      .update({
-        reward_points:
-          remainingPoints,
-      })
-      .eq(
-        "id",
-        customerId
-      );
+  const {
+    data,
+    error,
+  } = await supabase.rpc(
+    "deduct_customer_reward_points",
+    {
+      p_customer_id:
+        customerId,
+
+      p_points_used:
+        pointsUsed,
+    }
+  );
 
   if (error) {
     throw error;
   }
 
-  return pointsUsed;
+  return Number(data || 0);
 }
 
 export async function restoreRewardPoints({
@@ -54,34 +55,19 @@ export async function restoreRewardPoints({
     return;
   }
 
-  const { data } =
-    await supabase
-      .from("customer_profiles")
-      .select(
-        "reward_points"
-      )
-      .eq(
-        "id",
-        customerId
-      )
-      .maybeSingle();
+  const { error } =
+    await supabase.rpc(
+      "restore_customer_reward_points",
+      {
+        p_customer_id:
+          customerId,
 
-  if (!data) {
-    return;
-  }
-
-  await supabase
-    .from("customer_profiles")
-    .update({
-      reward_points:
-        Number(
-          data.reward_points ||
-          0
-        ) +
-        points,
-    })
-    .eq(
-      "id",
-      customerId
+        p_points:
+          points,
+      }
     );
+
+  if (error) {
+    throw error;
+  }
 }

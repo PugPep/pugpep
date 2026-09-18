@@ -375,6 +375,28 @@ export default function HomePage() {
   return (
     <main style={page}>
       <style>{`
+        .category-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        }
+
+        @media (max-width: 1100px) {
+          .category-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+        }
+
+        @media (max-width: 720px) {
+          .category-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+        }
+
+        @media (max-width: 420px) {
+          .category-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
         @keyframes campaignGlow {
           0%, 100% {
             box-shadow:
@@ -477,7 +499,7 @@ export default function HomePage() {
 
         <div style={heroOverlay}>
           <div style={researchBadge}>
-            🧪 FOR RESEARCH PURPOSES ONLY
+            FOR RESEARCH PURPOSES ONLY
             <br />
             <span style={{ color: "#00ff99" }}>
               NOT FOR HUMAN OR VETERINARY USE
@@ -485,6 +507,77 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {featuredNewProducts.length > 0 && (
+        <section style={newProductsSection}>
+          <div style={newProductsHeader}>
+            <div>
+              <span style={newProductsEyebrow}>NEW &amp; COMING SOON</span>
+              <h2 style={newProductsTitle}>New Products</h2>
+              <p style={newProductsText}>
+                Recently added research products and upcoming additions.
+              </p>
+            </div>
+
+            <span style={newProductsCount}>
+              {featuredNewProducts.length} FEATURED
+            </span>
+          </div>
+
+          <div style={newProductsGrid}>
+            {featuredNewProducts.map((product) => (
+              <Link
+                key={`new-${product.slug}`}
+                href={`/products/${product.slug}`}
+                onClick={(event) => {
+                  void handleProductAccess(event, product.slug);
+                }}
+                style={{ textDecoration: "none" }}
+              >
+                <article
+                  style={{
+                    ...newProductCard,
+                    borderColor: product.color || "rgba(0,255,153,.42)",
+                  }}
+                >
+                  <div style={newProductImageWrap}>
+                    {product.is_coming_soon ? (
+                      <span style={comingSoonBadge}>COMING SOON</span>
+                    ) : (
+                      <span style={newBadge}>NEW</span>
+                    )}
+
+                    <img
+                      src={product.image || "/pugpep-logo.png"}
+                      alt={product.name}
+                      style={newProductImage}
+                    />
+                  </div>
+
+                  <div style={newProductBody}>
+                    <span style={showcaseCategory}>
+                      {getCategoryLabel(product.category)}
+                    </span>
+
+                    <strong
+                      style={{
+                        ...newProductName,
+                        color: product.color || "#7df9ff",
+                      }}
+                    >
+                      {product.name}
+                    </strong>
+
+                    <span style={newProductCta}>
+                      {product.is_coming_soon ? "VIEW DETAILS →" : "VIEW PRODUCT →"}
+                    </span>
+                  </div>
+                </article>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {primaryCampaign && (
         <section style={campaignBanner}>
@@ -511,34 +604,21 @@ export default function HomePage() {
         </section>
       )}
 
-      <section style={discoverBanner}>
-        <div>
-          <span style={discoverEyebrow}>WHY PUGPEP</span>
-          <h2 style={discoverTitle}>Built Around Better Research Standards</h2>
-          <p style={discoverText}>
-            Research-focused products, available quality documentation,
-            tracked fulfillment, and real human support.
+      <section style={brandIntroSection}>
+        <div style={brandIntroCopy}>
+          <span style={premiumEyebrow}>WHY PUGPEP</span>
+          <h2 style={brandIntroTitle}>Proof Hits Different.</h2>
+          <p style={brandIntroText}>
+            Clean research. Clear documentation. Lot-level traceability.
+            No mystery. No digging.
           </p>
-        </div>
 
-        <div style={discoverPoints}>
-          <span>✓ Quality Documentation</span>
-          <span>✓ Veteran-Owned Support</span>
-          <span>✓ Tracked Shipping</span>
-        </div>
-      </section>
+          <div style={brandPunchLine}>
+            <span style={brandPunchDot}>●</span>
+            <span>VERIFY IT. TRACE IT. RESEARCH WITH CONFIDENCE.</span>
+          </div>
 
-      {(featuredProducts.length > 0 || featuredNewProducts.length > 0) && (
-        <section style={showcaseSection}>
-          <div style={showcaseHeader}>
-            <div>
-              <span style={showcaseEyebrow}></span>
-              <h2 style={showcaseTitle}>Featured &amp; New</h2>
-              <p style={showcaseText}>
-                A compact look at highlighted and recently added research products.
-              </p>
-            </div>
-
+          <div style={brandIntroActions}>
             <button
               type="button"
               onClick={() => {
@@ -547,76 +627,139 @@ export default function HomePage() {
                   .getElementById("catalog")
                   ?.scrollIntoView({ behavior: "smooth", block: "start" });
               }}
-              style={showcaseBrowseButton}
+              style={primaryMarketingButton}
             >
-              BROWSE FULL CATALOG →
+              EXPLORE THE CATALOG →
             </button>
           </div>
+        </div>
 
-          <div style={showcaseGrid}>
-            {[...featuredProducts, ...featuredNewProducts]
-              .filter(
-                (product, index, array) =>
-                  array.findIndex((item) => item.slug === product.slug) === index
-              )
-              .slice(0, 8)
-              .map((product) => {
-                const effectiveSale = saleMap[product.slug];
-
-                return (
-                  <Link
-                    key={`highlight-${product.slug}`}
-                    href={`/products/${product.slug}`}
-                    onClick={(event) => {
-                      void handleProductAccess(event, product.slug);
-                    }}
-                    style={{ textDecoration: "none" }}
-                  >
-                    <article
-                      style={{
-                        ...showcaseCard,
-                        borderColor: `${product.color || "#00d9ff"}70`,
-                      }}
-                    >
-                      <div style={showcaseImageWrap}>
-                        {product.is_coming_soon ? (
-                          <span style={comingSoonBadge}>COMING SOON</span>
-                        ) : isProductNew(product) ? (
-                          <span style={newBadge}>NEW</span>
-                        ) : null}
-
-                        {!product.is_coming_soon &&
-                          effectiveSale?.isOnSale && (
-                            <span style={showcaseSaleBadge}>
-                              {effectiveSale.badgeText}
-                            </span>
-                          )}
-
-                        <img
-                          src={product.image || "/pugpep-logo.png"}
-                          alt={product.name}
-                          style={showcaseImage}
-                        />
-                      </div>
-
-                      <div style={showcaseBody}>
-                        <strong
-                          style={{
-                            ...showcaseName,
-                            color: product.color || "#7df9ff",
-                          }}
-                        >
-                          {product.name}
-                        </strong>
-
-                        </div>
-                    </article>
-                  </Link>
-                );
-              })}
+        <Link href="/quality" style={brandQualityVisualLink}>
+          <div style={brandQualityVisual}>
+            <img
+              src="/marketing/lot-specific-coas.png"
+              alt="PugPep transparent research quality and testing"
+              style={brandQualityImage}
+            />
+            <div style={brandQualityShade} />
+            <div style={brandQualityOverlayCopy}>
+              <span style={brandQualityKicker}>TRANSPARENT RESEARCH</span>
+              <strong style={brandQualityOverlayTitle}>Quality You Can Verify</strong>
+              <span style={brandQualityCta}>SEE THE PROOF →</span>
+            </div>
           </div>
-        </section>
-      )}
+        </Link>
+      </section>
+
+      <section style={categorySection}>
+        <div style={sectionLead}>
+          <span style={premiumEyebrow}>SHOP BY FOCUS</span>
+          <h2 style={premiumSectionTitle}>Explore the PugPep Catalog</h2>
+          <p style={premiumSectionText}>
+            Premium category visuals guide the storefront while the real product
+            catalog remains clean, fast, and easy to browse.
+          </p>
+
+        </div>
+
+        <div className="category-grid" style={categoryGrid}>
+          <button
+            type="button"
+            onClick={() => {
+              setFilter("peptides");
+              document
+                .getElementById("catalog")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            className="category-card"
+            style={categoryCardButton}
+          >
+            <img
+              src="/marketing/research-peptides.png"
+              alt="PugPep research peptides category"
+              style={categoryImage}
+            />
+            <div style={categoryShade} />
+            <div style={categoryContent}>
+              <span style={categoryKicker}>CORE CATALOG</span>
+              <h3 style={categoryTitle}>Research Peptides</h3>
+              <span style={categoryCta}>SHOP PEPTIDES →</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setFilter("sprays");
+              document
+                .getElementById("catalog")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            className="category-card"
+            style={categoryCardButton}
+          >
+            <img
+              src="/marketing/research-sprays.png"
+              alt="PugPep research sprays category"
+              style={categoryImage}
+            />
+            <div style={categoryShade} />
+            <div style={categoryContent}>
+              <span style={categoryKicker}>SPRAY CATALOG</span>
+              <h3 style={categoryTitle}>Research Sprays</h3>
+              <span style={categoryCta}>SHOP SPRAYS →</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setFilter("lab materials");
+              document
+                .getElementById("catalog")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            className="category-card"
+            style={categoryCardButton}
+          >
+            <img
+              src="/marketing/lab-materials.png"
+              alt="PugPep laboratory materials category"
+              style={categoryImage}
+            />
+            <div style={categoryShade} />
+            <div style={categoryContent}>
+              <span style={categoryKicker}>LAB ESSENTIALS</span>
+              <h3 style={categoryTitle}>Lab Materials</h3>
+              <span style={categoryCta}>SHOP LAB MATERIALS →</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setFilter("sale");
+              document
+                .getElementById("catalog")
+                ?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+            className="category-card"
+            style={categoryCardButton}
+          >
+            <img
+              src="/marketing/current-offers.png"
+              alt="PugPep current offers and promotions"
+              style={categoryImage}
+            />
+            <div style={categoryShade} />
+            <div style={categoryContent}>
+              <span style={categoryKicker}>FEATURED PROMOTIONS</span>
+              <h3 style={categoryTitle}>Current Offers</h3>
+              <span style={categoryCta}>VIEW OFFERS →</span>
+            </div>
+          </button>
+        </div>
+      </section>
 
       {saleProducts.length > 0 && (
         <section style={saleShowcaseSection}>
@@ -719,13 +862,6 @@ export default function HomePage() {
         </div>
 
         <div style={searchSection}>
-          <input
-            placeholder="Search products..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            style={searchInput}
-          />
-
           <div style={catalogControls}>
             <div style={filterButtons}>
               {["all", "sale", "peptides", "sprays", "lab materials"].map((item) => (
@@ -761,6 +897,15 @@ export default function HomePage() {
               <option value="az">A–Z</option>
               <option value="za">Z–A</option>
             </select>
+          </div>
+
+          <div style={catalogSearchWrap}>
+            <input
+              placeholder="Search products..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              style={catalogSearchInput}
+            />
           </div>
 
           {campaignLoading && (
@@ -876,31 +1021,6 @@ export default function HomePage() {
         )}
       </section>
 
-      <section style={bottomBar}>
-        <QualityItem
-          icon="🔒"
-          title="SECURE PACKAGING"
-          text="secure, safe & professional"
-        />
-
-        <QualityItem
-          icon="🚚"
-          title="FAST & TRACKED SHIPPING"
-          text="Quick & reliable delivery"
-        />
-
-        <QualityItem
-          icon="💳"
-          title="EASY PAYMENT"
-          text="Multiple secure options"
-        />
-
-        <QualityItem
-          icon="🇺🇸"
-          title="VETERAN-OWNED HUMAN SUPPORT"
-          text="Real U.S.-based people when you need help"
-        />
-      </section>
 
       <footer style={footer}>
         <div style={footerGrid}>
@@ -910,7 +1030,7 @@ export default function HomePage() {
             </p>
 
             <p style={footerSupportPromise}>
-              🇺🇸 Veteran-Owned • U.S.-Based • Human Support
+              Veteran-Owned • U.S.-Based • Human Support
             </p>
 
             <Link href="/account" style={footerLink}>
@@ -1068,8 +1188,8 @@ const heroVideoSection = {
 
 const researchBadge = {
   display: "inline-block",
-  marginTop: 20,
-  padding: "15px 24px",
+  marginTop: 10,
+  padding: "10px 16px",
   border: "1px solid #ff2fbf",
   borderRadius: 12,
   background: "rgba(0,0,0,.45)",
@@ -1079,21 +1199,21 @@ const researchBadge = {
 
 const campaignBanner = {
   maxWidth: 1320,
-  margin: "20px auto 14px",
+  margin: "14px auto 10px",
   padding: 1,
   borderRadius: 16,
   background: "linear-gradient(90deg, #ff45d8, #00d9ff, #00ff99)",
 };
 
 const campaignBannerContent = {
-  padding: "17px 18px",
+  padding: "12px 14px",
   borderRadius: 15,
   background:
     "linear-gradient(135deg, rgba(12,5,16,.98), rgba(4,13,16,.98))",
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  gap: 18,
+  gap: 9,
   flexWrap: "wrap" as const,
 };
 
@@ -1107,20 +1227,20 @@ const campaignEyebrow = {
 const campaignTitle = {
   margin: "4px 0 1px",
   color: "#ff75df",
-  fontSize: "clamp(22px, 4vw, 30px)",
+  fontSize: "clamp(18px, 2.8vw, 24px)",
   textTransform: "uppercase" as const,
 };
 
 const campaignMessage = {
   margin: "4px 0 0",
   color: "#d6d6dc",
-  fontSize: 14,
+  fontSize: 11,
   fontWeight: 700,
 };
 
 const shopSaleButton = {
-  minHeight: 40,
-  padding: "8px 14px",
+  minHeight: 28,
+  padding: "6px 11px",
   border: "1px solid #00ff99",
   borderRadius: 999,
   background: "rgba(0,255,153,.07)",
@@ -1131,23 +1251,23 @@ const shopSaleButton = {
 
 const showcaseSection = {
   maxWidth: 1280,
-  margin: "34px auto 18px",
-  padding: "0 22px",
+  margin: "22px auto 12px",
+  padding: "0 16px",
 };
 
 const saleShowcaseSection = {
   ...showcaseSection,
-  marginTop: 38,
-  paddingTop: 22,
+  marginTop: 24,
+  paddingTop: 14,
   borderTop: "1px solid rgba(0,255,153,.30)",
 };
 
 const showcaseHeader = {
-  marginBottom: 18,
+  marginBottom: 12,
   display: "flex",
   alignItems: "flex-end",
   justifyContent: "space-between",
-  gap: 18,
+  gap: 9,
   flexWrap: "wrap" as const,
 };
 
@@ -1166,7 +1286,7 @@ const saleShowcaseEyebrow = {
 const showcaseTitle = {
   margin: "5px 0 2px",
   color: "#ffffff",
-  fontSize: "clamp(26px, 3vw, 34px)",
+  fontSize: "clamp(21px, 2.4vw, 28px)",
   letterSpacing: "-.02em",
   lineHeight: 1.08,
 };
@@ -1175,7 +1295,7 @@ const showcaseText = {
   maxWidth: 720,
   margin: "6px 0 0",
   color: "#b9bbc3",
-  fontSize: 14,
+  fontSize: 11,
   lineHeight: 1.55,
 };
 
@@ -1186,7 +1306,7 @@ const showcaseBrowseButton = {
   borderRadius: 999,
   background: "rgba(0,217,255,.06)",
   color: "#7df9ff",
-  fontSize: 11,
+  fontSize: 10,
   fontWeight: 950,
   letterSpacing: ".04em",
   cursor: "pointer",
@@ -1202,8 +1322,8 @@ const saleBrowseButton = {
 const showcaseGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fill, minmax(185px, 1fr))",
-  gap: 12,
+    "repeat(auto-fill, minmax(160px, 1fr))",
+  gap: 9,
   justifyContent: "stretch",
   alignItems: "stretch",
 };
@@ -1247,10 +1367,10 @@ const showcaseBody = {
   left: 0,
   right: 0,
   bottom: 0,
-  padding: "36px 12px 12px",
+  padding: "26px 10px 10px",
   display: "grid",
   alignContent: "end",
-  gap: 7,
+  gap: 5,
   background:
     "linear-gradient(180deg, transparent 0%, rgba(0,0,0,.28) 18%, rgba(0,0,0,.86) 66%, rgba(0,0,0,.97) 100%)",
 };
@@ -1269,8 +1389,8 @@ const showcaseCategory = {
 
 const showcaseName = {
   display: "block",
-  minHeight: 34,
-  fontSize: 15,
+  minHeight: 28,
+  fontSize: 11,
   lineHeight: 1.18,
   textTransform: "uppercase" as const,
 };
@@ -1298,7 +1418,7 @@ const showcaseCampaignName = {
 const newProductsSection = {
   maxWidth: 1320,
   margin: "18px auto 14px",
-  padding: "20px 18px",
+  padding: "14px 14px",
   border: "1px solid rgba(0,255,153,.24)",
   borderRadius: 16,
   background:
@@ -1306,11 +1426,11 @@ const newProductsSection = {
 };
 
 const newProductsHeader = {
-  marginBottom: 14,
+  marginBottom: 10,
   display: "flex",
   alignItems: "flex-end",
   justifyContent: "space-between",
-  gap: 14,
+  gap: 8,
   flexWrap: "wrap" as const,
 };
 
@@ -1324,13 +1444,13 @@ const newProductsEyebrow = {
 const newProductsTitle = {
   margin: "4px 0 1px",
   color: "#7df9ff",
-  fontSize: "clamp(24px, 4vw, 34px)",
+  fontSize: "clamp(20px, 3vw, 28px)",
 };
 
 const newProductsText = {
   margin: "4px 0 0",
   color: "#cfcfd5",
-  fontSize: 13,
+  fontSize: 11,
 };
 
 const newProductsCount = {
@@ -1344,8 +1464,8 @@ const newProductsCount = {
 
 const newProductsGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(185px, 1fr))",
-  gap: 12,
+  gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))",
+  gap: 11,
 };
 
 const newProductCard = {
@@ -1353,7 +1473,7 @@ const newProductCard = {
   overflow: "hidden",
   height: "100%",
   display: "grid",
-  gridTemplateRows: "180px minmax(0, 1fr)",
+  gridTemplateRows: "215px minmax(0, 1fr)",
   border: "1px solid",
   borderRadius: 13,
   background: "rgba(3,3,3,.92)",
@@ -1366,8 +1486,16 @@ const newProductImageWrap = {
   placeItems: "center",
 };
 
+const newProductImage = {
+  width: "100%",
+  height: "100%",
+  objectFit: "contain" as const,
+  objectPosition: "center",
+  display: "block",
+};
+
 const newProductBody = {
-  padding: 12,
+  padding: 10,
   display: "grid",
   gap: 6,
   alignContent: "start",
@@ -1376,7 +1504,7 @@ const newProductBody = {
 
 const newProductName = {
   display: "block",
-  fontSize: 17,
+  fontSize: 14,
   textTransform: "uppercase" as const,
 };
 
@@ -1445,7 +1573,7 @@ const catalogNewBadge = {
 const discoverBanner = {
   maxWidth: 1320,
   margin: "18px auto 14px",
-  padding: "18px 20px",
+  padding: "13px 15px",
   border: "1px solid rgba(255,45,210,.22)",
   borderRadius: 16,
   background:
@@ -1453,7 +1581,7 @@ const discoverBanner = {
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  gap: 18,
+  gap: 9,
   flexWrap: "wrap" as const,
 };
 
@@ -1466,7 +1594,7 @@ const discoverEyebrow = {
 
 const discoverTitle = {
   margin: "4px 0 0",
-  fontSize: "clamp(24px, 4vw, 32px)",
+  fontSize: "clamp(20px, 3vw, 27px)",
   color: "#ff45d8",
 };
 
@@ -1474,13 +1602,13 @@ const discoverText = {
   maxWidth: 720,
   margin: "5px 0 0",
   color: "#cfd0d5",
-  fontSize: 14,
+  fontSize: 11,
   lineHeight: 1.55,
 };
 
 const discoverPoints = {
   display: "flex",
-  gap: 7,
+  gap: 5,
   flexWrap: "wrap" as const,
   color: "#00ff99",
   fontSize: 10,
@@ -1490,7 +1618,7 @@ const discoverPoints = {
 const catalogShell = {
   maxWidth: 1320,
   margin: "20px auto 0",
-  padding: "0 14px",
+  padding: "0 12px",
   scrollMarginTop: 110,
 };
 
@@ -1498,7 +1626,7 @@ const catalogHeader = {
   display: "flex",
   alignItems: "flex-end",
   justifyContent: "space-between",
-  gap: 14,
+  gap: 8,
   flexWrap: "wrap" as const,
 };
 
@@ -1512,7 +1640,7 @@ const catalogEyebrow = {
 const catalogTitle = {
   margin: "5px 0 0",
   color: "#ffffff",
-  fontSize: "clamp(30px, 4vw, 42px)",
+  fontSize: "clamp(24px, 3vw, 34px)",
   letterSpacing: "-.025em",
   lineHeight: 1.08,
 };
@@ -1521,7 +1649,7 @@ const catalogStats = {
   display: "flex",
   gap: 8,
   flexWrap: "wrap" as const,
-  padding: "8px 12px",
+  padding: "6px 10px",
   border: "1px solid rgba(255,255,255,.10)",
   borderRadius: 999,
   background: "rgba(255,255,255,.025)",
@@ -1530,26 +1658,33 @@ const catalogStats = {
   fontWeight: 850,
 };
 
+const catalogSearchWrap = {
+  marginTop: 10,
+  width: "100%",
+};
+
+const catalogSearchInput = {
+  width: "100%",
+  boxSizing: "border-box" as const,
+  padding: "11px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(0,217,255,.34)",
+  background: "#0b0b0d",
+  color: "#fff",
+  fontSize: 14,
+  outline: "none",
+};
+
 const searchSection = {
-  marginTop: 13,
-  padding: 12,
+  marginTop: 9,
+  padding: 10,
   display: "grid",
-  gap: 10,
+  gap: 8,
   border: "1px solid rgba(255,255,255,.09)",
   borderRadius: 13,
   background: "rgba(255,255,255,.018)",
 };
 
-const searchInput = {
-  width: "100%",
-  boxSizing: "border-box" as const,
-  padding: 12,
-  borderRadius: 9,
-  border: "1px solid #333",
-  background: "#0b0b0d",
-  color: "#fff",
-  fontSize: 16,
-};
 
 const catalogControls = {
   display: "flex",
@@ -1561,13 +1696,13 @@ const catalogControls = {
 
 const filterButtons = {
   display: "flex",
-  gap: 7,
+  gap: 5,
   flexWrap: "wrap" as const,
 };
 
 const filterButton = {
-  minHeight: 36,
-  padding: "7px 10px",
+  minHeight: 32,
+  padding: "6px 9px",
   borderRadius: 999,
   cursor: "pointer",
   fontWeight: 900,
@@ -1575,8 +1710,8 @@ const filterButton = {
 };
 
 const sortSelect = {
-  minHeight: 36,
-  padding: "0 10px",
+  minHeight: 32,
+  padding: "0 9px",
   border: "1px solid rgba(0,217,255,.24)",
   borderRadius: 9,
   background: "#0a0a0c",
@@ -1588,13 +1723,13 @@ const campaignLoadingText = {
   margin: 0,
   textAlign: "center" as const,
   color: "#8d8d96",
-  fontSize: 11,
+  fontSize: 10,
 };
 
 const groupedCatalog = {
-  marginTop: 18,
+  marginTop: 8,
   display: "grid",
-  gap: 28,
+  gap: 18,
 };
 
 const catalogGroup = {
@@ -1606,7 +1741,7 @@ const catalogGroupHeader = {
   display: "flex",
   alignItems: "end",
   justifyContent: "space-between",
-  gap: 14,
+  gap: 8,
   borderBottom: "1px solid rgba(255,255,255,.10)",
 };
 
@@ -1620,13 +1755,13 @@ const catalogGroupEyebrow = {
 const catalogGroupTitle = {
   margin: "3px 0 0",
   color: "#ffffff",
-  fontSize: "clamp(21px, 3vw, 28px)",
+  fontSize: "clamp(18px, 2.2vw, 24px)",
   lineHeight: 1.05,
 };
 
 const catalogGroupCount = {
   minWidth: 30,
-  minHeight: 30,
+  minHeight: 27,
   display: "grid",
   placeItems: "center",
   border: "1px solid rgba(255,69,216,.32)",
@@ -1640,8 +1775,8 @@ const productsGrid = {
   margin: "12px 0 0",
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fill, minmax(185px, 1fr))",
-  gap: 12,
+    "repeat(auto-fill, minmax(195px, 1fr))",
+  gap: 11,
 };
 
 const productCard = {
@@ -1683,9 +1818,9 @@ const productBody = {
   left: 0,
   right: 0,
   bottom: 0,
-  padding: "36px 12px 12px",
+  padding: "26px 10px 10px",
   display: "grid",
-  gap: 7,
+  gap: 5,
   alignContent: "end",
   background:
     "linear-gradient(180deg, transparent 0%, rgba(0,0,0,.28) 18%, rgba(0,0,0,.86) 66%, rgba(0,0,0,.97) 100%)",
@@ -1744,14 +1879,14 @@ const catalogCategoryPill = {
 
 const productName = {
   margin: 0,
-  fontSize: 19,
+  fontSize: 16,
   textTransform: "uppercase" as const,
   lineHeight: 1.2,
 };
 
 const emptyState = {
-  marginTop: 15,
-  padding: 24,
+  marginTop: 7,
+  padding: 11,
   border: "1px dashed rgba(0,217,255,.20)",
   borderRadius: 13,
   textAlign: "center" as const,
@@ -1760,18 +1895,18 @@ const emptyState = {
 const emptyTitle = {
   margin: 0,
   color: "#fff",
-  fontSize: 20,
+  fontSize: 17,
 };
 
 const emptyText = {
   margin: "5px 0 10px",
   color: "#94989f",
-  fontSize: 13,
+  fontSize: 11,
 };
 
 const emptyButton = {
-  minHeight: 38,
-  padding: "7px 11px",
+  minHeight: 33,
+  padding: "6px 9px",
   border: "1px solid rgba(0,255,153,.32)",
   borderRadius: 8,
   background: "rgba(0,255,153,.04)",
@@ -1782,23 +1917,306 @@ const emptyButton = {
 
 const qualityItem = {
   display: "flex",
-  gap: 12,
+  gap: 9,
   alignItems: "center",
-  padding: 12,
+  padding: 10,
   borderLeft: "1px solid #333",
 };
 
 const bottomBar = {
   maxWidth: 1320,
   margin: "18px auto 46px",
-  padding: 13,
+  padding: 10,
   border: "1px solid rgba(255,255,255,.10)",
   borderRadius: 13,
   background: "rgba(10,10,10,.95)",
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 8,
+};
+
+const brandIntroSection = {
+  maxWidth: 1320,
+  margin: "22px auto 0",
+  padding: "14px",
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1.25fr) minmax(260px, .75fr)",
+  gap: 16,
+  alignItems: "stretch",
+  border: "1px solid rgba(0,217,255,.18)",
+  borderRadius: 16,
+  background:
+    "linear-gradient(115deg, rgba(0,217,255,.055), rgba(255,69,216,.035) 48%, rgba(0,255,153,.045))",
+  boxShadow: "0 18px 50px rgba(0,0,0,.28), inset 0 0 30px rgba(0,217,255,.025)",
+};
+
+const brandIntroCopy = {
+  maxWidth: 760,
+  display: "flex",
+  flexDirection: "column" as const,
+  justifyContent: "center",
+  padding: "4px 2px",
+};
+
+const premiumEyebrow = {
+  color: "#7df9ff",
+  fontSize: 10,
+  fontWeight: 950,
+  letterSpacing: ".18em",
+  textTransform: "uppercase" as const,
+};
+
+const brandIntroTitle = {
+  margin: "5px 0 0",
+  color: "#fff",
+  fontSize: "clamp(26px, 3.5vw, 40px)",
+  letterSpacing: "-.045em",
+  lineHeight: .98,
+  textShadow: "0 0 24px rgba(125,249,255,.12)",
+};
+
+const brandIntroText = {
+  maxWidth: 600,
+  margin: "9px 0 0",
+  color: "#d4d7dd",
+  fontSize: "clamp(12px, 1.45vw, 14px)",
+  lineHeight: 1.45,
+};
+
+const brandIntroActions = {
+  marginTop: 11,
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap" as const,
+};
+
+const primaryMarketingButton = {
+  minHeight: 38,
+  padding: "8px 14px",
+  border: "1px solid rgba(0,255,153,.72)",
+  borderRadius: 999,
+  background: "linear-gradient(90deg, rgba(0,255,153,.17), rgba(0,217,255,.15))",
+  color: "#fff",
+  fontSize: 10,
+  fontWeight: 1000,
+  letterSpacing: ".07em",
+  cursor: "pointer",
+  boxShadow: "0 0 26px rgba(0,255,153,.12)",
+};
+
+
+
+
+
+
+
+const brandQualityVisualLink = {
+  display: "block",
+  textDecoration: "none",
+};
+
+const brandQualityVisual = {
+  position: "relative" as const,
+  overflow: "hidden",
+  minHeight: 160,
+  height: "100%",
+  border: "1px solid rgba(0,217,255,.30)",
+  borderRadius: 14,
+  background: "#030304",
+  boxShadow: "0 0 30px rgba(0,217,255,.06)",
+};
+
+const brandQualityImage = {
+  width: "100%",
+  height: "100%",
+  minHeight: 160,
+  display: "block",
+  objectFit: "contain" as const,
+  objectPosition: "center",
+  padding: 8,
+  background: "#030304",
+};
+
+const brandQualityShade = {
+  position: "absolute" as const,
+  inset: 0,
+  background:
+    "linear-gradient(180deg, transparent 34%, rgba(0,0,0,.12) 52%, rgba(0,0,0,.92) 100%)",
+  pointerEvents: "none" as const,
+};
+
+const brandQualityOverlayCopy = {
+  position: "absolute" as const,
+  left: 12,
+  right: 12,
+  bottom: 10,
+  zIndex: 2,
+  display: "grid",
+  gap: 2,
+};
+
+const brandQualityKicker = {
+  color: "#ff8ee7",
+  fontSize: 8,
+  fontWeight: 950,
+  letterSpacing: ".12em",
+};
+
+const brandQualityOverlayTitle = {
+  color: "#fff",
+  fontSize: 15,
+  lineHeight: 1.12,
+};
+
+const brandQualityCta = {
+  marginTop: 3,
+  color: "#00ff99",
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".05em",
+};
+
+const brandPunchLine = {
+  marginTop: 10,
+  display: "flex",
+  alignItems: "center",
+  gap: 7,
+  color: "#7df9ff",
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".09em",
+};
+
+const brandPunchDot = {
+  color: "#ff45d8",
+  fontSize: 9,
+  textShadow: "0 0 12px rgba(255,69,216,.9)",
+};
+
+
+
+const sectionLead = {
+  maxWidth: 820,
+  marginBottom: 12,
+};
+
+const premiumSectionTitle = {
+  margin: "7px 0 0",
+  color: "#fff",
+  fontSize: "clamp(20px, 2.4vw, 29px)",
+  lineHeight: 1.05,
+  letterSpacing: "-.03em",
+};
+
+const premiumSectionText = {
+  margin: "10px 0 0",
+  color: "#aeb2ba",
+  fontSize: 11,
+  lineHeight: 1.65,
+};
+
+
+
+
+
+
+
+
+
+
+
+const categorySection = {
+  maxWidth: 1320,
+  margin: "48px auto 0",
+  padding: "0 14px",
+};
+
+
+
+const categoryGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
   gap: 10,
 };
+
+
+const categoryCardButton = {
+  position: "relative" as const,
+  minHeight: 230,
+  overflow: "hidden",
+  padding: 0,
+  border: "1px solid rgba(255,255,255,.12)",
+  borderRadius: 18,
+  background: "#050507",
+  color: "#fff",
+  textAlign: "left" as const,
+  cursor: "pointer",
+  boxShadow: "0 18px 44px rgba(0,0,0,.28)",
+};
+
+const categoryImage = {
+  position: "absolute" as const,
+  inset: 0,
+  width: "100%",
+  height: "100%",
+  objectFit: "cover" as const,
+  objectPosition: "center",
+};
+
+const categoryShade = {
+  position: "absolute" as const,
+  inset: 0,
+  background:
+    "linear-gradient(180deg, rgba(0,0,0,.06), rgba(0,0,0,.24) 48%, rgba(0,0,0,.92) 100%)",
+};
+
+const categoryContent = {
+  position: "absolute" as const,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 2,
+  padding: 11,
+};
+
+const categoryKicker = {
+  color: "#00ff99",
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".14em",
+};
+
+const categoryTitle = {
+  margin: "5px 0 0",
+  color: "#fff",
+  fontSize: "clamp(21px, 2.4vw, 28px)",
+  lineHeight: 1.05,
+};
+
+const categoryCta = {
+  display: "inline-block",
+  marginTop: 7,
+  color: "#7df9ff",
+  fontSize: 10,
+  fontWeight: 950,
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 const overlay = {
   position: "fixed" as const,
@@ -1808,12 +2226,12 @@ const overlay = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  padding: 25,
+  padding: 18,
 };
 
 const modal = {
   maxWidth: 520,
-  padding: 30,
+  padding: 22,
   border: "1px solid #ff45d8",
   borderRadius: 18,
   background: "#080808",
@@ -1822,23 +2240,23 @@ const modal = {
 
 const gateCheckboxRow = {
   marginTop: 14,
-  padding: 14,
+  padding: 11,
   display: "flex",
   alignItems: "flex-start",
-  gap: 12,
+  gap: 9,
   border: "1px solid rgba(0,217,255,.22)",
   borderRadius: 12,
   background: "rgba(0,217,255,.035)",
   color: "#e5e5ea",
   textAlign: "left" as const,
   lineHeight: 1.55,
-  fontSize: 14,
+  fontSize: 11,
   cursor: "pointer",
 };
 
 const gateCheckbox = {
   width: 20,
-  height: 20,
+  height: 17,
   marginTop: 2,
   flex: "0 0 auto",
   accentColor: "#00ff99",
@@ -1846,21 +2264,37 @@ const gateCheckbox = {
 };
 
 const mainButton = {
-  marginTop: 20,
-  padding: "14px 24px",
+  marginTop: 14,
+  padding: "10px 18px",
   border: "none",
   borderRadius: 10,
   background: "linear-gradient(90deg, #00b7ff, #ff2fd0)",
   color: "#fff",
   fontWeight: "bold",
   cursor: "pointer",
-  fontSize: 18,
+  fontSize: 15,
+};
+
+const primaryLinkButton = {
+  minHeight: 32,
+  padding: "6px 10px",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  border: "1px solid rgba(0,255,153,.44)",
+  borderRadius: 9,
+  background: "rgba(0,255,153,.06)",
+  color: "#00ff99",
+  textDecoration: "none",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: ".03em",
 };
 
 const footer = {
-  marginTop: 60,
+  marginTop: 38,
   padding:
-    "clamp(34px, 5vw, 54px) clamp(20px, 4vw, 36px)",
+    "clamp(24px, 3.5vw, 38px) clamp(14px, 3vw, 26px)",
   borderTop:
     "1px solid rgba(255,255,255,.12)",
   background:
@@ -1874,19 +2308,19 @@ const footerGrid = {
   display: "grid",
   gridTemplateColumns:
     "repeat(auto-fit, minmax(210px, 1fr))",
-  gap: 28,
+  gap: 18,
 };
 
 const footerColumn = {
   display: "grid",
   alignContent: "start",
-  gap: 10,
+  gap: 8,
 };
 
 const footerColumnTitle = {
   margin: "0 0 5px",
   color: "#ff75df",
-  fontSize: 12,
+  fontSize: 11,
   fontWeight: 900,
   letterSpacing: ".13em",
 };
@@ -1894,7 +2328,7 @@ const footerColumnTitle = {
 const footerSupportPromise = {
   margin: "0 0 8px",
   color: "#00ff99",
-  fontSize: 13,
+  fontSize: 11,
   lineHeight: 1.5,
   fontWeight: 700,
 };
@@ -1902,7 +2336,7 @@ const footerSupportPromise = {
 const footerLink = {
   width: "fit-content",
   color: "#cfcfd5",
-  fontSize: 14,
+  fontSize: 11,
   lineHeight: 1.5,
   textDecoration: "none",
 };
@@ -1921,7 +2355,7 @@ const footerResearchNotice = {
   margin: "0 auto 14px",
   color: "#cfcfd5",
   lineHeight: 1.7,
-  fontSize: 13,
+  fontSize: 11,
   textAlign: "center" as const,
 };
 
@@ -1930,7 +2364,7 @@ const footerText = {
   margin: "0 auto 14px",
   color: "#888",
   lineHeight: 1.7,
-  fontSize: 13,
+  fontSize: 11,
   textAlign: "center" as const,
 };
 
@@ -1939,7 +2373,7 @@ const footerCopyright = {
   margin: "22px auto 0",
   color: "#00d9ff",
   fontWeight: 900,
-  fontSize: 13,
+  fontSize: 11,
   textAlign: "center" as const,
 };
 

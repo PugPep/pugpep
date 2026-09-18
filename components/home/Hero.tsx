@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "../../lib/supabaseClient";
@@ -51,25 +52,12 @@ export default function Hero() {
     event.preventDefault();
 
     const query = searchTerm.trim();
-    const target = query
-      ? `/?search=${encodeURIComponent(query)}#laboratory`
-      : "/#laboratory";
 
-    router.push(target);
-
-    window.setTimeout(() => {
-      document.getElementById("laboratory")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 60);
-  }
-
-  function enterLab() {
-    document.getElementById("laboratory")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
+    router.push(
+      query
+        ? `/shop?search=${encodeURIComponent(query)}`
+        : "/shop"
+    );
   }
 
   const firstName =
@@ -78,194 +66,512 @@ export default function Hero() {
   const tier = profile?.vip_tier || null;
 
   return (
-    <section aria-labelledby="pugpep-hero-title" style={hero}>
-      <div aria-hidden="true" style={gridOverlay} />
-      <div aria-hidden="true" style={{ ...glowOrb, ...pinkOrb }} />
-      <div aria-hidden="true" style={{ ...glowOrb, ...cyanOrb }} />
-      <div aria-hidden="true" style={{ ...glowOrb, ...greenOrb }} />
+    <section aria-labelledby="pugpep-hero-title" className="hero">
+      <div className="gridOverlay" aria-hidden="true" />
+      <div className="glow glowPink" aria-hidden="true" />
+      <div className="glow glowCyan" aria-hidden="true" />
 
-      <div style={heroInner}>
-        <div style={contentColumn}>
-          <div style={brandPill}>
-            <span style={brandDot} />
+      <div className="inner">
+        <div className="content">
+          <div className="brandPill">
+            <span className="brandDot" />
             PUGPEP LABORATORY
           </div>
 
           {firstName ? (
-            <p style={welcomeText}>
+            <p className="welcome">
               Welcome back, <strong>{firstName}</strong>
               {tier ? <> · {tier} Lab Status</> : null}
             </p>
           ) : (
-            <p style={welcomeText}>
-              Premium compounds for qualified laboratory research
+            <p className="welcome">
+              Premium research materials for qualified laboratory use
             </p>
           )}
 
-          <p style={overline}>ENTER THE LAB</p>
+          <p className="eyebrow">ENTER THE LAB</p>
 
-          <h1 id="pugpep-hero-title" style={headline}>
+          <h1 id="pugpep-hero-title" className="headline">
             Precision
-            <span style={headlineAccent}> Starts Here.</span>
+            <span> Starts Here.</span>
           </h1>
 
-          <p style={description}>
-            Explore third-party-tested compounds, transparent quality
-            documentation, and a streamlined ordering experience built for
-            discovery.
+          <p className="description">
+            Explore research materials, transparent quality documentation,
+            and a streamlined storefront built for fast product discovery.
           </p>
 
-          <div style={actionRow}>
-            <button type="button" onClick={enterLab} style={primaryButton}>
-              Enter the Lab
-              <span aria-hidden="true" style={buttonArrow}>
-                →
-              </span>
-            </button>
+          <div className="actions">
+            <Link href="/shop" className="primaryButton">
+              SHOP THE LAB
+              <span aria-hidden="true">→</span>
+            </Link>
 
-            <a href="/quality" style={secondaryButton}>
-              View Quality Standards
-            </a>
+            <Link href="/quality" className="secondaryButton">
+              VIEW QUALITY &amp; TESTING
+            </Link>
           </div>
 
-          <form onSubmit={submitSearch} role="search" style={searchShell}>
-            <span aria-hidden="true" style={searchIcon}>
+          <form
+            onSubmit={submitSearch}
+            role="search"
+            className="searchShell"
+          >
+            <label htmlFor="hero-shop-search" className="srOnly">
+              Search PugPep products
+            </label>
+
+            <span className="searchIcon" aria-hidden="true">
               ⌕
             </span>
 
-            <label htmlFor="hero-lab-search" style={srOnly}>
-              Search the laboratory
-            </label>
-
             <input
-              id="hero-lab-search"
+              id="hero-shop-search"
               type="search"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search the Lab..."
+              placeholder="Search products..."
               autoComplete="off"
-              style={searchInput}
             />
 
-            <button type="submit" style={searchButton}>
+            <button type="submit">
               Search
             </button>
           </form>
-
-          <div style={trustGrid}>
-            <TrustBadge icon="★" label="Veteran Owned" />
-            <TrustBadge icon="✓" label="Third-Party Tested" />
-            <TrustBadge icon="↗" label="Fast Delivery" />
-            <TrustBadge icon="◆" label="Trusted by Researchers" />
-          </div>
         </div>
 
-        <aside style={visualColumn}>
-          <div style={visualCard}>
-            <div style={visualTopRow}>
-              <span style={visualLabel}>LIVE LAB OVERVIEW</span>
-              <span style={statusPill}>ONLINE</span>
+        <aside className="visual" aria-label="PugPep research overview">
+          <div className="visualCard">
+            <div className="visualTop">
+              <span>RESEARCH OVERVIEW</span>
+              <span className="online">ONLINE</span>
             </div>
 
-            <div style={visualCenter}>
-              <div style={coreRingOuter}>
-                <div style={coreRingMiddle}>
-                  <div style={coreRingInner}>
-                    <span style={coreMark}>P</span>
-                  </div>
+            <div className="visualCenter">
+              <div className="coreOuter">
+                <div className="coreMiddle">
+                  <div className="coreInner">P</div>
                 </div>
               </div>
 
-              <div style={visualCopy}>
-                <p style={visualEyebrow}>BUILT FOR DISCOVERY</p>
-                <h2 style={visualTitle}>
-                  Transparent quality.
+              <div className="visualCopy">
+                <p>RESEARCH-FIRST</p>
+                <h2>
+                  Quality documentation.
                   <br />
-                  Premium experience.
+                  Cleaner shopping.
                 </h2>
               </div>
             </div>
 
-            <div style={metricGrid}>
-              <Metric value="RUO" label="Research Use Only" />
-              <Metric value="COA" label="Quality Documentation" />
-              <Metric value="USA" label="Domestic Fulfillment" />
+            <div className="metrics">
+              <div>
+                <strong>RUO</strong>
+                <span>Research Use Only</span>
+              </div>
+              <div>
+                <strong>COA</strong>
+                <span>Quality Documentation</span>
+              </div>
+              <div>
+                <strong>USA</strong>
+                <span>Domestic Support</span>
+              </div>
             </div>
           </div>
         </aside>
       </div>
 
       <style jsx>{`
-        @keyframes heroFloat {
-          0%,
-          100% {
-            transform: translate3d(0, 0, 0);
-          }
-
-          50% {
-            transform: translate3d(0, -12px, 0);
-          }
+        .hero {
+          position: relative;
+          min-height: 620px;
+          overflow: hidden;
+          display: grid;
+          align-items: center;
+          color: #fff;
+          border-bottom: 1px solid rgba(0, 217, 255, 0.18);
+          background:
+            radial-gradient(circle at 15% 12%, rgba(255, 69, 216, 0.14), transparent 29%),
+            radial-gradient(circle at 84% 14%, rgba(0, 217, 255, 0.15), transparent 30%),
+            linear-gradient(180deg, #050507 0%, #020203 100%);
         }
 
-        @keyframes heroPulse {
-          0%,
-          100% {
-            opacity: 0.52;
-            transform: scale(1);
-          }
-
-          50% {
-            opacity: 0.8;
-            transform: scale(1.06);
-          }
+        .gridOverlay {
+          position: absolute;
+          inset: 0;
+          opacity: 0.13;
+          background-image:
+            linear-gradient(rgba(0, 217, 255, 0.13) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255, 69, 216, 0.1) 1px, transparent 1px);
+          background-size: 64px 64px;
+          mask-image: linear-gradient(to bottom, #000, transparent 94%);
+          pointer-events: none;
         }
 
-        section {
-          isolation: isolate;
+        .glow {
+          position: absolute;
+          border-radius: 999px;
+          filter: blur(24px);
+          pointer-events: none;
         }
 
-        aside {
-          animation: heroFloat 8s ease-in-out infinite;
+        .glowPink {
+          width: 280px;
+          height: 280px;
+          left: -100px;
+          top: 24%;
+          background: rgba(255, 69, 216, 0.12);
+        }
+
+        .glowCyan {
+          width: 340px;
+          height: 340px;
+          right: -120px;
+          top: 4%;
+          background: rgba(0, 217, 255, 0.12);
+        }
+
+        .inner {
+          position: relative;
+          z-index: 1;
+          width: 100%;
+          max-width: 1320px;
+          margin: 0 auto;
+          padding: 90px clamp(18px, 4vw, 52px) 70px;
+          display: grid;
+          grid-template-columns: minmax(0, 1.08fr) minmax(340px, 0.92fr);
+          gap: clamp(28px, 5vw, 64px);
+          align-items: center;
+        }
+
+        .content {
+          min-width: 0;
+        }
+
+        .brandPill {
+          width: fit-content;
+          display: inline-flex;
+          align-items: center;
+          gap: 9px;
+          padding: 8px 12px;
+          border: 1px solid rgba(0, 217, 255, 0.34);
+          border-radius: 999px;
+          background: rgba(0, 217, 255, 0.05);
+          color: #7df9ff;
+          font-size: 11px;
+          font-weight: 900;
+          letter-spacing: 0.14em;
+        }
+
+        .brandDot {
+          width: 8px;
+          height: 8px;
+          border-radius: 999px;
+          background: #00ff99;
+          box-shadow: 0 0 12px rgba(0, 255, 153, 0.7);
+        }
+
+        .welcome {
+          margin: 15px 0 0;
+          color: #9fa1aa;
+          font-size: 14px;
+        }
+
+        .eyebrow {
+          margin: 34px 0 0;
+          color: #ff45d8;
+          font-size: 12px;
+          font-weight: 900;
+          letter-spacing: 0.2em;
+        }
+
+        .headline {
+          max-width: 760px;
+          margin: 9px 0 0;
+          font-size: clamp(48px, 7vw, 84px);
+          line-height: 0.98;
+          letter-spacing: -0.055em;
+          color: #fff;
+        }
+
+        .headline span {
+          color: #7df9ff;
+          text-shadow: 0 0 24px rgba(0, 217, 255, 0.2);
+        }
+
+        .description {
+          max-width: 650px;
+          margin: 20px 0 0;
+          color: #b7b8c0;
+          font-size: clamp(16px, 2vw, 18px);
+          line-height: 1.65;
+        }
+
+        .actions {
+          margin-top: 26px;
+          display: flex;
+          gap: 11px;
+          flex-wrap: wrap;
+        }
+
+        .primaryButton,
+        .secondaryButton {
+          min-height: 50px;
+          padding: 12px 18px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 9px;
+          border-radius: 11px;
+          text-decoration: none;
+          font-weight: 900;
+        }
+
+        .primaryButton {
+          border: 1px solid #ff62de;
+          background: linear-gradient(90deg, #d92eb8, #079dca);
+          color: #fff;
+          box-shadow: 0 0 20px rgba(255, 47, 208, 0.2);
+        }
+
+        .secondaryButton {
+          border: 1px solid rgba(0, 217, 255, 0.45);
+          background: rgba(0, 217, 255, 0.05);
+          color: #7df9ff;
+        }
+
+        .searchShell {
+          max-width: 690px;
+          margin-top: 22px;
+          padding: 7px;
+          display: grid;
+          grid-template-columns: 34px minmax(0, 1fr) auto;
+          align-items: center;
+          gap: 8px;
+          border: 1px solid rgba(0, 217, 255, 0.36);
+          border-radius: 14px;
+          background: rgba(7, 7, 11, 0.92);
+        }
+
+        .searchIcon {
+          text-align: center;
+          color: #00d9ff;
+          font-size: 23px;
+        }
+
+        .searchShell input {
+          min-width: 0;
+          min-height: 44px;
+          padding: 8px;
+          border: 0;
+          outline: 0;
+          background: transparent;
+          color: #fff;
+          font-size: 16px;
+        }
+
+        .searchShell button {
+          min-height: 42px;
+          padding: 9px 16px;
+          border: 1px solid #45d97a;
+          border-radius: 9px;
+          background: linear-gradient(180deg, #2eea6f, #19b857);
+          color: #fff;
+          font-weight: 900;
+          cursor: pointer;
+        }
+
+        .visual {
+          min-width: 0;
+        }
+
+        .visualCard {
+          padding: 24px;
+          border: 1px solid rgba(255, 69, 216, 0.36);
+          border-radius: 22px;
+          background: linear-gradient(
+            145deg,
+            rgba(17, 7, 20, 0.94),
+            rgba(5, 14, 18, 0.94)
+          );
+          box-shadow:
+            0 0 32px rgba(255, 69, 216, 0.1),
+            inset 0 0 28px rgba(0, 217, 255, 0.02);
+        }
+
+        .visualTop {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          color: #00d9ff;
+          font-size: 10px;
+          font-weight: 900;
+          letter-spacing: 0.13em;
+        }
+
+        .online {
+          padding: 5px 8px;
+          border: 1px solid rgba(0, 255, 153, 0.5);
+          border-radius: 999px;
+          color: #00ff99;
+          background: rgba(0, 255, 153, 0.07);
+        }
+
+        .visualCenter {
+          min-height: 305px;
+          display: grid;
+          place-items: center;
+          align-content: center;
+          gap: 20px;
+        }
+
+        .coreOuter {
+          width: clamp(160px, 20vw, 220px);
+          aspect-ratio: 1;
+          display: grid;
+          place-items: center;
+          border: 1px solid rgba(0, 217, 255, 0.34);
+          border-radius: 999px;
+          background: conic-gradient(
+            from 0deg,
+            rgba(0, 217, 255, 0.02),
+            rgba(255, 69, 216, 0.2),
+            rgba(0, 255, 153, 0.08),
+            rgba(0, 217, 255, 0.02)
+          );
+        }
+
+        .coreMiddle {
+          width: 76%;
+          aspect-ratio: 1;
+          display: grid;
+          place-items: center;
+          border: 1px solid rgba(255, 69, 216, 0.38);
+          border-radius: 999px;
+          background: rgba(0, 0, 0, 0.3);
+        }
+
+        .coreInner {
+          width: 62%;
+          aspect-ratio: 1;
+          display: grid;
+          place-items: center;
+          border: 1px solid rgba(0, 255, 153, 0.4);
+          border-radius: 999px;
+          color: #fff;
+          font-size: clamp(50px, 7vw, 72px);
+          font-weight: 900;
+          text-shadow:
+            7px 0 0 rgba(255, 69, 216, 0.38),
+            -7px 0 0 rgba(0, 217, 255, 0.32);
+        }
+
+        .visualCopy {
+          text-align: center;
+        }
+
+        .visualCopy p {
+          margin: 0;
+          color: #ff45d8;
+          font-size: 10px;
+          font-weight: 900;
+          letter-spacing: 0.14em;
+        }
+
+        .visualCopy h2 {
+          margin: 7px 0 0;
+          color: #fff;
+          font-size: clamp(21px, 3vw, 28px);
+          line-height: 1.2;
+        }
+
+        .metrics {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .metrics > div {
+          min-width: 0;
+          padding: 11px 9px;
+          display: grid;
+          gap: 4px;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 10px;
+          background: rgba(0, 0, 0, 0.23);
+        }
+
+        .metrics strong {
+          color: #7df9ff;
+          font-size: 16px;
+        }
+
+        .metrics span {
+          color: #8f9299;
+          font-size: 10px;
+          line-height: 1.3;
+        }
+
+        .srOnly {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          padding: 0;
+          margin: -1px;
+          overflow: hidden;
+          clip: rect(0, 0, 0, 0);
+          white-space: nowrap;
+          border: 0;
         }
 
         @media (max-width: 980px) {
-          section > div:last-of-type {
-            grid-template-columns: minmax(0, 1fr) !important;
+          .inner {
+            grid-template-columns: minmax(0, 1fr);
+            padding-top: 82px;
           }
 
-          aside {
-            max-width: 720px;
-            width: 100%;
-            justify-self: center;
+          .visual {
+            display: none;
+          }
+
+          .hero {
+            min-height: auto;
           }
         }
 
-        @media (max-width: 720px) {
-          form {
-            grid-template-columns: 32px minmax(0, 1fr) !important;
+        @media (max-width: 620px) {
+          .inner {
+            padding-top: 72px;
+            padding-bottom: 48px;
           }
 
-          form button {
+          .headline {
+            font-size: clamp(44px, 15vw, 64px);
+          }
+
+          .actions {
+            display: grid;
+          }
+
+          .primaryButton,
+          .secondaryButton {
+            width: 100%;
+          }
+
+          .searchShell {
+            grid-template-columns: 30px minmax(0, 1fr);
+          }
+
+          .searchShell button {
             grid-column: 1 / -1;
             width: 100%;
           }
         }
 
-        @media (max-width: 620px) {
-          section {
-            min-height: auto !important;
-          }
-
-          section > div:last-of-type {
-            padding-top: 72px !important;
-            padding-bottom: 54px !important;
-          }
-        }
-
         @media (prefers-reduced-motion: reduce) {
-          section *,
-          aside {
-            animation: none !important;
+          * {
             scroll-behavior: auto !important;
           }
         }
@@ -273,417 +579,3 @@ export default function Hero() {
     </section>
   );
 }
-
-function TrustBadge({ icon, label }: { icon: string; label: string }) {
-  return (
-    <div style={trustBadge}>
-      <span style={trustIcon}>{icon}</span>
-      <span>{label}</span>
-    </div>
-  );
-}
-
-function Metric({ value, label }: { value: string; label: string }) {
-  return (
-    <div style={metricCard}>
-      <strong style={metricValue}>{value}</strong>
-      <span style={metricLabel}>{label}</span>
-    </div>
-  );
-}
-
-const hero = {
-  position: "relative" as const,
-  minHeight: "72vh",
-  overflow: "hidden",
-  display: "grid",
-  alignItems: "center",
-  borderBottom: "1px solid rgba(0,217,255,.20)",
-  background:
-    "radial-gradient(circle at 15% 10%, rgba(255,47,208,.15), transparent 29%), radial-gradient(circle at 82% 15%, rgba(0,217,255,.16), transparent 30%), radial-gradient(circle at 50% 100%, rgba(0,255,153,.08), transparent 36%), linear-gradient(180deg, #050507 0%, #020203 100%)",
-  color: "#ffffff",
-};
-
-const heroInner = {
-  position: "relative" as const,
-  zIndex: 2,
-  width: "100%",
-  maxWidth: 1320,
-  margin: "0 auto",
-  padding:
-    "clamp(84px, 10vw, 130px) clamp(18px, 4vw, 52px) clamp(64px, 8vw, 100px)",
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1.08fr) minmax(360px, .92fr)",
-  gap: "clamp(30px, 6vw, 80px)",
-  alignItems: "center",
-  boxSizing: "border-box" as const,
-};
-
-const contentColumn = { minWidth: 0 };
-
-const visualColumn = { minWidth: 0 };
-
-const gridOverlay = {
-  position: "absolute" as const,
-  inset: 0,
-  zIndex: 0,
-  opacity: 0.16,
-  backgroundImage:
-    "linear-gradient(rgba(0,217,255,.14) 1px, transparent 1px), linear-gradient(90deg, rgba(255,47,208,.11) 1px, transparent 1px)",
-  backgroundSize: "64px 64px",
-  maskImage:
-    "linear-gradient(to bottom, rgba(0,0,0,.85), transparent 92%)",
-};
-
-const glowOrb = {
-  position: "absolute" as const,
-  zIndex: 0,
-  borderRadius: 999,
-  filter: "blur(12px)",
-  pointerEvents: "none" as const,
-};
-
-const pinkOrb = {
-  width: 290,
-  height: 290,
-  left: "-110px",
-  top: "22%",
-  background:
-    "radial-gradient(circle, rgba(255,47,208,.25), transparent 70%)",
-};
-
-const cyanOrb = {
-  width: 360,
-  height: 360,
-  right: "-120px",
-  top: "2%",
-  background:
-    "radial-gradient(circle, rgba(0,217,255,.24), transparent 70%)",
-};
-
-const greenOrb = {
-  width: 280,
-  height: 280,
-  left: "44%",
-  bottom: "-150px",
-  background:
-    "radial-gradient(circle, rgba(0,255,153,.14), transparent 70%)",
-};
-
-const brandPill = {
-  width: "fit-content",
-  display: "flex",
-  alignItems: "center",
-  gap: 9,
-  padding: "8px 12px",
-  border: "1px solid rgba(0,217,255,.36)",
-  borderRadius: 999,
-  background: "rgba(0,217,255,.06)",
-  color: "#7df9ff",
-  fontSize: 11,
-  fontWeight: 900,
-  letterSpacing: ".14em",
-};
-
-const brandDot = {
-  width: 8,
-  height: 8,
-  borderRadius: 999,
-  background: "#00ff99",
-  boxShadow: "0 0 12px rgba(0,255,153,.75)",
-};
-
-const welcomeText = {
-  margin: "16px 0 0",
-  color: "#a9a9b0",
-  fontSize: 14,
-};
-
-const overline = {
-  margin: "clamp(32px, 5vw, 56px) 0 0",
-  color: "#ff45d8",
-  fontSize: 13,
-  fontWeight: 900,
-  letterSpacing: ".22em",
-};
-
-const headline = {
-  maxWidth: 800,
-  margin: "10px 0 0",
-  fontSize: "clamp(48px, 8vw, 92px)",
-  lineHeight: 0.96,
-  letterSpacing: "-.055em",
-  color: "#ffffff",
-};
-
-const headlineAccent = {
-  color: "#7df9ff",
-  textShadow: "0 0 24px rgba(0,217,255,.22)",
-};
-
-const description = {
-  maxWidth: 670,
-  margin: "22px 0 0",
-  color: "#bdbdc4",
-  fontSize: "clamp(16px, 2vw, 19px)",
-  lineHeight: 1.7,
-};
-
-const actionRow = {
-  marginTop: 28,
-  display: "flex",
-  gap: 12,
-  flexWrap: "wrap" as const,
-};
-
-const primaryButton = {
-  minHeight: 54,
-  padding: "13px 20px",
-  display: "inline-flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 10,
-  border: "1px solid #ff62de",
-  borderRadius: 12,
-  background: "linear-gradient(90deg, #d92eb8, #079dca)",
-  color: "#ffffff",
-  fontSize: 16,
-  fontWeight: 900,
-  cursor: "pointer",
-  boxShadow: "0 0 22px rgba(255,47,208,.23)",
-};
-
-const buttonArrow = {
-  fontSize: 21,
-  lineHeight: 1,
-};
-
-const secondaryButton = {
-  minHeight: 54,
-  padding: "13px 20px",
-  display: "inline-grid",
-  placeItems: "center",
-  border: "1px solid rgba(0,217,255,.48)",
-  borderRadius: 12,
-  background: "rgba(0,217,255,.06)",
-  color: "#7df9ff",
-  textDecoration: "none",
-  fontSize: 15,
-  fontWeight: 800,
-};
-
-const searchShell = {
-  maxWidth: 720,
-  marginTop: 26,
-  padding: 8,
-  display: "grid",
-  gridTemplateColumns: "34px minmax(0, 1fr) auto",
-  alignItems: "center",
-  gap: 8,
-  border: "1px solid rgba(0,217,255,.44)",
-  borderRadius: 15,
-  background:
-    "linear-gradient(145deg, rgba(8,8,12,.96), rgba(17,8,18,.94))",
-  boxShadow: "0 0 20px rgba(0,217,255,.10)",
-};
-
-const searchIcon = {
-  textAlign: "center" as const,
-  color: "#00d9ff",
-  fontSize: 25,
-};
-
-const searchInput = {
-  minWidth: 0,
-  minHeight: 46,
-  padding: "9px 8px",
-  border: 0,
-  outline: 0,
-  background: "transparent",
-  color: "#ffffff",
-  fontSize: 16,
-};
-
-const searchButton = {
-  minHeight: 44,
-  padding: "10px 17px",
-  border: "1px solid #45d97a",
-  borderRadius: 10,
-  background: "linear-gradient(180deg, #2eea6f, #19b857)",
-  color: "#ffffff",
-  fontWeight: 900,
-  cursor: "pointer",
-  boxShadow: "0 0 14px rgba(46,234,111,.18)",
-};
-
-const trustGrid = {
-  marginTop: 20,
-  display: "flex",
-  flexWrap: "wrap" as const,
-  gap: 9,
-};
-
-const trustBadge = {
-  minHeight: 35,
-  padding: "7px 10px",
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 7,
-  border: "1px solid rgba(255,255,255,.12)",
-  borderRadius: 999,
-  background: "rgba(255,255,255,.035)",
-  color: "#d1d1d6",
-  fontSize: 12,
-  fontWeight: 700,
-};
-
-const trustIcon = {
-  color: "#00ff99",
-  fontWeight: 900,
-};
-
-const visualCard = {
-  position: "relative" as const,
-  padding: "clamp(20px, 4vw, 30px)",
-  overflow: "hidden",
-  border: "1px solid rgba(255,47,208,.46)",
-  borderRadius: 24,
-  background:
-    "linear-gradient(145deg, rgba(17,7,20,.96), rgba(5,14,18,.96))",
-  boxShadow:
-    "0 0 34px rgba(255,47,208,.12), inset 0 0 30px rgba(0,217,255,.025)",
-};
-
-const visualTopRow = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
-};
-
-const visualLabel = {
-  color: "#00d9ff",
-  fontSize: 10,
-  fontWeight: 900,
-  letterSpacing: ".14em",
-};
-
-const statusPill = {
-  padding: "6px 9px",
-  border: "1px solid rgba(0,255,153,.55)",
-  borderRadius: 999,
-  background: "rgba(0,255,153,.08)",
-  color: "#00ff99",
-  fontSize: 10,
-  fontWeight: 900,
-};
-
-const visualCenter = {
-  minHeight: 390,
-  display: "grid",
-  placeItems: "center",
-  alignContent: "center",
-  gap: 24,
-};
-
-const coreRingOuter = {
-  width: "clamp(190px, 24vw, 260px)",
-  aspectRatio: "1",
-  display: "grid",
-  placeItems: "center",
-  border: "1px solid rgba(0,217,255,.38)",
-  borderRadius: 999,
-  background:
-    "conic-gradient(from 0deg, rgba(0,217,255,.02), rgba(255,47,208,.24), rgba(0,255,153,.10), rgba(0,217,255,.02))",
-  boxShadow: "0 0 38px rgba(0,217,255,.10)",
-};
-
-const coreRingMiddle = {
-  width: "78%",
-  aspectRatio: "1",
-  display: "grid",
-  placeItems: "center",
-  border: "1px solid rgba(255,47,208,.42)",
-  borderRadius: 999,
-  background: "rgba(0,0,0,.34)",
-  boxShadow: "inset 0 0 26px rgba(255,47,208,.10)",
-};
-
-const coreRingInner = {
-  width: "62%",
-  aspectRatio: "1",
-  display: "grid",
-  placeItems: "center",
-  border: "1px solid rgba(0,255,153,.44)",
-  borderRadius: 999,
-  background:
-    "radial-gradient(circle, rgba(0,255,153,.13), rgba(0,217,255,.04), rgba(0,0,0,.48))",
-  boxShadow: "0 0 30px rgba(0,255,153,.10)",
-};
-
-const coreMark = {
-  color: "#ffffff",
-  fontSize: "clamp(54px, 8vw, 84px)",
-  fontWeight: 900,
-  letterSpacing: "-.08em",
-  textShadow:
-    "8px 0 0 rgba(255,47,208,.42), -8px 0 0 rgba(0,217,255,.35)",
-};
-
-const visualCopy = {
-  textAlign: "center" as const,
-};
-
-const visualEyebrow = {
-  margin: 0,
-  color: "#ff45d8",
-  fontSize: 10,
-  fontWeight: 900,
-  letterSpacing: ".14em",
-};
-
-const visualTitle = {
-  margin: "8px 0 0",
-  color: "#ffffff",
-  fontSize: "clamp(22px, 4vw, 32px)",
-  lineHeight: 1.2,
-};
-
-const metricGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-  gap: 9,
-};
-
-const metricCard = {
-  minWidth: 0,
-  padding: "12px 10px",
-  display: "grid",
-  gap: 4,
-  border: "1px solid rgba(255,255,255,.11)",
-  borderRadius: 11,
-  background: "rgba(0,0,0,.25)",
-};
-
-const metricValue = {
-  color: "#7df9ff",
-  fontSize: 17,
-};
-
-const metricLabel = {
-  color: "#8f8f97",
-  fontSize: 10,
-  lineHeight: 1.35,
-};
-
-const srOnly = {
-  position: "absolute" as const,
-  width: 1,
-  height: 1,
-  padding: 0,
-  margin: -1,
-  overflow: "hidden",
-  clip: "rect(0, 0, 0, 0)",
-  whiteSpace: "nowrap" as const,
-  border: 0,
-};
