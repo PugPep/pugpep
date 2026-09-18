@@ -1492,6 +1492,8 @@ const newProductImage = {
   objectFit: "contain" as const,
   objectPosition: "center",
   display: "block",
+  padding: 34,
+  boxSizing: "border-box" as const,
 };
 
 const newProductBody = {
