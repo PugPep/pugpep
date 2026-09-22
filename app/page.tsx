@@ -2233,8 +2233,6 @@ const productBody = {
   alignContent: "end",
   background:
     "linear-gradient(180deg, transparent 0%, rgba(0,0,0,.16) 16%, rgba(0,0,0,.78) 58%, rgba(0,0,0,.97) 100%)",
-  backdropFilter: "blur(1.2px)",
-  WebkitBackdropFilter: "blur(1.2px)",
 };
 
 

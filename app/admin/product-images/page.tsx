@@ -78,12 +78,14 @@ type BulkPreviewItem = {
   reasons: string[];
   approved: boolean;
   layout: ProductLayout;
+  letteringColor: string;
 };
 
 type SavedBulkState = {
   productId: string;
   approved: boolean;
   layout: ProductLayout;
+  letteringColor?: string;
 };
 
 type SavedImageEngineSession = {
@@ -478,6 +480,7 @@ export default function ProductImagesAdminPage() {
           productId: item.productId,
           approved: item.approved,
           layout: item.layout,
+          letteringColor: item.letteringColor,
         })),
       };
 
@@ -1492,6 +1495,12 @@ export default function ProductImagesAdminPage() {
             researchFontSize,
           };
 
+        const letteringColor =
+          getValidHexColor(
+            restoredBulkItem?.letteringColor
+          ) ||
+          getManualOrProductColor(product);
+
         const response =
           await fetch(
             "/api/admin/product-image-engine/preview",
@@ -1516,9 +1525,7 @@ export default function ProductImagesAdminPage() {
                   paletteKey:
                     "custom",
                   customColor:
-                    getProductAccentColor(
-                      product
-                    ),
+                    letteringColor,
                 }),
             }
           );
@@ -1571,6 +1578,7 @@ export default function ProductImagesAdminPage() {
             (fit.fitStatus === "pass"),
           layout:
             productLayout,
+          letteringColor,
         });
 
         setBulkPreviews(
@@ -1648,6 +1656,26 @@ export default function ProductImagesAdminPage() {
     );
   }
 
+  function updatePreviewLetteringColor(
+    productId: string,
+    value: string
+  ) {
+    setBulkPreviews((current) =>
+      current.map((item) =>
+        item.productId === productId
+          ? {
+              ...item,
+              approved: false,
+              letteringColor:
+                /^#[0-9a-fA-F]{6}$/.test(value)
+                  ? value
+                  : item.letteringColor,
+            }
+          : item
+      )
+    );
+  }
+
   function updatePreviewLayout(
     productId: string,
     field: keyof ProductLayout,
@@ -1700,9 +1728,8 @@ export default function ProductImagesAdminPage() {
               item.layout.labelText,
             paletteKey: "custom",
             customColor:
-              getProductAccentColor(
-                product
-              ),
+              item.letteringColor ||
+              getManualOrProductColor(product),
           }),
         }
       );
@@ -1834,7 +1861,8 @@ export default function ProductImagesAdminPage() {
         await generateImages(
           [item.productId],
           item.layout,
-          true
+          true,
+          item.letteringColor
         );
       }
 
@@ -1859,7 +1887,8 @@ export default function ProductImagesAdminPage() {
     productIds:
       string[],
     layoutOverride?: ProductLayout,
-    skipConfirmation = false
+    skipConfirmation = false,
+    letteringColorOverride?: string
   ) {
     if (
       !selectedTemplateId
@@ -1962,7 +1991,10 @@ export default function ProductImagesAdminPage() {
                 paletteKey:
                   "custom",
                 customColor:
-                  getProductAccentColor(
+                  getValidHexColor(
+                    letteringColorOverride
+                  ) ||
+                  getManualOrProductColor(
                     generationTargetProduct
                   ),
               }),
@@ -2940,6 +2972,106 @@ export default function ProductImagesAdminPage() {
                             </span>
                           </label>
 
+                          <label
+                            style={{
+                              ...label,
+                              gridColumn: "1 / -1",
+                            }}
+                          >
+                            <span style={editorFieldLabel}>
+                              LETTERING COLOR
+                            </span>
+
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns:
+                                  "52px minmax(0, 1fr)",
+                                gap: 10,
+                                alignItems: "center",
+                              }}
+                            >
+                              <input
+                                type="color"
+                                value={
+                                  editingItem.letteringColor ||
+                                  "#ffffff"
+                                }
+                                onChange={(event) =>
+                                  updatePreviewLetteringColor(
+                                    editingItem.productId,
+                                    event.target.value
+                                  )
+                                }
+                                style={{
+                                  width: 52,
+                                  height: 42,
+                                  padding: 3,
+                                  border:
+                                    "1px solid rgba(255,255,255,.18)",
+                                  borderRadius: 9,
+                                  background: "#090a0d",
+                                  cursor: "pointer",
+                                }}
+                                aria-label="Choose this vial lettering color"
+                              />
+
+                              <input
+                                value={
+                                  editingItem.letteringColor ||
+                                  "#ffffff"
+                                }
+                                onChange={(event) => {
+                                  const value =
+                                    event.target.value;
+
+                                  setBulkPreviews(
+                                    (current) =>
+                                      current.map(
+                                        (item) =>
+                                          item.productId ===
+                                          editingItem.productId
+                                            ? {
+                                                ...item,
+                                                approved:
+                                                  false,
+                                                letteringColor:
+                                                  value,
+                                              }
+                                            : item
+                                      )
+                                  );
+                                }}
+                                onBlur={() => {
+                                  if (
+                                    !/^#[0-9a-fA-F]{6}$/.test(
+                                      editingItem.letteringColor
+                                    )
+                                  ) {
+                                    updatePreviewLetteringColor(
+                                      editingItem.productId,
+                                      getManualOrProductColor(
+                                        products.find(
+                                          (product) =>
+                                            product.id ===
+                                            editingItem.productId
+                                        )
+                                      )
+                                    );
+                                  }
+                                }}
+                                placeholder="#ffffff"
+                                style={input}
+                              />
+                            </div>
+
+                            <span style={labelWrapHint}>
+                              This starts with the color used in the generated
+                              preview. Change it here only when you want this
+                              individual vial to use a different lettering color.
+                            </span>
+                          </label>
+
                           <EditorNumberControl
                             label="Product Name Font"
                             value={editingItem.layout.nameFontSize}
@@ -3070,7 +3202,7 @@ export default function ProductImagesAdminPage() {
                       </div>
 
                       <p style={editorFooterHelp}>
-                        Any lettering change removes approval automatically.
+                        Any lettering or color change removes approval automatically.
                         Re-preview the vial, inspect the result, then approve it.
                         Closing this editor keeps your individual settings for
                         this preview.
