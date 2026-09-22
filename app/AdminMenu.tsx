@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -23,6 +24,12 @@ export default function AdminMenu() {
 
   const [open, setOpen] =
     useState(false);
+
+  const buttonRef =
+    useRef<HTMLButtonElement | null>(null);
+
+  const [mobileDropdownTop, setMobileDropdownTop] =
+    useState<number | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -111,6 +118,65 @@ export default function AdminMenu() {
     };
   }, [supabase]);
 
+  function updateMobileDropdownPosition() {
+    if (
+      typeof window === "undefined" ||
+      !buttonRef.current
+    ) {
+      return;
+    }
+
+    if (window.innerWidth <= 640) {
+      const rect =
+        buttonRef.current.getBoundingClientRect();
+
+      setMobileDropdownTop(
+        Math.max(
+          8,
+          Math.round(rect.bottom + 8)
+        )
+      );
+    } else {
+      setMobileDropdownTop(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    updateMobileDropdownPosition();
+
+    function handleViewportChange() {
+      updateMobileDropdownPosition();
+    }
+
+    window.addEventListener(
+      "resize",
+      handleViewportChange
+    );
+
+    window.addEventListener(
+      "scroll",
+      handleViewportChange,
+      true
+    );
+
+    return () => {
+      window.removeEventListener(
+        "resize",
+        handleViewportChange
+      );
+
+      window.removeEventListener(
+        "scroll",
+        handleViewportChange,
+        true
+      );
+    };
+  }, [open]);
+
   if (!isAdmin) {
     return null;
   }
@@ -122,16 +188,22 @@ export default function AdminMenu() {
   return (
     <div
       style={container}
-      onMouseEnter={() => setOpen(true)}
+      onMouseEnter={() => {
+        updateMobileDropdownPosition();
+        setOpen(true);
+      }}
       onMouseLeave={closeMenu}
     >
       <button
+        ref={buttonRef}
         type="button"
-        onClick={() =>
+        onClick={() => {
+          updateMobileDropdownPosition();
+
           setOpen(
             (current) => !current
-          )
-        }
+          );
+        }}
         style={adminButton}
         aria-expanded={open}
         aria-haspopup="menu"
@@ -154,7 +226,22 @@ export default function AdminMenu() {
       {open && (
         <div
           role="menu"
-          style={dropdown}
+          className="pugpep-admin-dropdown"
+          style={{
+            ...dropdown,
+            ...(mobileDropdownTop !== null
+              ? {
+                  position: "fixed",
+                  top: mobileDropdownTop,
+                  left: 12,
+                  right: 12,
+                  width: "auto",
+                  maxWidth: "none",
+                  maxHeight:
+                    `calc(100vh - ${mobileDropdownTop + 12}px)`,
+                }
+              : {}),
+          }}
         >
           <div
             style={backgroundLogo}
@@ -285,6 +372,15 @@ export default function AdminMenu() {
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        @media (max-width: 640px) {
+          .pugpep-admin-dropdown {
+            box-sizing: border-box !important;
+            overscroll-behavior: contain;
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -348,7 +444,11 @@ const dropdown = {
 
   right: 0,
 
-  width: 270,
+  width: "min(270px, calc(100vw - 24px))",
+
+  maxWidth: "calc(100vw - 24px)",
+
+  boxSizing: "border-box" as const,
 
   maxHeight: "78vh",
 
