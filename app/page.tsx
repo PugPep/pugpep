@@ -45,6 +45,8 @@ export default function HomePage() {
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("featured");
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
+  const [selectedNewProductSlug, setSelectedNewProductSlug] = useState("");
+  const [showMoreNewProducts, setShowMoreNewProducts] = useState(false);
   const [campaignLoading, setCampaignLoading] = useState(true);
   const campaignLoadStartedRef = useRef(false);
   const mountedRef = useRef(true);
@@ -263,6 +265,27 @@ export default function HomePage() {
     });
 
 
+  const defaultMobileNewProduct =
+    featuredNewProducts.find((product) => !product.is_coming_soon) ||
+    featuredNewProducts[0] ||
+    null;
+
+  const mobileFeaturedNewProduct =
+    featuredNewProducts.find(
+      (product) => product.slug === selectedNewProductSlug
+    ) || defaultMobileNewProduct;
+
+  /*
+   * Desktop: keep the New Products area to one clean row.
+   * Six tiles fit the existing 1320px homepage shell and match
+   * the visual density of the product tiles below.
+   */
+  const desktopNewProducts =
+    featuredNewProducts.slice(0, 6);
+
+  const remainingDesktopNewProducts =
+    featuredNewProducts.slice(6);
+
   const featuredProducts = products
     .filter(
       (product) =>
@@ -341,8 +364,8 @@ export default function HomePage() {
   const catalogGroups = [
     {
       key: "compounds",
-      eyebrow: "",
-      title: "",
+      eyebrow: "CORE RESEARCH CATALOG",
+      title: "Research Compounds",
       products: visibleProducts.filter((product) => {
         const category = String(product.category || "").toLowerCase().trim();
         return (
@@ -354,7 +377,7 @@ export default function HomePage() {
     },
     {
       key: "sprays",
-      eyebrow: "",
+      eyebrow: "DELIVERY FORMATS",
       title: "Research Sprays",
       products: visibleProducts.filter((product) => {
         const category = String(product.category || "").toLowerCase().trim();
@@ -363,7 +386,7 @@ export default function HomePage() {
     },
     {
       key: "materials",
-      eyebrow: "",
+      eyebrow: "LAB ESSENTIALS",
       title: "Lab Materials",
       products: visibleProducts.filter((product) => {
         const category = String(product.category || "").toLowerCase().trim();
@@ -379,8 +402,46 @@ export default function HomePage() {
           grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
         }
 
+        .catalog-products-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        }
+
+        .catalog-product-link {
+          display: block;
+          transition:
+            transform 180ms ease,
+            filter 180ms ease;
+        }
+
+        .catalog-product-link:hover {
+          transform: translateY(-4px);
+          filter: brightness(1.06);
+        }
+
+        .catalog-product-card {
+          transition:
+            border-color 180ms ease,
+            box-shadow 180ms ease;
+        }
+
+        .catalog-product-link:hover .catalog-product-card {
+          box-shadow:
+            0 18px 42px rgba(0,0,0,.48),
+            0 0 28px rgba(0,217,255,.08);
+        }
+
+
+        .shop-by-focus-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        }
+
         @media (max-width: 1100px) {
-          .category-grid {
+          .category-grid,
+          .shop-by-focus-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+
+          .catalog-products-grid {
             grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
           }
         }
@@ -389,10 +450,18 @@ export default function HomePage() {
           .category-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
           }
+
+          .catalog-products-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
         }
 
         @media (max-width: 420px) {
           .category-grid {
+            grid-template-columns: 1fr !important;
+          }
+
+          .catalog-products-grid {
             grid-template-columns: 1fr !important;
           }
         }
@@ -524,58 +593,241 @@ export default function HomePage() {
             </span>
           </div>
 
-          <div style={newProductsGrid}>
-            {featuredNewProducts.map((product) => (
+          {isMobile && mobileFeaturedNewProduct ? (
+            <div style={mobileNewProductsLayout}>
+              {featuredNewProducts.length > 1 && (
+                <label style={mobileNewProductSelectorLabel}>
+                  <span style={mobileNewProductSelectorTitle}>
+                    VIEW OTHER NEW PRODUCTS
+                  </span>
+
+                  <select
+                    value={mobileFeaturedNewProduct.slug}
+                    onChange={(event) =>
+                      setSelectedNewProductSlug(event.target.value)
+                    }
+                    style={mobileNewProductSelect}
+                    aria-label="Choose another new product"
+                  >
+                    {featuredNewProducts.map((product) => (
+                      <option
+                        key={`new-product-option-${product.slug}`}
+                        value={product.slug}
+                      >
+                        {product.name}
+                        {product.is_coming_soon ? " — Coming Soon" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
               <Link
-                key={`new-${product.slug}`}
-                href={`/products/${product.slug}`}
+                href={`/products/${mobileFeaturedNewProduct.slug}`}
                 onClick={(event) => {
-                  void handleProductAccess(event, product.slug);
+                  void handleProductAccess(
+                    event,
+                    mobileFeaturedNewProduct.slug
+                  );
                 }}
                 style={{ textDecoration: "none" }}
               >
                 <article
                   style={{
-                    ...newProductCard,
-                    borderColor: product.color || "rgba(0,255,153,.42)",
+                    ...mobileNewProductCard,
+                    borderColor:
+                      mobileFeaturedNewProduct.color ||
+                      "rgba(0,255,153,.42)",
                   }}
                 >
-                  <div style={newProductImageWrap}>
-                    {product.is_coming_soon ? (
+                  <div style={mobileNewProductImageWrap}>
+                    {mobileFeaturedNewProduct.is_coming_soon ? (
                       <span style={comingSoonBadge}>COMING SOON</span>
                     ) : (
                       <span style={newBadge}>NEW</span>
                     )}
 
                     <img
-                      src={product.image || "/pugpep-logo.png"}
-                      alt={product.name}
-                      style={newProductImage}
+                      src={
+                        mobileFeaturedNewProduct.image ||
+                        "/pugpep-logo.png"
+                      }
+                      alt={mobileFeaturedNewProduct.name}
+                      style={mobileNewProductImage}
                     />
-                  </div>
 
-                  <div style={newProductBody}>
-                    <span style={showcaseCategory}>
-                      {getCategoryLabel(product.category)}
-                    </span>
-
-                    <strong
-                      style={{
-                        ...newProductName,
-                        color: product.color || "#7df9ff",
-                      }}
-                    >
-                      {product.name}
-                    </strong>
-
-                    <span style={newProductCta}>
-                      {product.is_coming_soon ? "VIEW DETAILS →" : "VIEW PRODUCT →"}
-                    </span>
+                    <div style={productBody}>
+                      <h2
+                        style={{
+                          ...productName,
+                          color:
+                            mobileFeaturedNewProduct.color ||
+                            "#ff45d8",
+                        }}
+                      >
+                        {mobileFeaturedNewProduct.name}
+                      </h2>
+                    </div>
                   </div>
                 </article>
               </Link>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div style={desktopNewProductsLayout}>
+              <div className="new-products-desktop-grid" style={newProductsGrid}>
+                {desktopNewProducts.map((product) => (
+                  <Link
+                    key={`new-${product.slug}`}
+                    href={`/products/${product.slug}`}
+                    onClick={(event) => {
+                      void handleProductAccess(event, product.slug);
+                    }}
+                    style={{ textDecoration: "none" }}
+                  >
+                    <article
+                      style={{
+                        ...productCard,
+                        borderColor:
+                          product.color || "rgba(0,255,153,.42)",
+                      }}
+                    >
+                      <div style={productImageWrap}>
+                        {product.is_coming_soon ? (
+                          <span style={comingSoonBadge}>COMING SOON</span>
+                        ) : (
+                          <span style={newBadge}>NEW</span>
+                        )}
+
+                        <img
+                          src={product.image || "/pugpep-logo.png"}
+                          alt={product.name}
+                          style={productImage}
+                        />
+
+                        <div style={productBody}>
+                          <h2
+                            style={{
+                              ...productName,
+                              color: product.color || "#ff45d8",
+                            }}
+                          >
+                            {product.name}
+                          </h2>
+                        </div>
+                      </div>
+                    </article>
+                  </Link>
+                ))}
+              </div>
+
+              {remainingDesktopNewProducts.length > 0 && (
+                <div style={desktopMoreNewProducts}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowMoreNewProducts(
+                        (current) => !current
+                      )
+                    }
+                    style={moreNewProductsButton}
+                    aria-expanded={showMoreNewProducts}
+                    aria-controls="more-new-products-panel"
+                  >
+                    <span>
+                      {showMoreNewProducts
+                        ? "HIDE MORE NEW PRODUCTS"
+                        : `VIEW ${remainingDesktopNewProducts.length} MORE NEW PRODUCTS`}
+                    </span>
+
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        ...moreNewProductsChevron,
+                        transform: showMoreNewProducts
+                          ? "rotate(180deg)"
+                          : "rotate(0deg)",
+                      }}
+                    >
+                      ▾
+                    </span>
+                  </button>
+
+                  {showMoreNewProducts && (
+                    <div
+                      id="more-new-products-panel"
+                      className="new-products-expanded-grid"
+                      style={expandedNewProductsGrid}
+                    >
+                      {remainingDesktopNewProducts.map(
+                        (product) => (
+                          <Link
+                            key={`expanded-new-${product.slug}`}
+                            href={`/products/${product.slug}`}
+                            onClick={(event) => {
+                              void handleProductAccess(
+                                event,
+                                product.slug
+                              );
+                            }}
+                            style={{
+                              textDecoration: "none",
+                            }}
+                          >
+                            <article
+                              style={{
+                                ...productCard,
+                                borderColor:
+                                  product.color ||
+                                  "rgba(0,255,153,.42)",
+                              }}
+                            >
+                              <div
+                                style={productImageWrap}
+                              >
+                                {product.is_coming_soon ? (
+                                  <span
+                                    style={comingSoonBadge}
+                                  >
+                                    COMING SOON
+                                  </span>
+                                ) : (
+                                  <span style={newBadge}>
+                                    NEW
+                                  </span>
+                                )}
+
+                                <img
+                                  src={
+                                    product.image ||
+                                    "/pugpep-logo.png"
+                                  }
+                                  alt={product.name}
+                                  style={productImage}
+                                />
+
+                                <div style={productBody}>
+                                  <h2
+                                    style={{
+                                      ...productName,
+                                      color:
+                                        product.color ||
+                                        "#ff45d8",
+                                    }}
+                                  >
+                                    {product.name}
+                                  </h2>
+                                </div>
+                              </div>
+                            </article>
+                          </Link>
+                        )
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
 
@@ -591,10 +843,12 @@ export default function HomePage() {
             <button
               type="button"
               onClick={() => {
-                setFilter("sale");
                 document
-                  .getElementById("catalog")
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  .getElementById("current-offers")
+                  ?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  });
               }}
               style={shopSaleButton}
             >
@@ -662,7 +916,7 @@ export default function HomePage() {
 
         </div>
 
-        <div className="category-grid" style={categoryGrid}>
+        <div className="category-grid shop-by-focus-grid" style={categoryGrid}>
           <button
             type="button"
             onClick={() => {
@@ -735,34 +989,14 @@ export default function HomePage() {
             </div>
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setFilter("sale");
-              document
-                .getElementById("catalog")
-                ?.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
-            className="category-card"
-            style={categoryCardButton}
-          >
-            <img
-              src="/marketing/current-offers.png"
-              alt="PugPep current offers and promotions"
-              style={categoryImage}
-            />
-            <div style={categoryShade} />
-            <div style={categoryContent}>
-              <span style={categoryKicker}>FEATURED PROMOTIONS</span>
-              <h3 style={categoryTitle}>Current Offers</h3>
-              <span style={categoryCta}>VIEW OFFERS →</span>
-            </div>
-          </button>
         </div>
       </section>
 
       {saleProducts.length > 0 && (
-        <section style={saleShowcaseSection}>
+        <section
+          id="current-offers"
+          style={saleShowcaseSection}
+        >
           <div style={showcaseHeader}>
             <div>
               <span style={saleShowcaseEyebrow}></span>
@@ -801,12 +1035,12 @@ export default function HomePage() {
                 >
                   <article
                     style={{
-                      ...showcaseCard,
+                      ...productCard,
                       borderColor: "rgba(0,255,153,.48)",
                       boxShadow: "0 0 24px rgba(0,255,153,.10)",
                     }}
                   >
-                    <div style={showcaseImageWrap}>
+                    <div style={productImageWrap}>
                       <span style={showcaseSaleBadge}>
                         {effectiveSale?.badgeText || "SALE"}
                       </span>
@@ -814,30 +1048,25 @@ export default function HomePage() {
                       <img
                         src={product.image || "/pugpep-logo.png"}
                         alt={product.name}
-                        style={showcaseImage}
+                        style={productImage}
                       />
                     </div>
 
-                    <div style={showcaseBody}>
-                      <span style={showcaseCategory}>
-                        {getCategoryLabel(product.category)}
-                      </span>
-
-                      <strong
+                    <div style={productBody}>
+                      <h2
                         style={{
-                          ...showcaseName,
-                          color: product.color || "#00ff99",
+                          ...productName,
+                          color: product.color || "#ff45d8",
                         }}
                       >
                         {product.name}
-                      </strong>
+                      </h2>
 
                       {effectiveSale?.campaignName && (
-                        <span style={showcaseCampaignName}>
+                        <div style={campaignNameBadge}>
                           {effectiveSale.campaignName}
-                        </span>
+                        </div>
                       )}
-
                     </div>
                   </article>
                 </Link>
@@ -932,7 +1161,17 @@ export default function HomePage() {
         ) : (
           <div style={groupedCatalog}>
             {catalogGroups.map((group) => (
-              <section key={group.key} style={catalogGroup}>
+              <section
+                key={group.key}
+                style={{
+                  ...catalogGroup,
+                  ...(group.key === "compounds"
+                    ? catalogGroupCompounds
+                    : group.key === "sprays"
+                    ? catalogGroupSprays
+                    : catalogGroupMaterials),
+                }}
+              >
                 <div style={catalogGroupHeader}>
                   <div>
                     {group.eyebrow ? (
@@ -946,7 +1185,10 @@ export default function HomePage() {
                   </span>
                 </div>
 
-                <div style={productsGrid}>
+                <div
+                  className="catalog-products-grid"
+                  style={productsGrid}
+                >
                   {group.products.map((product) => {
                     const effectiveSale = saleMap[product.slug];
 
@@ -957,9 +1199,11 @@ export default function HomePage() {
                         onClick={(event) => {
                           void handleProductAccess(event, product.slug);
                         }}
+                        className="catalog-product-link"
                         style={{ textDecoration: "none" }}
                       >
                         <article
+                          className="catalog-product-card"
                           style={{
                             ...productCard,
                             borderColor: `${product.color || "#ff45d8"}65`,
@@ -1256,9 +1500,10 @@ const showcaseSection = {
 };
 
 const saleShowcaseSection = {
-  ...showcaseSection,
-  marginTop: 24,
-  paddingTop: 14,
+  maxWidth: 1320,
+  margin: "24px auto 12px",
+  padding: "14px",
+  boxSizing: "border-box" as const,
   borderTop: "1px solid rgba(0,255,153,.30)",
 };
 
@@ -1322,10 +1567,8 @@ const saleBrowseButton = {
 const showcaseGrid = {
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fill, minmax(160px, 1fr))",
-  gap: 9,
-  justifyContent: "stretch",
-  alignItems: "stretch",
+    "repeat(auto-fill, minmax(195px, 1fr))",
+  gap: 11,
 };
 
 const showcaseCard = {
@@ -1369,8 +1612,8 @@ const showcaseBody = {
   bottom: 0,
   padding: "26px 10px 10px",
   display: "grid",
-  alignContent: "end",
   gap: 5,
+  alignContent: "end",
   background:
     "linear-gradient(180deg, transparent 0%, rgba(0,0,0,.28) 18%, rgba(0,0,0,.86) 66%, rgba(0,0,0,.97) 100%)",
 };
@@ -1418,7 +1661,8 @@ const showcaseCampaignName = {
 const newProductsSection = {
   maxWidth: 1320,
   margin: "18px auto 14px",
-  padding: "14px 14px",
+  padding: "14px",
+  boxSizing: "border-box" as const,
   border: "1px solid rgba(0,255,153,.24)",
   borderRadius: 16,
   background:
@@ -1462,26 +1706,142 @@ const newProductsCount = {
   fontWeight: 900,
 };
 
+const desktopNewProductsLayout = {
+  display: "grid",
+  gap: 12,
+};
+
 const newProductsGrid = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))",
+  gridTemplateColumns:
+    "repeat(auto-fill, minmax(195px, 1fr))",
   gap: 11,
+};
+
+const desktopMoreNewProducts = {
+  display: "grid",
+  gap: 12,
+  paddingTop: 2,
+};
+
+const moreNewProductsButton = {
+  width: "100%",
+  minHeight: 46,
+  padding: "10px 14px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  border: "1px solid rgba(0,217,255,.42)",
+  borderRadius: 11,
+  background:
+    "linear-gradient(135deg, rgba(0,217,255,.08), rgba(0,255,153,.04))",
+  color: "#7df9ff",
+  fontSize: 11,
+  fontWeight: 950,
+  letterSpacing: ".05em",
+  cursor: "pointer",
+  boxShadow:
+    "0 0 18px rgba(0,217,255,.06)",
+};
+
+const moreNewProductsChevron = {
+  display: "inline-block",
+  fontSize: 15,
+  transition: "transform 160ms ease",
+};
+
+const expandedNewProductsGrid = {
+  display: "grid",
+  gridTemplateColumns:
+    "repeat(auto-fill, minmax(195px, 1fr))",
+  gap: 11,
+  paddingTop: 2,
+};
+
+const mobileNewProductsLayout = {
+  display: "grid",
+  gap: 12,
+};
+
+const mobileNewProductSelectorLabel = {
+  display: "grid",
+  gap: 7,
+};
+
+const mobileNewProductSelectorTitle = {
+  color: "#9fa2aa",
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".10em",
+};
+
+const mobileNewProductSelect = {
+  width: "100%",
+  minHeight: 44,
+  padding: "0 12px",
+  border: "1px solid rgba(0,217,255,.42)",
+  borderRadius: 10,
+  background: "#08090b",
+  color: "#ffffff",
+  fontSize: 14,
+  fontWeight: 800,
+  outline: "none",
+  boxSizing: "border-box" as const,
+};
+
+const mobileNewProductCard = {
+  position: "relative" as const,
+  overflow: "hidden",
+  width: "100%",
+  height: "auto",
+  aspectRatio: "4 / 5",
+  minHeight: 0,
+  display: "block",
+  border: "1px solid",
+  borderRadius: 16,
+  background: "#050507",
+  boxShadow:
+    "0 10px 26px rgba(0,0,0,.24)",
+};
+
+const mobileNewProductImageWrap = {
+  position: "absolute" as const,
+  inset: 0,
+  overflow: "hidden",
+  display: "grid",
+  placeItems: "center",
+  background: "#050507",
+};
+
+const mobileNewProductImage = {
+  width: "100%",
+  height: "100%",
+  objectFit: "contain" as const,
+  objectPosition: "center",
+  display: "block",
+  padding: 0,
+  boxSizing: "border-box" as const,
 };
 
 const newProductCard = {
   position: "relative" as const,
   overflow: "hidden",
-  height: "100%",
-  display: "grid",
-  gridTemplateRows: "215px minmax(0, 1fr)",
+  width: "100%",
+  height: "auto",
+  aspectRatio: "4 / 5",
+  minHeight: 0,
+  display: "block",
   border: "1px solid",
   borderRadius: 13,
-  background: "rgba(3,3,3,.92)",
+  background: "#050507",
 };
 
 const newProductImageWrap = {
+  position: "absolute" as const,
+  inset: 0,
   overflow: "hidden",
-  background: "#030303",
+  background: "#050507",
   display: "grid",
   placeItems: "center",
 };
@@ -1492,8 +1852,25 @@ const newProductImage = {
   objectFit: "contain" as const,
   objectPosition: "center",
   display: "block",
-  padding: 34,
+  padding: 0,
   boxSizing: "border-box" as const,
+  transform: "none",
+};
+
+const newProductImageShade = {
+  display: "none",
+};
+
+const newProductOverlayBody = {
+  position: "absolute" as const,
+  zIndex: 2,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  padding: "28px 10px 10px",
+  display: "grid",
+  alignContent: "end",
+  gap: 5,
 };
 
 const newProductBody = {
@@ -1503,18 +1880,19 @@ const newProductBody = {
   alignContent: "start",
 };
 
-
 const newProductName = {
   display: "block",
-  fontSize: 14,
+  minHeight: 28,
+  fontSize: 11,
+  lineHeight: 1.18,
   textTransform: "uppercase" as const,
 };
 
 const newProductCta = {
   display: "block",
-  marginTop: 3,
+  marginTop: 1,
   color: "#00ff99",
-  fontSize: 10,
+  fontSize: 9,
   fontWeight: 900,
 };
 
@@ -1620,7 +1998,8 @@ const discoverPoints = {
 const catalogShell = {
   maxWidth: 1320,
   margin: "20px auto 0",
-  padding: "0 12px",
+  padding: "0 14px",
+  boxSizing: "border-box" as const,
   scrollMarginTop: 110,
 };
 
@@ -1729,36 +2108,61 @@ const campaignLoadingText = {
 };
 
 const groupedCatalog = {
-  marginTop: 8,
+  marginTop: 14,
   display: "grid",
-  gap: 18,
+  gap: 28,
 };
 
 const catalogGroup = {
-  paddingTop: 4,
+  padding: "20px",
+  border: "1px solid rgba(255,255,255,.08)",
+  borderRadius: 20,
+  overflow: "hidden",
+};
+
+const catalogGroupCompounds = {
+  background:
+    "linear-gradient(135deg, rgba(255,69,216,.055), rgba(0,217,255,.025) 52%, rgba(255,255,255,.012))",
+  boxShadow:
+    "inset 0 1px 0 rgba(255,255,255,.035), 0 20px 55px rgba(0,0,0,.16)",
+};
+
+const catalogGroupSprays = {
+  background:
+    "linear-gradient(135deg, rgba(0,217,255,.055), rgba(0,255,153,.022) 52%, rgba(255,255,255,.012))",
+  boxShadow:
+    "inset 0 1px 0 rgba(255,255,255,.035), 0 20px 55px rgba(0,0,0,.16)",
+};
+
+const catalogGroupMaterials = {
+  background:
+    "linear-gradient(135deg, rgba(0,255,153,.050), rgba(255,69,216,.020) 52%, rgba(255,255,255,.012))",
+  boxShadow:
+    "inset 0 1px 0 rgba(255,255,255,.035), 0 20px 55px rgba(0,0,0,.16)",
 };
 
 const catalogGroupHeader = {
-  paddingBottom: 10,
+  paddingBottom: 14,
   display: "flex",
   alignItems: "end",
   justifyContent: "space-between",
-  gap: 8,
+  gap: 12,
   borderBottom: "1px solid rgba(255,255,255,.10)",
 };
 
 const catalogGroupEyebrow = {
-  color: "#00d9ff",
-  fontSize: 9,
+  color: "#7df9ff",
+  fontSize: 10,
   fontWeight: 950,
-  letterSpacing: ".12em",
+  letterSpacing: ".15em",
 };
 
 const catalogGroupTitle = {
-  margin: "3px 0 0",
+  margin: "5px 0 0",
   color: "#ffffff",
-  fontSize: "clamp(18px, 2.2vw, 24px)",
-  lineHeight: 1.05,
+  fontSize: "clamp(23px, 2.6vw, 32px)",
+  lineHeight: 1.02,
+  letterSpacing: "-.025em",
 };
 
 const catalogGroupCount = {
@@ -1774,11 +2178,11 @@ const catalogGroupCount = {
 };
 
 const productsGrid = {
-  margin: "12px 0 0",
+  margin: "18px 0 0",
   display: "grid",
   gridTemplateColumns:
-    "repeat(auto-fill, minmax(195px, 1fr))",
-  gap: 11,
+    "repeat(4, minmax(0, 1fr))",
+  gap: 18,
 };
 
 const productCard = {
@@ -1790,8 +2194,10 @@ const productCard = {
   minHeight: 0,
   display: "block",
   border: "1px solid",
-  borderRadius: 13,
+  borderRadius: 16,
   background: "#050507",
+  boxShadow:
+    "0 10px 26px rgba(0,0,0,.24)",
 };
 
 const productImageWrap = {
@@ -1820,12 +2226,15 @@ const productBody = {
   left: 0,
   right: 0,
   bottom: 0,
-  padding: "26px 10px 10px",
+  minHeight: "24%",
+  padding: "34px 12px 12px",
   display: "grid",
-  gap: 5,
+  gap: 6,
   alignContent: "end",
   background:
-    "linear-gradient(180deg, transparent 0%, rgba(0,0,0,.28) 18%, rgba(0,0,0,.86) 66%, rgba(0,0,0,.97) 100%)",
+    "linear-gradient(180deg, transparent 0%, rgba(0,0,0,.16) 16%, rgba(0,0,0,.78) 58%, rgba(0,0,0,.97) 100%)",
+  backdropFilter: "blur(1.2px)",
+  WebkitBackdropFilter: "blur(1.2px)",
 };
 
 
@@ -1881,9 +2290,12 @@ const catalogCategoryPill = {
 
 const productName = {
   margin: 0,
-  fontSize: 16,
+  fontSize: 15,
+  fontWeight: 950,
+  letterSpacing: ".01em",
   textTransform: "uppercase" as const,
-  lineHeight: 1.2,
+  lineHeight: 1.15,
+  textShadow: "0 2px 10px rgba(0,0,0,.85)",
 };
 
 const emptyState = {
