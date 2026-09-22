@@ -25,6 +25,7 @@ type Campaign = {
   get_quantity: number | null;
   is_storewide: boolean;
   priority: number;
+  minimum_spend: number;
   is_active: boolean;
   allow_reward_points: boolean;
   allow_general_promos: boolean;
@@ -43,6 +44,7 @@ type CampaignForm = {
   getQuantity: string;
   isStorewide: boolean;
   priority: string;
+  minimumSpend: string;
   isActive: boolean;
   allowRewardPoints: boolean;
   allowGeneralPromos: boolean;
@@ -59,6 +61,7 @@ const emptyForm: CampaignForm = {
   getQuantity: "1",
   isStorewide: false,
   priority: "50",
+  minimumSpend: "0",
   isActive: false,
   allowRewardPoints: true,
   allowGeneralPromos: false,
@@ -211,6 +214,7 @@ export default function CampaignsPage() {
           "get_quantity",
           "is_storewide",
           "priority",
+          "minimum_spend",
           "is_active",
           "allow_reward_points",
           "allow_general_promos",
@@ -312,6 +316,13 @@ export default function CampaignsPage() {
           )
         ),
 
+      minimumSpend:
+        String(
+          Number(
+            campaign.minimum_spend || 0
+          )
+        ),
+
       isActive:
         campaign.is_active,
 
@@ -381,6 +392,14 @@ export default function CampaignsPage() {
         )
       );
 
+    const minimumSpend =
+      Math.max(
+        0,
+        Number(
+          form.minimumSpend || 0
+        )
+      );
+
     const buyQuantity =
       Math.max(
         1,
@@ -444,6 +463,9 @@ export default function CampaignsPage() {
           form.isStorewide,
 
         priority,
+
+        minimum_spend:
+          minimumSpend,
 
         is_active:
           form.isActive,
@@ -886,6 +908,33 @@ export default function CampaignsPage() {
                 style={styles.input}
               />
             </label>
+
+            <label style={styles.label}>
+              Minimum Spend ($)
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.minimumSpend}
+                onChange={(event) =>
+                  updateForm(
+                    "minimumSpend",
+                    event.target.value
+                  )
+                }
+                placeholder="0.00"
+                style={styles.input}
+              />
+              <span
+                style={{
+                  color: "#888888",
+                  fontSize: 12,
+                  fontWeight: 500,
+                }}
+              >
+                Enter 0 for no minimum order amount. Shipping and tax should not count toward this threshold.
+              </span>
+            </label>
           </div>
 
           <div style={styles.toggleGrid}>
@@ -1106,6 +1155,17 @@ export default function CampaignsPage() {
                       <span>
                         Priority{" "}
                         {campaign.priority}
+                      </span>
+
+                      <span>
+                        Min Spend{" "}
+                        {Number(
+                          campaign.minimum_spend || 0
+                        ) > 0
+                          ? money(
+                              campaign.minimum_spend
+                            )
+                          : "None"}
                       </span>
                     </div>
 

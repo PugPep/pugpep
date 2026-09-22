@@ -17,6 +17,7 @@ type EditableOrderItem = {
   product_slug?: string | null;
   product_name: string;
   dosage: string;
+  lot_number?: string | null;
   purchase_type: string;
   quantity: number;
   regular_unit_price: number;
@@ -94,6 +95,7 @@ function toEditableOrderItem(item: any): EditableOrderItem {
     product_slug: item.product_slug ? String(item.product_slug) : null,
     product_name: String(item.product_name || "Product"),
     dosage: String(item.dosage || ""),
+    lot_number: item.lot_number ? String(item.lot_number) : null,
     purchase_type: String(item.purchase_type || ""),
     quantity,
     regular_unit_price: regular,
@@ -857,6 +859,13 @@ export default function OrderDetailsPage() {
 
                   dosage:
                     item.dosage,
+
+                  lot_number:
+                    String(
+                      item.lot_number ||
+                      ""
+                    ).trim() ||
+                    "Not captured",
 
                   purchase_type:
                     item.purchase_type,
@@ -1890,6 +1899,7 @@ export default function OrderDetailsPage() {
                             <p style={itemSubline}>
                               {item.dosage || "-"} ·{" "}
                               {item.purchase_type || "-"}
+                              {item.lot_number ? ` · Lot ${item.lot_number}` : ""}
                             </p>
                           </div>
 
@@ -2121,6 +2131,7 @@ export default function OrderDetailsPage() {
                               {item.dosage || "-"} ·{" "}
                               {item.purchase_type || "-"} · Qty{" "}
                               {quantity}
+                              {item.lot_number ? ` · Lot ${item.lot_number}` : ""}
                             </p>
                           </div>
 
@@ -2140,6 +2151,11 @@ export default function OrderDetailsPage() {
                         </div>
 
                         <InfoGrid>
+                          <Info
+                            label="Lot Number"
+                            value={item.lot_number || "Not captured"}
+                            accent={item.lot_number ? "#7df9ff" : undefined}
+                          />
                           <Info
                             label="Regular Unit"
                             value={money(regular)}

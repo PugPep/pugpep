@@ -61,6 +61,7 @@ export default function AdminMenu() {
           "Admin menu role check failed:",
           adminResult.error
         );
+
         setIsAdmin(false);
         setIsSuperAdmin(false);
         return;
@@ -73,7 +74,10 @@ export default function AdminMenu() {
         );
       }
 
-      setIsAdmin(Boolean(adminResult.data));
+      setIsAdmin(
+        Boolean(adminResult.data)
+      );
+
       setIsSuperAdmin(
         Boolean(superAdminResult.data)
       );
@@ -124,13 +128,16 @@ export default function AdminMenu() {
       <button
         type="button"
         onClick={() =>
-          setOpen((current) => !current)
+          setOpen(
+            (current) => !current
+          )
         }
         style={adminButton}
         aria-expanded={open}
         aria-haspopup="menu"
       >
         Admin
+
         <span
           aria-hidden="true"
           style={{
@@ -145,107 +152,137 @@ export default function AdminMenu() {
       </button>
 
       {open && (
-        <div role="menu" style={dropdown}>
-          <div style={menuHeader}>
-            <span style={menuEyebrow}>
-              CONTROL CENTER
-            </span>
+        <div
+          role="menu"
+          style={dropdown}
+        >
+          <div
+            style={backgroundLogo}
+            aria-hidden="true"
+          />
 
-            <strong style={menuTitle}>
-              Admin Navigation
-            </strong>
-          </div>
+          <div
+            style={neonTopLine}
+            aria-hidden="true"
+          />
 
-          <Link
-            href="/admin/dashboard"
-            style={item}
-            onClick={closeMenu}
-            role="menuitem"
+          <div
+            style={menuContent}
           >
-            Dashboard
-          </Link>
+            <div style={menuHeader}>
+              <span style={menuEyebrow}>
+                PUGPEP CONTROL CENTER
+              </span>
 
-          <Link
-            href="/admin"
-            style={item}
-            onClick={closeMenu}
-            role="menuitem"
-          >
-            Orders
-          </Link>
+              <strong style={menuTitle}>
+                Admin Navigation
+              </strong>
+            </div>
 
-          {isSuperAdmin && (
             <Link
-              href="/admin/users"
+              href="/admin/dashboard"
               style={item}
               onClick={closeMenu}
               role="menuitem"
             >
-              Admin Users
+              Dashboard
             </Link>
-          )}
 
-          <Link
-            href="/admin/customers"
-            style={item}
-            onClick={closeMenu}
-            role="menuitem"
-          >
-            Customers
-          </Link>
+            <Link
+              href="/admin"
+              style={item}
+              onClick={closeMenu}
+              role="menuitem"
+            >
+              Orders
+            </Link>
 
-          <Link
-            href="/admin/inventory"
-            style={item}
-            onClick={closeMenu}
-            role="menuitem"
-          >
-            Products / Inventory
-          </Link>
+            {isSuperAdmin && (
+              <Link
+                href="/admin/users"
+                style={item}
+                onClick={closeMenu}
+                role="menuitem"
+              >
+                Admin Users
+              </Link>
+            )}
 
-          <div style={sectionLabel}>
-            Promotions
+            <Link
+              href="/admin/customers"
+              style={item}
+              onClick={closeMenu}
+              role="menuitem"
+            >
+              Customers
+            </Link>
+
+            <div style={sectionLabel}>
+              Products
+            </div>
+
+            <Link
+              href="/admin/inventory"
+              style={item}
+              onClick={closeMenu}
+              role="menuitem"
+            >
+              Inventory Manager
+            </Link>
+
+            <Link
+              href="/admin/product-manager"
+              style={productManagerItem}
+              onClick={closeMenu}
+              role="menuitem"
+            >
+              Product Manager
+            </Link>
+
+            <div style={sectionLabel}>
+              Promotions
+            </div>
+
+            <Link
+              href="/admin/promotions"
+              style={promotionItem}
+              onClick={closeMenu}
+              role="menuitem"
+            >
+              Promotion Center
+            </Link>
+
+            <Link
+              href="/admin/promos"
+              style={item}
+              onClick={closeMenu}
+              role="menuitem"
+            >
+              Promo Codes
+            </Link>
+
+            <Link
+              href="/admin/sales-reps"
+              style={item}
+              onClick={closeMenu}
+              role="menuitem"
+            >
+              Sales Representatives
+            </Link>
+
+            <div style={sectionLabel}>
+              Reports
+            </div>
+
+            <Link
+              href="/admin/analytics"
+              style={lastItem}
+              onClick={closeMenu}
+              role="menuitem"
+            >
+              Analytics
+            </Link>
           </div>
-
-          <Link
-            href="/admin/promotions"
-            style={highlightedItem}
-            onClick={closeMenu}
-            role="menuitem"
-          >
-            Promotion Center
-          </Link>
-
-          <Link
-            href="/admin/promos"
-            style={item}
-            onClick={closeMenu}
-            role="menuitem"
-          >
-            Promo Codes
-          </Link>
-
-          <Link
-            href="/admin/sales-reps"
-            style={item}
-            onClick={closeMenu}
-            role="menuitem"
-          >
-            Sales Representatives
-          </Link>
-
-          <div style={sectionLabel}>
-            Reports
-          </div>
-
-          <Link
-            href="/admin/analytics"
-            style={lastItem}
-            onClick={closeMenu}
-            role="menuitem"
-          >
-            Analytics
-          </Link>
         </div>
       )}
     </div>
@@ -259,91 +296,273 @@ const container = {
 
 const adminButton = {
   minHeight: 38,
+
   display: "inline-flex",
+
   alignItems: "center",
+
   gap: 7,
-  padding: "8px 12px",
-  border: "1px solid #00d9ff",
-  borderRadius: 8,
-  background: "#111111",
-  color: "#00d9ff",
+
+  padding: "8px 13px",
+
+  border:
+    "1px solid rgba(0,217,255,.72)",
+
+  borderRadius: 9,
+
+  background:
+    "linear-gradient(135deg, rgba(0,217,255,.08), rgba(255,69,216,.05))",
+
+  backdropFilter:
+    "blur(14px)",
+
+  WebkitBackdropFilter:
+    "blur(14px)",
+
+  color: "#7df9ff",
+
   cursor: "pointer",
-  fontWeight: 900,
+
+  fontWeight: 950,
+
+  letterSpacing:
+    ".02em",
+
   boxShadow:
-    "0 0 14px rgba(0,217,255,.10)",
+    "0 0 18px rgba(0,217,255,.10), inset 0 0 12px rgba(0,217,255,.03)",
 };
 
 const chevron = {
   display: "inline-block",
-  transition: "transform 160ms ease",
+
+  transition:
+    "transform 160ms ease",
 };
 
 const dropdown = {
   position: "absolute" as const,
+
   zIndex: 9999,
+
   top: "100%",
+
   right: 0,
-  minWidth: 240,
-  maxHeight: "75vh",
-  marginTop: 0,
+
+  width: 270,
+
+  maxHeight: "78vh",
+
   overflowY: "auto" as const,
+
   overflowX: "hidden" as const,
-  border: "1px solid #333333",
-  borderRadius: 10,
-  background: "#080808",
+
+  border:
+    "1px solid rgba(0,217,255,.30)",
+
+  borderRadius: 16,
+
+  background:
+    "linear-gradient(145deg, rgba(5,5,8,.88), rgba(9,9,12,.74))",
+
+  backdropFilter:
+    "blur(22px) saturate(135%)",
+
+  WebkitBackdropFilter:
+    "blur(22px) saturate(135%)",
+
   boxShadow:
-    "0 0 25px rgba(0,217,255,.25)",
+    "0 18px 55px rgba(0,0,0,.55), 0 0 28px rgba(0,217,255,.10), 0 0 36px rgba(255,69,216,.05)",
+
+  isolation:
+    "isolate" as const,
+};
+
+const backgroundLogo = {
+  position: "absolute" as const,
+
+  inset: 0,
+
+  zIndex: 0,
+
+  backgroundImage:
+    "url('/pugpep-logo.png')",
+
+  backgroundRepeat:
+    "no-repeat",
+
+  backgroundPosition:
+    "center 45%",
+
+  backgroundSize:
+    "78% auto",
+
+  opacity: 0.08,
+
+  filter:
+    "saturate(1.15) contrast(1.05)",
+
+  pointerEvents:
+    "none" as const,
+};
+
+const neonTopLine = {
+  position: "absolute" as const,
+
+  top: 0,
+
+  left: "10%",
+
+  right: "10%",
+
+  height: 1,
+
+  zIndex: 2,
+
+  background:
+    "linear-gradient(90deg, transparent, #00d9ff, #ff45d8, #00ff99, transparent)",
+
+  boxShadow:
+    "0 0 16px rgba(0,217,255,.55)",
+};
+
+const menuContent = {
+  position: "relative" as const,
+
+  zIndex: 1,
 };
 
 const menuHeader = {
-  padding: "12px 14px",
+  padding:
+    "14px 15px 13px",
+
   display: "grid",
-  gap: 3,
-  borderBottom: "1px solid #222222",
+
+  gap: 4,
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.08)",
+
   background:
-    "linear-gradient(90deg, rgba(0,217,255,.08), rgba(255,69,216,.06))",
+    "linear-gradient(90deg, rgba(0,217,255,.055), rgba(255,69,216,.045), rgba(0,255,153,.035))",
 };
 
 const menuEyebrow = {
-  color: "#00d9ff",
-  fontSize: 10,
-  fontWeight: 900,
-  letterSpacing: ".12em",
+  color: "#7df9ff",
+
+  fontSize: 9,
+
+  fontWeight: 950,
+
+  letterSpacing:
+    ".15em",
 };
 
 const menuTitle = {
   color: "#ffffff",
-  fontSize: 14,
+
+  fontSize: 15,
+
+  textShadow:
+    "0 0 14px rgba(255,255,255,.08)",
 };
 
 const item = {
   display: "block",
-  padding: "12px 14px",
-  color: "#ffffff",
+
+  padding:
+    "11px 14px",
+
+  color:
+    "rgba(255,255,255,.92)",
+
   textDecoration: "none",
-  borderBottom: "1px solid #222222",
-  background: "transparent",
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.065)",
+
+  background:
+    "rgba(0,0,0,.10)",
+
+  backdropFilter:
+    "blur(4px)",
+
+  WebkitBackdropFilter:
+    "blur(4px)",
+
+  fontSize: 13,
+
+  fontWeight: 750,
+
+  transition:
+    "all 150ms ease",
 };
 
-const highlightedItem = {
+const productManagerItem = {
   ...item,
-  color: "#ff45d8",
+
+  color: "#00ff99",
+
+  fontWeight: 950,
+
+  background:
+    "linear-gradient(90deg, rgba(0,255,153,.10), rgba(0,217,255,.045), transparent)",
+
+  textShadow:
+    "0 0 12px rgba(0,255,153,.25)",
+
+  borderLeft:
+    "2px solid rgba(0,255,153,.65)",
+};
+
+const promotionItem = {
+  ...item,
+
+  color: "#ff8ee7",
+
   fontWeight: 900,
-  background: "rgba(255,69,216,.08)",
+
+  background:
+    "linear-gradient(90deg, rgba(255,69,216,.09), rgba(255,69,216,.02), transparent)",
+
+  textShadow:
+    "0 0 12px rgba(255,69,216,.20)",
+
+  borderLeft:
+    "2px solid rgba(255,69,216,.55)",
 };
 
 const lastItem = {
   ...item,
+
   borderBottom: "none",
 };
 
 const sectionLabel = {
-  padding: "9px 14px",
-  borderBottom: "1px solid #222222",
-  background: "#050505",
-  color: "#777777",
-  fontSize: 11,
-  fontWeight: 900,
-  letterSpacing: 1,
-  textTransform: "uppercase" as const,
+  padding:
+    "8px 14px",
+
+  borderBottom:
+    "1px solid rgba(255,255,255,.06)",
+
+  background:
+    "rgba(0,0,0,.24)",
+
+  backdropFilter:
+    "blur(8px)",
+
+  WebkitBackdropFilter:
+    "blur(8px)",
+
+  color:
+    "rgba(255,255,255,.38)",
+
+  fontSize: 9,
+
+  fontWeight: 950,
+
+  letterSpacing:
+    ".14em",
+
+  textTransform:
+    "uppercase" as const,
 };

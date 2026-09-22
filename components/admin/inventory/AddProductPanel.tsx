@@ -79,7 +79,7 @@ export default function AddProductPanel({
                     </select>
                   </Field>
 
-                  <Field label="Product Image" wide>
+                  <Field label="Initial Product Image (Optional)" wide>
                     <div
                       style={{
                         display: "grid",
@@ -130,7 +130,7 @@ export default function AddProductPanel({
                         >
                           {newProductImageUploading
                             ? "Uploading Image..."
-                            : "Upload Image From Computer"}
+                            : "Upload Initial Image"}
 
                           <input
                             type="file"
@@ -157,7 +157,7 @@ export default function AddProductPanel({
                               image: event.target.value,
                             })
                           }
-                          placeholder="Or paste an existing image URL/path"
+                          placeholder="Optional: paste an existing image URL/path"
                           style={input}
                         />
 
@@ -168,7 +168,7 @@ export default function AddProductPanel({
                             lineHeight: 1.5,
                           }}
                         >
-                          PNG, JPG, or WebP up to 5 MB. Uploaded files are stored in the Supabase product-images bucket.
+                          Optional starting image for the new product. PNG, JPG, or WebP up to 5 MB. Final artwork can be replaced or generated later in Product Manager.
                         </span>
                       </div>
                     </div>

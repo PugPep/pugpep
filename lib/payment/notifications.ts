@@ -17,6 +17,15 @@ type SmsApiResponse = {
   to?: string;
 };
 
+type SavedOrderItem = {
+  product_name: string | null;
+  dosage: string | null;
+  quantity: number | null;
+  line_revenue: number | null;
+  price: number | null;
+  lot_number: string | null;
+};
+
 export async function sendOrderNotifications({
   order,
   pricing,
@@ -30,14 +39,113 @@ export async function sendOrderNotifications({
   const discounts =
     pricing.discounts;
 
+  const supabase =
+    createClient();
+
   /*
    * EMAIL
    *
-   * Email and SMS are intentionally isolated from one another.
-   * A failure in one notification channel must never prevent
-   * the other notification from being attempted.
+   * Load the order-item snapshots AFTER the order has been saved.
+   * This lets the confirmation email use the exact historical lot
+   * number stored on each order item instead of whatever lot becomes
+   * current later.
+   *
+   * Email and SMS remain isolated from one another. A failure in one
+   * notification channel must never prevent the other notification
+   * from being attempted.
    */
   try {
+    const {
+      data: savedItems,
+      error: savedItemsError,
+    } =
+      await supabase
+        .from("order_items")
+        .select(
+          "product_name,dosage,quantity,line_revenue,price,lot_number"
+        )
+        .eq(
+          "order_id",
+          order.id
+        )
+        .order(
+          "id",
+          {
+            ascending: true,
+          }
+        );
+
+    if (savedItemsError) {
+      throw savedItemsError;
+    }
+
+    const emailItems =
+      (
+        savedItems ||
+        []
+      ).map(
+        (
+          item: SavedOrderItem
+        ) => {
+          const productName =
+            String(
+              item.product_name ||
+              "Product"
+            );
+
+          const dosage =
+            String(
+              item.dosage ||
+              ""
+            );
+
+          const lotNumber =
+            String(
+              item.lot_number ||
+              ""
+            ).trim();
+
+          const displayName =
+            dosage
+              ? `${productName} (${dosage})`
+              : productName;
+
+          return {
+            /*
+             * Keeping the lot inside "name" means your existing
+             * EmailJS template will show it even before you add a
+             * dedicated {{lot_number}} field to the template.
+             */
+            name:
+              lotNumber
+                ? `${displayName} — Lot ${lotNumber}`
+                : displayName,
+
+            dosage,
+
+            lot_number:
+              lotNumber ||
+              "Not captured",
+
+            quantity:
+              Math.max(
+                1,
+                Number(
+                  item.quantity ||
+                  1
+                )
+              ),
+
+            price:
+              money(
+                item.line_revenue ??
+                  item.price ??
+                  0
+              ),
+          };
+        }
+      );
+
     await emailjs.send(
       "service_quxnkin",
       "template_xz4gtk9",
@@ -59,20 +167,7 @@ export async function sendOrderNotifications({
           order.orderNumber,
 
         items:
-          pricing.campaign.items.map(
-            (item) => ({
-              name:
-                `${item.productName} (${item.dosage})`,
-
-              quantity:
-                item.quantity,
-
-              price:
-                money(
-                  item.campaignLineRevenue
-                ),
-            })
-          ),
+          emailItems,
 
         shipping:
           accounting
@@ -153,9 +248,6 @@ export async function sendOrderNotifications({
    * owns this order before sending the message.
    */
   try {
-    const supabase =
-      createClient();
-
     const {
       data: {
         session,

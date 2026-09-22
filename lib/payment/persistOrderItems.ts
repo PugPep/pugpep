@@ -20,6 +20,47 @@ export async function persistOrderItems({
   const snapshot =
     pricing.snapshot;
 
+  /*
+   * Snapshot the verified current COA lot at the moment the order is created.
+   * This intentionally stores the lot on order_items so historical orders do
+   * not change when a newer COA becomes current later.
+   */
+  const productSlugs = Array.from(
+    new Set(
+      pricing.campaign.items
+        .map((item) => String(item.productSlug || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  const lotByProductAndDosage = new Map<string, string>();
+
+  if (productSlugs.length > 0) {
+    const { data: currentCoas, error: currentCoaError } = await supabase
+      .from("current_product_coas")
+      .select("product_slug,dosage,lot_number")
+      .in("product_slug", productSlugs);
+
+    if (currentCoaError) {
+      throw new Error(
+        `Order confirmation could not verify current lot numbers: ${currentCoaError.message}`
+      );
+    }
+
+    for (const coa of currentCoas || []) {
+      const slug = String(coa.product_slug || "").trim();
+      const dosage = String(coa.dosage || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "");
+      const lot = String(coa.lot_number || "").trim();
+
+      if (slug && dosage && lot) {
+        lotByProductAndDosage.set(`${slug}|${dosage}`, lot);
+      }
+    }
+  }
+
   const orderItems =
     pricing.campaign.items.map(
       (item) => {
@@ -78,6 +119,14 @@ export async function persistOrderItems({
 
           dosage:
             item.dosage,
+
+          lot_number:
+            lotByProductAndDosage.get(
+              `${String(item.productSlug || "").trim()}|${String(item.dosage || "")
+                .trim()
+                .toLowerCase()
+                .replace(/\s+/g, "")}`
+            ) || null,
 
           purchase_type:
             item.purchaseType,

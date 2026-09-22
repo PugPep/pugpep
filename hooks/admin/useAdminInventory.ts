@@ -91,6 +91,39 @@ export function useAdminInventory() {
     init();
   }, []);
 
+  useEffect(() => {
+    if (
+      !authorized ||
+      products.length === 0 ||
+      selectedSlug ||
+      typeof window === "undefined"
+    ) {
+      return;
+    }
+
+    const requestedProduct =
+      new URLSearchParams(
+        window.location.search
+      ).get("product");
+
+    if (
+      requestedProduct &&
+      products.some(
+        (product) =>
+          product.slug ===
+          requestedProduct
+      )
+    ) {
+      void selectProduct(
+        requestedProduct
+      );
+    }
+  }, [
+    authorized,
+    products,
+    selectedSlug,
+  ]);
+
   function getSingleStatus(quantity: number) {
     return quantity > 0 ? "in stock" : "out of stock";
   }
@@ -384,13 +417,17 @@ export function useAdminInventory() {
   }
 
   async function createProduct() {
-    if (!newProduct.name || !newProduct.slug) {
+    const createdSlug = newProduct.slug.trim();
+
+    if (!newProduct.name.trim() || !createdSlug) {
       alert("Product name and slug are required.");
-      return;
+      return null;
     }
 
     const { error } = await supabase.from("products").insert({
       ...newProduct,
+      name: newProduct.name.trim(),
+      slug: createdSlug,
       new_until: newProduct.new_until || null,
       homepage_feature_order:
         newProduct.homepage_feature_order === ""
@@ -402,30 +439,52 @@ export function useAdminInventory() {
 
     if (error) {
       alert(error.message);
-      return;
+      return null;
     }
 
-    setNotice("Product created.");
-
     setNewProduct({
-  name: "",
-  slug: "",
-  color: "#ff45d8",
-  image: "",
-  short_description: "",
-  description: "",
-  storage: "",
-  category: "peptide",
-  is_active: true,
-  is_new: false,
-  feature_on_homepage: false,
-  new_until: "",
-  homepage_feature_order: "",
-  is_coming_soon: false,
-  coming_soon_date: "",
-});
+      name: "",
+      slug: "",
+      color: "#ff45d8",
+      image: "",
+      short_description: "",
+      description: "",
+      storage: "",
+      category: "peptide",
+      is_active: true,
+      is_new: false,
+      feature_on_homepage: false,
+      new_until: "",
+      homepage_feature_order: "",
+      is_coming_soon: false,
+      coming_soon_date: "",
+    });
+
     setShowAddProduct(false);
+
     await loadProducts();
+
+    const { data: createdProduct } = await supabase
+      .from("products")
+      .select("*")
+      .eq("slug", createdSlug)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (createdProduct) {
+      setSelectedSlug(createdSlug);
+      setSelectedProduct(createdProduct);
+      await Promise.all([
+        loadOptions(createdSlug),
+        loadInventory(createdSlug),
+      ]);
+    }
+
+    setNotice(
+      "Product created and selected. Add its dosages and inventory, then continue to Product Manager."
+    );
+
+    return createdSlug;
   }
 
   async function setProductActive(

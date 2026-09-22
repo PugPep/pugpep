@@ -103,6 +103,7 @@ export default function AdminPage() {
   const supabase = useMemo(() => createClient(), []);
 
   const [orders, setOrders] = useState<Order[]>([]);
+  const [orderLotSummaries, setOrderLotSummaries] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [filter, setFilter] = useState("all");
@@ -143,7 +144,49 @@ export default function AdminPage() {
       return;
     }
 
-    setOrders((data || []) as Order[]);
+    const loadedOrders = (data || []) as Order[];
+    setOrders(loadedOrders);
+
+    const orderIds = loadedOrders.map((order) => order.id);
+
+    if (orderIds.length === 0) {
+      setOrderLotSummaries({});
+      return;
+    }
+
+    const { data: lotRows, error: lotError } = await supabase
+      .from("order_items")
+      .select("order_id,product_name,dosage,lot_number")
+      .in("order_id", orderIds);
+
+    if (lotError) {
+      console.error("Unable to load order lot snapshots:", lotError);
+      setOrderLotSummaries({});
+      return;
+    }
+
+    const nextLotSummaries: Record<string, string[]> = {};
+
+    for (const row of lotRows || []) {
+      const orderId = String(row.order_id || "");
+      const lotNumber = String(row.lot_number || "").trim();
+
+      if (!orderId || !lotNumber) continue;
+
+      const productName = String(row.product_name || "Product");
+      const dosage = String(row.dosage || "").trim();
+      const label = `${productName}${dosage ? ` ${dosage}` : ""}: ${lotNumber}`;
+
+      if (!nextLotSummaries[orderId]) {
+        nextLotSummaries[orderId] = [];
+      }
+
+      if (!nextLotSummaries[orderId].includes(label)) {
+        nextLotSummaries[orderId].push(label);
+      }
+    }
+
+    setOrderLotSummaries(nextLotSummaries);
   }
 
   useEffect(() => {
@@ -824,7 +867,7 @@ export default function AdminPage() {
             } = await supabase
               .from("order_items")
               .select(
-                "product_name,dosage,purchase_type,quantity,line_revenue,price,actual_unit_price"
+                "product_name,dosage,purchase_type,quantity,line_revenue,price,actual_unit_price,lot_number"
               )
               .eq(
                 "order_id",
@@ -871,6 +914,12 @@ export default function AdminPage() {
                       )
                     );
 
+                  const lotNumber =
+                    String(
+                      item.lot_number ||
+                      ""
+                    ).trim();
+
                   const itemName =
                     [
                       item.product_name,
@@ -881,6 +930,9 @@ export default function AdminPage() {
                           ? "Kit"
                           : "Single"
                         : null,
+                      lotNumber
+                        ? `Lot ${lotNumber}`
+                        : null,
                     ]
                       .filter(Boolean)
                       .join(" — ");
@@ -888,6 +940,9 @@ export default function AdminPage() {
                   return {
                     name:
                       itemName,
+                    lot_number:
+                      lotNumber ||
+                      "Not captured",
                     quantity,
                     total:
                       Number.isFinite(
@@ -981,6 +1036,8 @@ export default function AdminPage() {
                     (item) => ({
                       name:
                         item.name,
+                      lot_number:
+                        item.lot_number,
                       quantity:
                         item.quantity,
                       price:
@@ -1199,7 +1256,10 @@ export default function AdminPage() {
       order.tracking_number?.toLowerCase().includes(query) ||
       order.state?.toLowerCase().includes(query) ||
       order.city?.toLowerCase().includes(query) ||
-      order.zip?.toLowerCase().includes(query);
+      order.zip?.toLowerCase().includes(query) ||
+      (orderLotSummaries[order.id] || []).some((lot) =>
+        lot.toLowerCase().includes(query)
+      );
 
     if (!matchesSearch) return false;
 
@@ -1733,6 +1793,24 @@ export default function AdminPage() {
                       <span style={customerEmail}>
                         {order.customer_email}
                       </span>
+                    </div>
+
+                    <div style={lotSummaryBlock}>
+                      <span style={lotSummaryLabel}>PRODUCT LOTS</span>
+
+                      {(orderLotSummaries[order.id] || []).length > 0 ? (
+                        <div style={lotSummaryList}>
+                          {(orderLotSummaries[order.id] || []).map((lot) => (
+                            <span key={lot} style={lotSummaryValue}>
+                              {lot}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={lotSummaryMissing}>
+                          No lot captured for this order
+                        </span>
+                      )}
                     </div>
 
                     <div style={orderMetrics}>
@@ -3010,6 +3088,39 @@ const customerName = {
 const customerEmail = {
   color: "#b1b1b8",
   overflowWrap: "anywhere" as const,
+};
+
+const lotSummaryBlock = {
+  padding: 12,
+  display: "grid",
+  gap: 7,
+  border: "1px solid rgba(0,217,255,.18)",
+  borderRadius: 11,
+  background: "rgba(0,217,255,.035)",
+};
+
+const lotSummaryLabel = {
+  color: "#7df9ff",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: ".11em",
+};
+
+const lotSummaryList = {
+  display: "grid",
+  gap: 4,
+};
+
+const lotSummaryValue = {
+  color: "#ffffff",
+  fontSize: 13,
+  fontWeight: 800,
+  overflowWrap: "anywhere" as const,
+};
+
+const lotSummaryMissing = {
+  color: "#777984",
+  fontSize: 12,
 };
 
 const orderMetrics = {
