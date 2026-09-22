@@ -400,6 +400,13 @@ export default function CampaignsPage() {
         )
       );
 
+    if (!Number.isFinite(minimumSpend)) {
+      alert(
+        "Minimum spend must be a valid number."
+      );
+      return;
+    }
+
     const buyQuantity =
       Math.max(
         1,
@@ -910,7 +917,7 @@ export default function CampaignsPage() {
             </label>
 
             <label style={styles.label}>
-              Minimum Spend ($)
+              Minimum spend ($)
               <input
                 type="number"
                 min="0"
@@ -925,15 +932,6 @@ export default function CampaignsPage() {
                 placeholder="0.00"
                 style={styles.input}
               />
-              <span
-                style={{
-                  color: "#888888",
-                  fontSize: 12,
-                  fontWeight: 500,
-                }}
-              >
-                Enter 0 for no minimum order amount. Shipping and tax should not count toward this threshold.
-              </span>
             </label>
           </div>
 
@@ -1158,14 +1156,11 @@ export default function CampaignsPage() {
                       </span>
 
                       <span>
-                        Min Spend{" "}
-                        {Number(
-                          campaign.minimum_spend || 0
-                        ) > 0
-                          ? money(
-                              campaign.minimum_spend
-                            )
-                          : "None"}
+                        Min spend {money(
+                          Number(
+                            campaign.minimum_spend || 0
+                          )
+                        )}
                       </span>
                     </div>
 

@@ -17,6 +17,7 @@ import { useCart } from "../cartContext";
 import { createClient } from "../../lib/supabaseClient";
 import { trackEvent } from "../../lib/trackEvent";
 import { calculatePricing } from "../../lib/pricing/pricingEngine";
+import { calculateCampaignPricing } from "../../lib/pricing/campaignPricing";
 
 import type {
   PricingResult,
@@ -27,7 +28,7 @@ import type {
   CustomerForm,
 } from "./checkoutTypes";
 
-import { styles } from "./checkoutTheme";
+import { money, styles } from "./checkoutTheme";
 import { TierBanner } from "./TierBanner";
 import { ShippingInformationSection } from "./ShippingInformationSection";
 import { ShippingMethodSection } from "./ShippingMethodSection";
@@ -182,6 +183,13 @@ export default function CheckoutPage() {
     useState<
       PricingResult | null
     >(null);
+
+  const [
+    campaignPreview,
+    setCampaignPreview,
+  ] = useState<
+    PricingResult["campaign"] | null
+  >(null);
 
   const [
     promoInput,
@@ -405,6 +413,57 @@ export default function CheckoutPage() {
       (item) =>
         !item.productOptionId
     );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCampaignPreview() {
+      if (
+        cart.length === 0 ||
+        hasMissingOptionIds
+      ) {
+        setCampaignPreview(null);
+        return;
+      }
+
+      try {
+        const preview =
+          await calculateCampaignPricing({
+            supabase,
+            items: cart.map((item) => ({
+              productOptionId:
+                item.productOptionId as string,
+              quantity: Number(
+                item.quantity || 1
+              ),
+            })),
+          });
+
+        if (!cancelled) {
+          setCampaignPreview(preview);
+        }
+      } catch (error) {
+        console.warn(
+          "Unable to load campaign preview:",
+          error
+        );
+
+        if (!cancelled) {
+          setCampaignPreview(null);
+        }
+      }
+    }
+
+    void loadCampaignPreview();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    cart,
+    hasMissingOptionIds,
+    supabase,
+  ]);
 
   const addressReady =
     customer.state
@@ -2041,6 +2100,9 @@ export default function CheckoutPage() {
               }
               pricing={
                 pricing
+              }
+              campaignPreview={
+                campaignPreview
               }
               updateQuantity={
                 updateQuantity

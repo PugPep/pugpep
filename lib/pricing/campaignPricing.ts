@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
+  CampaignMinimumSpendProgress,
   CampaignPricingResult,
   CampaignType,
   PricedCartLine,
@@ -858,136 +859,279 @@ function buildPricedLine({
   };
 }
 
+type CampaignMinimumSpendRow = {
+  id: string;
+  minimum_spend: number | null;
+};
+
+function removeCampaignForMinimumSpend(
+  campaignPrice: ProductOptionCampaignPrice
+): ProductOptionCampaignPrice {
+  return {
+    ...campaignPrice,
+    hasCampaign: false,
+    saleCampaignId: null,
+    saleCampaignName: null,
+    saleCampaignType: null,
+    saleUnitPrice: campaignPrice.regularUnitPrice,
+    saleDiscountAmount: 0,
+    discountValue: 0,
+    buyQuantity: null,
+    getQuantity: null,
+    allowRewardPoints: true,
+    allowGeneralPromos: true,
+    allowSalesRepDiscount: true,
+    allowReferralDiscount: true,
+    taxOffsetMode: "none",
+    taxOffsetReason: null,
+  };
+}
+
 export async function calculateCampaignPricing({
   supabase,
   items,
 }: CampaignPricingInput): Promise<CampaignPricingResult> {
-  const warnings:
-    PricingWarning[] = [];
+  const warnings: PricingWarning[] = [];
 
-  const validInputs =
-    items.filter(
-      (item) => {
-        if (
-          !item.productOptionId
-        ) {
-          warnings.push(
-            createWarning({
-              code:
-                "MISSING_PRODUCT_OPTION_ID",
-              message:
-                "A cart item is missing its product option ID.",
-              severity:
-                "critical",
-            })
-          );
-
-          return false;
-        }
-
-        if (
-          safePositiveQuantity(
-            item.quantity
-          ) <= 0
-        ) {
-          warnings.push(
-            createWarning({
-              code:
-                "INVALID_QUANTITY",
-              message:
-                "A cart item has an invalid quantity.",
-              severity:
-                "critical",
-              productOptionId:
-                item.productOptionId,
-            })
-          );
-
-          return false;
-        }
-
-        return true;
-      }
-    );
-
-  const optionIds =
-    Array.from(
-      new Set(
-        validInputs.map(
-          (item) =>
-            item.productOptionId
-        )
-      )
-    );
-
-  const metadata =
-    await loadProductMetadata(
-      supabase,
-      optionIds
-    );
-
-  const lines:
-    PricedCartLine[] = [];
-
-  for (
-    const input
-    of validInputs
-  ) {
-    const itemMetadata =
-      metadata.get(
-        input.productOptionId
+  const validInputs = items.filter((item) => {
+    if (!item.productOptionId) {
+      warnings.push(
+        createWarning({
+          code: "MISSING_PRODUCT_OPTION_ID",
+          message: "A cart item is missing its product option ID.",
+          severity: "critical",
+        })
       );
+
+      return false;
+    }
+
+    if (safePositiveQuantity(item.quantity) <= 0) {
+      warnings.push(
+        createWarning({
+          code: "INVALID_QUANTITY",
+          message: "A cart item has an invalid quantity.",
+          severity: "critical",
+          productOptionId: item.productOptionId,
+        })
+      );
+
+      return false;
+    }
+
+    return true;
+  });
+
+  const optionIds = Array.from(
+    new Set(validInputs.map((item) => item.productOptionId))
+  );
+
+  const metadata = await loadProductMetadata(supabase, optionIds);
+
+  /*
+   * Load the campaign candidate for each product option before we build
+   * any priced lines. This lets us calculate each campaign's qualifying
+   * merchandise subtotal across the entire cart before deciding whether
+   * that campaign is allowed to apply.
+   */
+  const campaignPriceByOption = new Map<
+    string,
+    ProductOptionCampaignPrice
+  >();
+
+  await Promise.all(
+    optionIds.map(async (productOptionId) => {
+      const campaignPrice = await loadCampaignPrice(
+        supabase,
+        productOptionId
+      );
+
+      campaignPriceByOption.set(
+        productOptionId,
+        campaignPrice
+      );
+    })
+  );
+
+  const campaignIds = Array.from(
+    new Set(
+      Array.from(campaignPriceByOption.values())
+        .filter(
+          (campaignPrice) =>
+            campaignPrice.hasCampaign &&
+            Boolean(campaignPrice.saleCampaignId)
+        )
+        .map(
+          (campaignPrice) =>
+            campaignPrice.saleCampaignId as string
+        )
+    )
+  );
+
+  const minimumSpendByCampaign = new Map<string, number>();
+
+  if (campaignIds.length > 0) {
+    const { data, error } = await supabase
+      .from("sale_campaigns")
+      .select("id,minimum_spend")
+      .in("id", campaignIds);
+
+    if (error) {
+      throw error;
+    }
+
+    const rows =
+      (data || []) as unknown as CampaignMinimumSpendRow[];
+
+    rows.forEach((row) => {
+      minimumSpendByCampaign.set(
+        row.id,
+        roundCurrency(nonNegative(row.minimum_spend))
+      );
+    });
+  }
+
+  /*
+   * Minimum spend is based only on merchandise that is actually eligible
+   * for that campaign, using regular pre-discount merchandise value.
+   *
+   * Example:
+   *   Campaign minimum: $100
+   *   Eligible campaign products: $80
+   *   Other products: $60
+   *
+   * The campaign does NOT activate because the qualifying subtotal is $80,
+   * not the full $140 cart subtotal. Shipping and later discounts are never
+   * counted toward the minimum.
+   */
+  const qualifyingSpendByCampaign = new Map<string, number>();
+
+  validInputs.forEach((input) => {
+    const campaignPrice = campaignPriceByOption.get(
+      input.productOptionId
+    );
+
+    if (
+      !campaignPrice?.hasCampaign ||
+      !campaignPrice.saleCampaignId
+    ) {
+      return;
+    }
+
+    const quantity = safePositiveQuantity(input.quantity);
+
+    const regularLineValue = roundCurrency(
+      nonNegative(campaignPrice.regularUnitPrice) * quantity
+    );
+
+    const current = qualifyingSpendByCampaign.get(
+      campaignPrice.saleCampaignId
+    ) || 0;
+
+    qualifyingSpendByCampaign.set(
+      campaignPrice.saleCampaignId,
+      roundCurrency(current + regularLineValue)
+    );
+  });
+
+  const campaignsBelowMinimum = new Set<string>();
+
+  campaignIds.forEach((campaignId) => {
+    const minimumSpend = minimumSpendByCampaign.get(campaignId) || 0;
+    const qualifyingSpend =
+      qualifyingSpendByCampaign.get(campaignId) || 0;
+
+    if (
+      minimumSpend > 0 &&
+      qualifyingSpend < minimumSpend
+    ) {
+      campaignsBelowMinimum.add(campaignId);
+    }
+  });
+
+  const minimumSpendProgress: CampaignMinimumSpendProgress[] =
+    campaignIds
+      .map((campaignId) => {
+        const minimumSpend =
+          minimumSpendByCampaign.get(campaignId) || 0;
+
+        if (minimumSpend <= 0) {
+          return null;
+        }
+
+        const qualifyingSpend =
+          qualifyingSpendByCampaign.get(campaignId) || 0;
+
+        const campaignName =
+          Array.from(campaignPriceByOption.values()).find(
+            (campaignPrice) =>
+              campaignPrice.saleCampaignId === campaignId
+          )?.saleCampaignName || "Current Sale";
+
+        const amountRemaining = roundCurrency(
+          Math.max(0, minimumSpend - qualifyingSpend)
+        );
+
+        return {
+          campaignId,
+          campaignName,
+          minimumSpend,
+          qualifyingSpend,
+          amountRemaining,
+          isMet: amountRemaining <= 0,
+        };
+      })
+      .filter(
+        (
+          progress
+        ): progress is CampaignMinimumSpendProgress =>
+          progress !== null
+      )
+      .sort(
+        (a, b) =>
+          a.amountRemaining - b.amountRemaining
+      );
+
+  const lines: PricedCartLine[] = [];
+
+  for (const input of validInputs) {
+    const itemMetadata = metadata.get(input.productOptionId);
 
     if (!itemMetadata) {
       warnings.push(
         createWarning({
-          code:
-            "PRODUCT_OPTION_NOT_FOUND",
-          message:
-            "A product option in the cart no longer exists.",
-          severity:
-            "critical",
-          productOptionId:
-            input.productOptionId,
+          code: "PRODUCT_OPTION_NOT_FOUND",
+          message: "A product option in the cart no longer exists.",
+          severity: "critical",
+          productOptionId: input.productOptionId,
         })
       );
 
       continue;
     }
 
-    const product =
-      itemMetadata.product;
+    const product = itemMetadata.product;
 
     if (!product) {
       warnings.push(
         createWarning({
-          code:
-            "PRODUCT_OPTION_NOT_FOUND",
-          message:
-            "The product linked to a cart option could not be found.",
-          severity:
-            "critical",
-          productOptionId:
-            input.productOptionId,
+          code: "PRODUCT_OPTION_NOT_FOUND",
+          message: "The product linked to a cart option could not be found.",
+          severity: "critical",
+          productOptionId: input.productOptionId,
         })
       );
 
       continue;
     }
 
-    if (
-      product.is_active === false
-    ) {
+    if (product.is_active === false) {
       warnings.push(
         createWarning({
-          code:
-            "PRODUCT_INACTIVE",
-          message:
-            `${product.name} is no longer active.`,
-          severity:
-            "critical",
-          productOptionId:
-            input.productOptionId,
+          code: "PRODUCT_INACTIVE",
+          message: `${product.name} is no longer active.`,
+          severity: "critical",
+          productOptionId: input.productOptionId,
         })
       );
 
@@ -1010,132 +1154,107 @@ export async function calculateCampaignPricing({
       continue;
     }
 
-    if (
-      itemMetadata.option.status ===
-        "out of stock"
-    ) {
+    if (itemMetadata.option.status === "out of stock") {
       warnings.push(
         createWarning({
-          code:
-            "OUT_OF_STOCK",
-          message:
-            `${product.name} ${itemMetadata.option.product_slug} is marked out of stock.`,
-          severity:
-            "critical",
-          productOptionId:
-            input.productOptionId,
+          code: "OUT_OF_STOCK",
+          message: `${product.name} ${itemMetadata.option.product_slug} is marked out of stock.`,
+          severity: "critical",
+          productOptionId: input.productOptionId,
         })
       );
     }
 
-    const campaignPrice =
-      await loadCampaignPrice(
-        supabase,
-        input.productOptionId
+    const rawCampaignPrice = campaignPriceByOption.get(
+      input.productOptionId
+    );
+
+    if (!rawCampaignPrice) {
+      throw new Error(
+        `No campaign pricing was returned for product option ${input.productOptionId}.`
       );
+    }
+
+    /*
+     * If this campaign has a minimum and the cart has not reached it,
+     * remove the campaign candidate BEFORE buildPricedLine(). This is
+     * important because it lets normal manual-sale / bundle logic run as
+     * though the campaign were not active.
+     */
+    const campaignPrice =
+      rawCampaignPrice.saleCampaignId &&
+      campaignsBelowMinimum.has(
+        rawCampaignPrice.saleCampaignId
+      )
+        ? removeCampaignForMinimumSpend(rawCampaignPrice)
+        : rawCampaignPrice;
 
     lines.push(
       buildPricedLine({
         input,
         campaignPrice,
-        productName:
-          product.name,
-        optionMetadata:
-          itemMetadata.option,
-        isTaxable:
-          product.is_taxable !== false,
-        taxCode:
-          product.tax_code || null,
+        productName: product.name,
+        optionMetadata: itemMetadata.option,
+        isTaxable: product.is_taxable !== false,
+        taxCode: product.tax_code || null,
       })
     );
   }
 
-  const regularMerchandiseValue =
-    sumCurrency(
-      lines.map(
-        (line) =>
-          line.regularLineValue
-      )
-    );
-
-  const campaignMerchandiseRevenue =
-    sumCurrency(
-      lines.map(
-        (line) =>
-          line.campaignLineRevenue
-      )
-    );
-
-  const saleDiscount =
-    sumCurrency(
-      lines.map(
-        (line) =>
-          line.saleDiscountAmount
-      )
-    );
-
-  const bundleDiscount =
-    sumCurrency(
-      lines.map(
-        (line) =>
-          line.bundleDiscountAmount
-      )
-    );
-
-  const campaignGroups =
-    new Map<
-      string,
-      {
-        id: string;
-        name: string;
-        type: CampaignType;
-        revenue: number;
-      }
-    >();
-
-  lines.forEach(
-    (line) => {
-      if (
-        !line.saleCampaignId ||
-        !line.saleCampaignName ||
-        !line.saleCampaignType
-      ) {
-        return;
-      }
-
-      const current =
-        campaignGroups.get(
-          line.saleCampaignId
-        ) || {
-          id:
-            line.saleCampaignId,
-          name:
-            line.saleCampaignName,
-          type:
-            line.saleCampaignType,
-          revenue: 0,
-        };
-
-      current.revenue =
-        roundCurrency(
-          current.revenue +
-            line.campaignLineRevenue
-        );
-
-      campaignGroups.set(
-        line.saleCampaignId,
-        current
-      );
-    }
+  const regularMerchandiseValue = sumCurrency(
+    lines.map((line) => line.regularLineValue)
   );
 
+  const campaignMerchandiseRevenue = sumCurrency(
+    lines.map((line) => line.campaignLineRevenue)
+  );
+
+  const saleDiscount = sumCurrency(
+    lines.map((line) => line.saleDiscountAmount)
+  );
+
+  const bundleDiscount = sumCurrency(
+    lines.map((line) => line.bundleDiscountAmount)
+  );
+
+  const campaignGroups = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      type: CampaignType;
+      revenue: number;
+    }
+  >();
+
+  lines.forEach((line) => {
+    if (
+      !line.saleCampaignId ||
+      !line.saleCampaignName ||
+      !line.saleCampaignType
+    ) {
+      return;
+    }
+
+    const current = campaignGroups.get(
+      line.saleCampaignId
+    ) || {
+      id: line.saleCampaignId,
+      name: line.saleCampaignName,
+      type: line.saleCampaignType,
+      revenue: 0,
+    };
+
+    current.revenue = roundCurrency(
+      current.revenue + line.campaignLineRevenue
+    );
+
+    campaignGroups.set(line.saleCampaignId, current);
+  });
+
   const primaryCampaign =
-    Array.from(
-      campaignGroups.values()
-    ).sort(
-      (a, b) =>
-        b.revenue -
-        a.revenue
+    Array.from(campaignGroups.values()).sort(
+      (a, b) => b.revenue - a.revenue
     )[0] || null;
 
   /*
@@ -1144,12 +1263,9 @@ export async function calculateCampaignPricing({
    * so these remain "none" until the campaign schema and RPC are
    * updated in the tax-engine phase.
    */
-  const taxOffsetLine =
-    lines.find(
-      (line) =>
-        line.hasCampaign &&
-        false
-    );
+  const taxOffsetLine = lines.find(
+    (line) => line.hasCampaign && false
+  );
 
   return {
     items: lines,
@@ -1161,49 +1277,33 @@ export async function calculateCampaignPricing({
     saleDiscount,
     bundleDiscount,
 
-    primaryCampaignId:
-      primaryCampaign?.id ||
-      null,
+    primaryCampaignId: primaryCampaign?.id || null,
 
-    primaryCampaignName:
-      primaryCampaign?.name ||
-      null,
+    primaryCampaignName: primaryCampaign?.name || null,
 
-    primaryCampaignType:
-      primaryCampaign?.type ||
-      null,
+    primaryCampaignType: primaryCampaign?.type || null,
 
-    hasSaleItems:
-      lines.some(
-        (line) =>
-          line.hasCampaign ||
-          line.hasManualSale
-      ),
+    minimumSpendProgress,
 
-    taxOffsetMode:
-      taxOffsetLine
-        ? "merchant_funded"
-        : "none",
+    hasSaleItems: lines.some(
+      (line) => line.hasCampaign || line.hasManualSale
+    ),
 
-    taxOffsetSourceType:
-      taxOffsetLine
-        ? "campaign"
-        : null,
+    taxOffsetMode: taxOffsetLine
+      ? "merchant_funded"
+      : "none",
+
+    taxOffsetSourceType: taxOffsetLine
+      ? "campaign"
+      : null,
 
     taxOffsetSourceId:
-      taxOffsetLine
-        ?.saleCampaignId ||
-      null,
+      taxOffsetLine?.saleCampaignId || null,
 
-    taxOffsetSourceCode:
-      null,
+    taxOffsetSourceCode: null,
 
-    taxOffsetReason:
-      null,
+    taxOffsetReason: null,
 
-    warnings:
-      uniqueWarnings(
-        warnings
-      ),
+    warnings: uniqueWarnings(warnings),
   };
 }

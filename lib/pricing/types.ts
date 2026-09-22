@@ -207,6 +207,15 @@ export type PricedCartLine = {
   lineMarginBeforeOrderCosts: number;
 };
 
+export type CampaignMinimumSpendProgress = {
+  campaignId: string;
+  campaignName: string;
+  minimumSpend: number;
+  qualifyingSpend: number;
+  amountRemaining: number;
+  isMet: boolean;
+};
+
 export type CampaignPricingResult = {
   items: PricedCartLine[];
 
@@ -245,6 +254,14 @@ export type CampaignPricingResult = {
     | null;
 
   hasSaleItems: boolean;
+
+  /*
+   * Tracks campaign minimum-spend progress for checkout messaging.
+   * Only campaigns with a configured minimum greater than $0
+   * need to appear in this array.
+   */
+  minimumSpendProgress?:
+    CampaignMinimumSpendProgress[];
 
   taxOffsetMode:
     TaxOffsetMode;

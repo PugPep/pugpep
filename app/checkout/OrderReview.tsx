@@ -112,12 +112,14 @@ function CheckoutProductImage({
 export function OrderReview({
   cart,
   pricing,
+  campaignPreview,
   updateQuantity,
   removeFromCart,
   routerToProducts,
 }: {
   cart: CartItem[];
   pricing: PricingResult | null;
+  campaignPreview?: PricingResult["campaign"] | null;
   updateQuantity: (index: number, quantity: number) => void;
   removeFromCart: (index: number) => void;
   routerToProducts: () => void;
@@ -127,6 +129,77 @@ export function OrderReview({
       <h2 style={styles.sectionTitle}>
         Research Summary
       </h2>
+
+      {campaignPreview?.minimumSpendProgress
+        ?.filter(
+          (progress) =>
+            !progress.isMet &&
+            progress.amountRemaining > 0
+        )
+        .map((progress) => (
+          <div
+            key={progress.campaignId}
+            style={{
+              marginBottom: 14,
+              padding: "13px 14px",
+              borderRadius: 12,
+              border:
+                "1px solid rgba(255,204,102,.55)",
+              background:
+                "linear-gradient(135deg,rgba(255,204,102,.12),rgba(255,47,208,.06))",
+            }}
+          >
+            <strong
+              style={{
+                display: "block",
+                color: "#ffcc66",
+                fontSize: 15,
+              }}
+            >
+              Spend {money(progress.amountRemaining)} more to unlock{" "}
+              {progress.campaignName}
+            </strong>
+
+            <span
+              style={{
+                display: "block",
+                marginTop: 4,
+                color: "#bbb",
+                fontSize: 12,
+                lineHeight: 1.45,
+              }}
+            >
+              {money(progress.qualifyingSpend)} of{" "}
+              {money(progress.minimumSpend)} qualifying spend reached.
+            </span>
+
+            <div
+              style={{
+                marginTop: 9,
+                height: 7,
+                overflow: "hidden",
+                borderRadius: 999,
+                background: "rgba(255,255,255,.08)",
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.min(
+                    100,
+                    (progress.qualifyingSpend /
+                      progress.minimumSpend) *
+                      100
+                  )}%`,
+                  height: "100%",
+                  borderRadius: 999,
+                  background:
+                    "linear-gradient(90deg,#ffcc66,#ff2fd0)",
+                  transition: "width 180ms ease",
+                }}
+              />
+            </div>
+          </div>
+        ))}
 
       {cart.length === 0 ? (
         <div
