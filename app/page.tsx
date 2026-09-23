@@ -656,18 +656,6 @@ export default function HomePage() {
                       style={mobileNewProductImage}
                     />
 
-                    <div style={productBody}>
-                      <h2
-                        style={{
-                          ...productName,
-                          color:
-                            mobileFeaturedNewProduct.color ||
-                            "#ff45d8",
-                        }}
-                      >
-                        {mobileFeaturedNewProduct.name}
-                      </h2>
-                    </div>
                   </div>
                 </article>
               </Link>
@@ -704,16 +692,6 @@ export default function HomePage() {
                           style={productImage}
                         />
 
-                        <div style={productBody}>
-                          <h2
-                            style={{
-                              ...productName,
-                              color: product.color || "#ff45d8",
-                            }}
-                          >
-                            {product.name}
-                          </h2>
-                        </div>
                       </div>
                     </article>
                   </Link>
@@ -805,18 +783,6 @@ export default function HomePage() {
                                   style={productImage}
                                 />
 
-                                <div style={productBody}>
-                                  <h2
-                                    style={{
-                                      ...productName,
-                                      color:
-                                        product.color ||
-                                        "#ff45d8",
-                                    }}
-                                  >
-                                    {product.name}
-                                  </h2>
-                                </div>
                               </div>
                             </article>
                           </Link>
@@ -1052,22 +1018,11 @@ export default function HomePage() {
                       />
                     </div>
 
-                    <div style={productBody}>
-                      <h2
-                        style={{
-                          ...productName,
-                          color: product.color || "#ff45d8",
-                        }}
-                      >
-                        {product.name}
-                      </h2>
-
-                      {effectiveSale?.campaignName && (
-                        <div style={campaignNameBadge}>
-                          {effectiveSale.campaignName}
-                        </div>
-                      )}
-                    </div>
+                    {effectiveSale?.campaignName && (
+                      <div style={campaignOverlay}>
+                        {effectiveSale.campaignName}
+                      </div>
+                    )}
                   </article>
                 </Link>
               );
@@ -1235,25 +1190,13 @@ export default function HomePage() {
                             />
                           </div>
 
-                          <div style={productBody}>
-                            <h2
-                              style={{
-                                ...productName,
-                                color: product.color || "#ff45d8",
-                              }}
-                            >
-                              {product.name}
-                            </h2>
-
-                            {!product.is_coming_soon &&
-                              effectiveSale?.source === "campaign" &&
-                              effectiveSale.campaignName && (
-                                <div style={campaignNameBadge}>
-                                  {effectiveSale.campaignName}
-                                </div>
-                              )}
-
-                          </div>
+                          {!product.is_coming_soon &&
+                            effectiveSale?.source === "campaign" &&
+                            effectiveSale.campaignName && (
+                              <div style={campaignOverlay}>
+                                {effectiveSale.campaignName}
+                              </div>
+                            )}
                         </article>
                       </Link>
                     );
@@ -1643,12 +1586,16 @@ const showcaseSaleBadge = {
   top: 10,
   right: 10,
   zIndex: 5,
-  padding: "6px 9px",
+  padding: "6px 10px",
   borderRadius: 999,
-  background: "#00ff99",
-  color: "#001009",
+  border: "2px solid rgba(0,0,0,.85)",
+  background: "#ffd400",
+  color: "#050505",
   fontSize: 10,
   fontWeight: 1000,
+  letterSpacing: ".04em",
+  boxShadow:
+    "0 3px 12px rgba(0,0,0,.72), 0 0 0 1px rgba(255,255,255,.22)",
 };
 
 const showcaseCampaignName = {
@@ -2226,13 +2173,11 @@ const productBody = {
   left: 0,
   right: 0,
   bottom: 0,
-  minHeight: "24%",
-  padding: "34px 12px 12px",
+  padding: "12px",
   display: "grid",
   gap: 6,
   alignContent: "end",
-  background:
-    "linear-gradient(180deg, transparent 0%, rgba(0,0,0,.16) 16%, rgba(0,0,0,.78) 58%, rgba(0,0,0,.97) 100%)",
+  background: "transparent",
 };
 
 
@@ -2241,28 +2186,52 @@ const saleBadge = {
   top: 10,
   right: 10,
   maxWidth: "75%",
-  padding: "5px 8px",
+  padding: "6px 10px",
   borderRadius: 999,
-  background: "#00ff99",
-  color: "#000",
-  fontWeight: 900,
+  border: "2px solid rgba(0,0,0,.85)",
+  background: "#ffd400",
+  color: "#050505",
+  fontWeight: 1000,
   fontSize: 10,
-  zIndex: 3,
+  letterSpacing: ".04em",
+  zIndex: 5,
+  boxShadow:
+    "0 3px 12px rgba(0,0,0,.72), 0 0 0 1px rgba(255,255,255,.22)",
 };
 
 const campaignNameBadge = {
   width: "fit-content",
   maxWidth: "100%",
-  padding: "4px 7px",
-  border: "1px solid rgba(255,69,216,.55)",
+  padding: "5px 8px",
+  border: "1px solid rgba(255,212,0,.9)",
   borderRadius: 999,
-  background: "rgba(255,69,216,.04)",
-  color: "#ff75df",
-  fontWeight: 900,
+  background: "rgba(0,0,0,.88)",
+  color: "#ffe45c",
+  fontWeight: 1000,
   fontSize: 9,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap" as const,
+  boxShadow: "0 3px 10px rgba(0,0,0,.65)",
+};
+
+const campaignOverlay = {
+  position: "absolute" as const,
+  left: 10,
+  bottom: 10,
+  zIndex: 5,
+  maxWidth: "calc(100% - 20px)",
+  padding: "5px 8px",
+  border: "1px solid rgba(255,212,0,.9)",
+  borderRadius: 999,
+  background: "rgba(0,0,0,.88)",
+  color: "#ffe45c",
+  fontWeight: 1000,
+  fontSize: 9,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap" as const,
+  boxShadow: "0 3px 10px rgba(0,0,0,.65)",
 };
 
 const saleDetail = {

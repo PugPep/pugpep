@@ -107,8 +107,19 @@ type SavedImageEngineSession = {
   bulk: SavedBulkState[];
 };
 
+type SavedImageEngineSessionRecord = SavedImageEngineSession & {
+  id: string;
+  label: string;
+};
+
+
 const IMAGE_ENGINE_SESSION_KEY =
   "pugpep-product-image-engine-session-v1";
+
+const IMAGE_ENGINE_SESSIONS_KEY =
+  "pugpep-product-image-engine-sessions-v1";
+
+const BULK_PREVIEW_CONCURRENCY = 4;
 
 const PALETTE_OPTIONS: Array<{
   key: PaletteChoice;
@@ -322,6 +333,32 @@ export default function ProductImagesAdminPage() {
     setRestoreBulkRequested,
   ] = useState(false);
 
+  const [
+    savedSessions,
+    setSavedSessions,
+  ] = useState<SavedImageEngineSessionRecord[]>([]);
+
+  const [
+    selectedSavedSessionId,
+    setSelectedSavedSessionId,
+  ] = useState("");
+
+  const [
+    sessionTitle,
+    setSessionTitle,
+  ] = useState("");
+
+  const [
+    renamingSession,
+    setRenamingSession,
+  ] = useState(false);
+
+  const livePreviewSequenceRef =
+    useRef(0);
+
+  const latestLivePreviewByProductRef =
+    useRef<Record<string, number>>({});
+
   const pendingSessionRestoreRef =
     useRef<SavedImageEngineSession | null>(null);
 
@@ -454,15 +491,76 @@ export default function ProductImagesAdminPage() {
     );
   }
 
+  function loadSavedSessionList() {
+    if (typeof window === "undefined") {
+      return [] as SavedImageEngineSessionRecord[];
+    }
+
+    try {
+      const raw =
+        window.localStorage.getItem(
+          IMAGE_ENGINE_SESSIONS_KEY
+        );
+
+      const parsed =
+        raw
+          ? JSON.parse(raw)
+          : [];
+
+      const sessions =
+        Array.isArray(parsed)
+          ? (parsed as SavedImageEngineSessionRecord[])
+              .filter(
+                (session) =>
+                  session &&
+                  session.version === 1 &&
+                  typeof session.id === "string"
+              )
+              .sort(
+                (a, b) =>
+                  new Date(b.savedAt).getTime() -
+                  new Date(a.savedAt).getTime()
+              )
+          : [];
+
+      setSavedSessions(sessions);
+
+      if (
+        sessions.length > 0 &&
+        !selectedSavedSessionId
+      ) {
+        setSelectedSavedSessionId(
+          sessions[0].id
+        );
+        setSessionTitle(
+          sessions[0].label
+        );
+      }
+
+      return sessions;
+    } catch (error) {
+      console.error(error);
+      setSavedSessions([]);
+      return [] as SavedImageEngineSessionRecord[];
+    }
+  }
+
+  useEffect(() => {
+    loadSavedSessionList();
+  }, []);
+
   function saveSession() {
     if (typeof window === "undefined") {
       return;
     }
 
     try {
-      const session: SavedImageEngineSession = {
+      const savedAt =
+        new Date().toISOString();
+
+      const baseSession: SavedImageEngineSession = {
         version: 1,
-        savedAt: new Date().toISOString(),
+        savedAt,
         family,
         selectedProductId,
         selectedTemplateId,
@@ -484,17 +582,209 @@ export default function ProductImagesAdminPage() {
         })),
       };
 
+      const sessionRecord:
+        SavedImageEngineSessionRecord = {
+          ...baseSession,
+          id: `session-${Date.now()}`,
+          label:
+            sessionTitle.trim() ||
+            (
+              `${family.replace("-", " ").toUpperCase()} • ` +
+              new Date(savedAt).toLocaleString()
+            ),
+        };
+
       window.localStorage.setItem(
         IMAGE_ENGINE_SESSION_KEY,
-        JSON.stringify(session)
+        JSON.stringify(baseSession)
+      );
+
+      const existingRaw =
+        window.localStorage.getItem(
+          IMAGE_ENGINE_SESSIONS_KEY
+        );
+
+      const existing =
+        existingRaw
+          ? JSON.parse(existingRaw)
+          : [];
+
+      const nextSessions:
+        SavedImageEngineSessionRecord[] = [
+          sessionRecord,
+          ...(Array.isArray(existing)
+            ? existing
+            : []),
+        ]
+          .filter(
+            (session, index, all) =>
+              session &&
+              typeof session.id === "string" &&
+              all.findIndex(
+                (candidate) =>
+                  candidate.id === session.id
+              ) === index
+          )
+          .slice(0, 20);
+
+      window.localStorage.setItem(
+        IMAGE_ENGINE_SESSIONS_KEY,
+        JSON.stringify(nextSessions)
+      );
+
+      setSavedSessions(nextSessions);
+      setSelectedSavedSessionId(
+        sessionRecord.id
+      );
+      setSessionTitle(
+        sessionRecord.label
       );
 
       setStatus(
-        `Session saved • ${bulkPreviews.length} bulk preview${bulkPreviews.length === 1 ? "" : "s"} remembered`
+        `Session saved • ${sessionRecord.label} • ${bulkPreviews.length} bulk preview${bulkPreviews.length === 1 ? "" : "s"} remembered`
       );
     } catch (error) {
       console.error(error);
-      setStatus("Unable to save this session in the browser.");
+      setStatus(
+        "Unable to save this session in the browser."
+      );
+    }
+  }
+
+  function renameSelectedSession() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const nextTitle =
+      sessionTitle.trim();
+
+    if (!selectedSavedSessionId) {
+      setStatus(
+        "Choose a saved session to rename."
+      );
+      return;
+    }
+
+    if (!nextTitle) {
+      setStatus(
+        "Enter a session title first."
+      );
+      return;
+    }
+
+    try {
+      const nextSessions =
+        savedSessions.map(
+          (session) =>
+            session.id ===
+            selectedSavedSessionId
+              ? {
+                  ...session,
+                  label:
+                    nextTitle,
+                }
+              : session
+        );
+
+      window.localStorage.setItem(
+        IMAGE_ENGINE_SESSIONS_KEY,
+        JSON.stringify(
+          nextSessions
+        )
+      );
+
+      setSavedSessions(
+        nextSessions
+      );
+
+      setRenamingSession(
+        false
+      );
+
+      setStatus(
+        `Session renamed • ${nextTitle}`
+      );
+    } catch (error) {
+      console.error(error);
+      setStatus(
+        "Unable to rename the saved session."
+      );
+    }
+  }
+
+  function deleteSelectedSession() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!selectedSavedSessionId) {
+      setStatus(
+        "Choose a saved session to delete."
+      );
+      return;
+    }
+
+    const selected =
+      savedSessions.find(
+        (session) =>
+          session.id ===
+          selectedSavedSessionId
+      );
+
+    const confirmed =
+      window.confirm(
+        `Delete saved session "${selected?.label || "Selected session"}"?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const nextSessions =
+        savedSessions.filter(
+          (session) =>
+            session.id !==
+            selectedSavedSessionId
+        );
+
+      window.localStorage.setItem(
+        IMAGE_ENGINE_SESSIONS_KEY,
+        JSON.stringify(
+          nextSessions
+        )
+      );
+
+      setSavedSessions(
+        nextSessions
+      );
+
+      const nextSelectedId =
+        nextSessions[0]?.id || "";
+
+      setSelectedSavedSessionId(
+        nextSelectedId
+      );
+
+      setSessionTitle(
+        nextSessions[0]?.label || ""
+      );
+
+      setRenamingSession(
+        false
+      );
+
+      setStatus(
+        selected?.label
+          ? `Session deleted • ${selected.label}`
+          : "Saved session deleted."
+      );
+    } catch (error) {
+      console.error(error);
+      setStatus(
+        "Unable to delete the saved session."
+      );
     }
   }
 
@@ -504,16 +794,34 @@ export default function ProductImagesAdminPage() {
     }
 
     try {
-      const raw = window.localStorage.getItem(
-        IMAGE_ENGINE_SESSION_KEY
-      );
+      const chosenSession =
+        savedSessions.find(
+          (session) =>
+            session.id ===
+            selectedSavedSessionId
+        );
 
-      if (!raw) {
-        setStatus("No saved Product Image Engine session was found in this browser.");
+      const legacyRaw =
+        window.localStorage.getItem(
+          IMAGE_ENGINE_SESSION_KEY
+        );
+
+      if (
+        !chosenSession &&
+        !legacyRaw
+      ) {
+        setStatus(
+          "No saved Product Image Engine session was found in this browser."
+        );
         return;
       }
 
-      const session = JSON.parse(raw) as SavedImageEngineSession;
+      const session:
+        SavedImageEngineSession =
+          chosenSession ||
+          JSON.parse(
+            legacyRaw as string
+          );
 
       if (
         session.version !== 1 ||
@@ -1254,6 +1562,57 @@ export default function ProductImagesAdminPage() {
     };
   }
 
+  function getLongestLabelLine(
+    value: string
+  ) {
+    return value
+      .replace(/\r\n/g, "\n")
+      .split("\n")
+      .reduce(
+        (longest, line) =>
+          line.length >
+          longest.length
+            ? line
+            : longest,
+        ""
+      );
+  }
+
+  function getMaximumRenderedNameFontSize(
+    value: string
+  ) {
+    const length =
+      getLongestLabelLine(
+        value
+      ).length;
+
+    if (length > 32) return 30;
+    if (length > 27) return 34;
+    if (length > 22) return 40;
+    if (length > 18) return 46;
+    if (length > 14) return 54;
+    if (length > 10) return 62;
+
+    return Number.POSITIVE_INFINITY;
+  }
+
+  function clampNameFontSizeToRenderer(
+    labelText: string,
+    requestedSize: number
+  ) {
+    const maximum =
+      getMaximumRenderedNameFontSize(
+        labelText
+      );
+
+    return Number.isFinite(maximum)
+      ? Math.min(
+          requestedSize,
+          maximum
+        )
+      : requestedSize;
+  }
+
   function measureLabelWidth(
     value: string,
     fontSize: number
@@ -1420,6 +1779,64 @@ export default function ProductImagesAdminPage() {
     };
   }
 
+  async function requestPreviewBlob(
+    args: {
+      headers: Record<string, string>;
+      productId: string;
+      templateId: string;
+      layout: ProductLayout;
+      labelText: string;
+      letteringColor: string;
+    }
+  ) {
+    const response =
+      await fetch(
+        "/api/admin/product-image-engine/preview",
+        {
+          method: "POST",
+          cache: "no-store",
+          headers: {
+            ...args.headers,
+            "Content-Type":
+              "application/json",
+          },
+          body:
+            JSON.stringify({
+              productId:
+                args.productId,
+              templateId:
+                args.templateId,
+              layout: args.layout,
+              labelText:
+                args.labelText,
+              paletteKey:
+                "custom",
+              customColor:
+                args.letteringColor,
+            }),
+        }
+      );
+
+    if (!response.ok) {
+      throw new Error(
+        await response.text()
+      );
+    }
+
+    if (
+      response.headers.get(
+        "X-Product-Image-Mode"
+      ) !==
+      "preview-only"
+    ) {
+      throw new Error(
+        "Preview safety check failed. No live image changes were allowed."
+      );
+    }
+
+    return response.blob();
+  }
+
   async function previewAllProducts() {
     if (
       !selectedTemplateId ||
@@ -1463,36 +1880,50 @@ export default function ProductImagesAdminPage() {
       const headers =
         await getAuthHeaders();
 
-      const next: BulkPreviewItem[] = [];
-
-      for (
-        let index = 0;
-        index < products.length;
-        index += 1
-      ) {
-        const product =
-          products[index];
-
-        setStatus(
-          `Safe-previewing ${index + 1} of ${products.length}: ${product.name}`
+      const nextItems:
+        (
+          | BulkPreviewItem
+          | undefined
+        )[] = new Array(
+          products.length
         );
 
-        const restoredBulkItem =
-          restoredBulkStateRef.current.get(product.id);
+      let completed = 0;
+      let cursor = 0;
 
-        const productLayout: ProductLayout =
-          restoredBulkItem?.layout || {
-            labelText:
-              splitProductLabel(
-                product.name
-              ).name,
-            nameY,
-            strengthY,
-            researchTextY:
-              researchY,
-            nameFontSize,
-            strengthFontSize,
-            researchFontSize,
+      async function processProduct(
+        product: Product,
+        index: number
+      ) {
+        const restoredBulkItem =
+          restoredBulkStateRef.current.get(
+            product.id
+          );
+
+        const baseProductLayout:
+          ProductLayout =
+            restoredBulkItem?.layout || {
+              labelText:
+                splitProductLabel(
+                  product.name
+                ).name,
+              nameY,
+              strengthY,
+              researchTextY:
+                researchY,
+              nameFontSize,
+              strengthFontSize,
+              researchFontSize,
+            };
+
+        const productLayout:
+          ProductLayout = {
+            ...baseProductLayout,
+            nameFontSize:
+              clampNameFontSizeToRenderer(
+                baseProductLayout.labelText,
+                baseProductLayout.nameFontSize
+              ),
           };
 
         const letteringColor =
@@ -1501,57 +1932,19 @@ export default function ProductImagesAdminPage() {
           ) ||
           getManualOrProductColor(product);
 
-        const response =
-          await fetch(
-            "/api/admin/product-image-engine/preview",
-            {
-              method: "POST",
-              cache: "no-store",
-              headers: {
-                ...headers,
-                "Content-Type":
-                  "application/json",
-              },
-              body:
-                JSON.stringify({
-                  productId:
-                    product.id,
-                  templateId:
-                    selectedTemplateId,
-                  layout:
-                    productLayout,
-                  labelText:
-                    productLayout.labelText,
-                  paletteKey:
-                    "custom",
-                  customColor:
-                    letteringColor,
-                }),
-            }
-          );
-
-        if (!response.ok) {
-          throw new Error(
-            `${product.name}: ${await response.text()}`
-          );
-        }
-
-        const mode =
-          response.headers.get(
-            "X-Product-Image-Mode"
-          );
-
-        if (
-          mode !==
-          "preview-only"
-        ) {
-          throw new Error(
-            `${product.name}: preview safety check failed.`
-          );
-        }
-
         const blob =
-          await response.blob();
+          await requestPreviewBlob({
+            headers,
+            productId:
+              product.id,
+            templateId:
+              selectedTemplateId,
+            layout:
+              productLayout,
+            labelText:
+              productLayout.labelText,
+            letteringColor,
+          });
 
         const fit =
           runFitCheck(
@@ -1560,7 +1953,7 @@ export default function ProductImagesAdminPage() {
             productLayout
           );
 
-        next.push({
+        nextItems[index] = {
           productId:
             product.id,
           productName:
@@ -1579,25 +1972,77 @@ export default function ProductImagesAdminPage() {
           layout:
             productLayout,
           letteringColor,
-        });
+        };
+
+        completed += 1;
+
+        setStatus(
+          `Safe-previewing ${completed} of ${products.length}: ${product.name}`
+        );
 
         setBulkPreviews(
-          [...next]
+          nextItems.filter(
+            Boolean
+          ) as BulkPreviewItem[]
         );
       }
 
+      async function worker() {
+        while (
+          cursor <
+          products.length
+        ) {
+          const index =
+            cursor;
+          cursor += 1;
+
+          const product =
+            products[index];
+
+          await processProduct(
+            product,
+            index
+          );
+        }
+      }
+
+      await Promise.all(
+        Array.from(
+          {
+            length:
+              Math.min(
+                BULK_PREVIEW_CONCURRENCY,
+                products.length
+              ),
+          },
+          () => worker()
+        )
+      );
+
+      const finalItems =
+        nextItems.filter(
+          Boolean
+        ) as BulkPreviewItem[];
+
       const passing =
-        next.filter(
+        finalItems.filter(
           (item) =>
             item.fitStatus ===
             "pass"
         ).length;
 
       const review =
-        next.length - passing;
+        finalItems.length - passing;
+
+      setBulkPreviews(
+        finalItems
+      );
 
       setStatus(
-        `Bulk preflight complete: ${passing} passed automatically, ${review} need visual review. Nothing was published.`
+        `Bulk preflight complete: ${passing} passed automatically, ${review} need visual review. Preview concurrency: ${Math.min(
+          BULK_PREVIEW_CONCURRENCY,
+          products.length
+        )} at a time. Nothing was published.`
       );
     } catch (error) {
       console.error(error);
@@ -1649,6 +2094,11 @@ export default function ProductImagesAdminPage() {
                     ...item.layout,
                     labelText:
                       value,
+                    nameFontSize:
+                      clampNameFontSizeToRenderer(
+                        value,
+                        item.layout.nameFontSize
+                      ),
                   },
                 }
               : item
@@ -1682,104 +2132,272 @@ export default function ProductImagesAdminPage() {
     value: number
   ) {
     setBulkPreviews((current) =>
-      current.map((item) =>
-        item.productId === productId
-          ? {
-              ...item,
-              approved: false,
-              layout: {
-                ...item.layout,
-                [field]: value,
-              },
-            }
-          : item
-      )
+      current.map((item) => {
+        if (
+          item.productId !==
+          productId
+        ) {
+          return item;
+        }
+
+        const nextValue =
+          field === "nameFontSize"
+            ? clampNameFontSizeToRenderer(
+                item.layout.labelText,
+                value
+              )
+            : value;
+
+        return {
+          ...item,
+          approved: false,
+          layout: {
+            ...item.layout,
+            [field]: nextValue,
+          },
+        };
+      })
     );
   }
 
-  async function rePreviewBulkProduct(productId: string) {
-    const item = bulkPreviews.find((entry) => entry.productId === productId);
-    const product = products.find((entry) => entry.id === productId);
-    const template = templates.find((entry) => entry.id === selectedTemplateId);
+  async function rePreviewBulkProduct(
+    productId: string,
+    options?: {
+      silent?: boolean;
+      requestId?: number;
+    }
+  ) {
+    const item =
+      bulkPreviews.find(
+        (entry) =>
+          entry.productId ===
+          productId
+      );
 
-    if (!item || !product || !template) {
-      setStatus("Unable to load this vial for editing.");
+    const product =
+      products.find(
+        (entry) =>
+          entry.id ===
+          productId
+      );
+
+    const template =
+      templates.find(
+        (entry) =>
+          entry.id ===
+          selectedTemplateId
+      );
+
+    if (
+      !item ||
+      !product ||
+      !template
+    ) {
+      setStatus(
+        "Unable to load this vial for editing."
+      );
       return;
     }
 
-    try {
-      setBusy(true);
-      setStatus(`Re-previewing ${product.name}...`);
+    const requestId =
+      options?.requestId ??
+      livePreviewSequenceRef.current + 1;
 
-      const response = await fetch(
-        "/api/admin/product-image-engine/preview",
-        {
-          method: "POST",
-          cache: "no-store",
-          headers: {
-            ...(await getAuthHeaders()),
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            productId,
-            templateId: selectedTemplateId,
-            layout: item.layout,
-            labelText:
-              item.layout.labelText,
-            paletteKey: "custom",
-            customColor:
-              item.letteringColor ||
-              getManualOrProductColor(product),
-          }),
-        }
+    livePreviewSequenceRef.current =
+      Math.max(
+        livePreviewSequenceRef.current,
+        requestId
       );
 
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
+    latestLivePreviewByProductRef.current[
+      productId
+    ] = requestId;
 
-      if (response.headers.get("X-Product-Image-Mode") !== "preview-only") {
-        throw new Error(
-          "Preview safety check failed. No live image changes were allowed."
+    try {
+      setBusy(true);
+
+      if (!options?.silent) {
+        setStatus(
+          `Re-previewing ${product.name}...`
         );
       }
 
-      const blob = await response.blob();
-      const nextUrl = URL.createObjectURL(blob);
-      const fit = runFitCheck(product, template, item.layout);
+      const blob =
+        await requestPreviewBlob({
+          headers:
+            await getAuthHeaders(),
+          productId,
+          templateId:
+            selectedTemplateId,
+          layout:
+            item.layout,
+          labelText:
+            item.layout.labelText,
+          letteringColor:
+            item.letteringColor ||
+            getManualOrProductColor(
+              product
+            ),
+        });
 
-      setBulkPreviews((current) =>
-        current.map((entry) => {
-          if (entry.productId !== productId) return entry;
+      if (
+        latestLivePreviewByProductRef
+          .current[productId] !==
+        requestId
+      ) {
+        return;
+      }
 
-          if (entry.previewUrl) {
-            URL.revokeObjectURL(entry.previewUrl);
-          }
+      const nextUrl =
+        URL.createObjectURL(
+          blob
+        );
 
-          return {
-            ...entry,
-            previewUrl: nextUrl,
-            fitStatus: fit.fitStatus,
-            reasons: fit.reasons,
-            approved: false,
-          };
-        })
+      const fit =
+        runFitCheck(
+          product,
+          template,
+          item.layout
+        );
+
+      setBulkPreviews(
+        (current) =>
+          current.map(
+            (entry) => {
+              if (
+                entry.productId !==
+                productId
+              ) {
+                return entry;
+              }
+
+              if (
+                entry.previewUrl
+              ) {
+                URL.revokeObjectURL(
+                  entry.previewUrl
+                );
+              }
+
+              return {
+                ...entry,
+                previewUrl:
+                  nextUrl,
+                fitStatus:
+                  fit.fitStatus,
+                reasons:
+                  fit.reasons,
+                approved:
+                  false,
+              };
+            }
+          )
       );
 
-      setStatus(
-        `${product.name} preview updated. Review it, then approve it when ready.`
-      );
+      if (!options?.silent) {
+        setStatus(
+          `${product.name} preview updated. Review it, then approve it when ready.`
+        );
+      }
     } catch (error) {
       console.error(error);
+
+      if (
+        latestLivePreviewByProductRef
+          .current[productId] !==
+        requestId
+      ) {
+        return;
+      }
+
       setStatus(
         error instanceof Error
           ? error.message
           : "Unable to refresh this vial preview."
       );
     } finally {
-      setBusy(false);
+      if (
+        latestLivePreviewByProductRef
+          .current[productId] ===
+        requestId
+      ) {
+        setBusy(false);
+      }
     }
   }
+
+  const editingPreviewRenderSignature =
+    useMemo(() => {
+      if (!editingPreviewId) {
+        return "";
+      }
+
+      const item =
+        bulkPreviews.find(
+          (entry) =>
+            entry.productId ===
+            editingPreviewId
+        );
+
+      if (!item) {
+        return "";
+      }
+
+      return JSON.stringify({
+        labelText:
+          item.layout.labelText,
+        nameY:
+          item.layout.nameY,
+        strengthY:
+          item.layout.strengthY,
+        researchTextY:
+          item.layout.researchTextY,
+        nameFontSize:
+          item.layout.nameFontSize,
+        strengthFontSize:
+          item.layout.strengthFontSize,
+        researchFontSize:
+          item.layout.researchFontSize,
+        letteringColor:
+          item.letteringColor,
+      });
+    }, [
+      editingPreviewId,
+      bulkPreviews,
+    ]);
+
+  useEffect(() => {
+    if (
+      !editingPreviewId ||
+      !editingPreviewRenderSignature
+    ) {
+      return;
+    }
+
+    const requestId =
+      livePreviewSequenceRef.current + 1;
+
+    const timer =
+      window.setTimeout(
+        () => {
+          void rePreviewBulkProduct(
+            editingPreviewId,
+            {
+              silent: true,
+              requestId,
+            }
+          );
+        },
+        550
+      );
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    editingPreviewId,
+    editingPreviewRenderSignature,
+  ]);
 
   function approveAllPassing() {
     setBulkPreviews(
@@ -2470,13 +3088,160 @@ export default function ProductImagesAdminPage() {
                     REFRESH PREVIEW
                   </button>
 
+                  {!renamingSession ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const selected =
+                          savedSessions.find(
+                            (session) =>
+                              session.id ===
+                              selectedSavedSessionId
+                          );
+
+                        setSessionTitle(
+                          selected?.label || ""
+                        );
+
+                        setRenamingSession(
+                          true
+                        );
+                      }}
+                      disabled={
+                        busy ||
+                        bulkPreviewing ||
+                        !selectedSavedSessionId
+                      }
+                      style={sessionRenameButton}
+                    >
+                      RENAME
+                    </button>
+                  ) : (
+                    <div style={sessionRenameEditor}>
+                      <input
+                        value={sessionTitle}
+                        onChange={(event) =>
+                          setSessionTitle(
+                            event.target.value
+                          )
+                        }
+                        onKeyDown={(event) => {
+                          if (
+                            event.key ===
+                            "Enter"
+                          ) {
+                            event.preventDefault();
+                            renameSelectedSession();
+                          }
+
+                          if (
+                            event.key ===
+                            "Escape"
+                          ) {
+                            setRenamingSession(
+                              false
+                            );
+                          }
+                        }}
+                        autoFocus
+                        placeholder="Session title"
+                        style={sessionTitleInput}
+                        aria-label="Saved session title"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={
+                          renameSelectedSession
+                        }
+                        disabled={
+                          busy ||
+                          bulkPreviewing ||
+                          !sessionTitle.trim()
+                        }
+                        style={sessionRenameSaveButton}
+                      >
+                        SAVE
+                      </button>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={
+                      deleteSelectedSession
+                    }
+                    disabled={
+                      busy ||
+                      bulkPreviewing ||
+                      !selectedSavedSessionId
+                    }
+                    style={sessionDeleteButton}
+                  >
+                    DELETE
+                  </button>
+
+                  <select
+                    value={selectedSavedSessionId}
+                    onChange={(event) => {
+                      const nextId =
+                        event.target.value;
+
+                      setSelectedSavedSessionId(
+                        nextId
+                      );
+
+                      setRenamingSession(
+                        false
+                      );
+
+                      const selected =
+                        savedSessions.find(
+                          (session) =>
+                            session.id ===
+                            nextId
+                        );
+
+                      setSessionTitle(
+                        selected?.label || ""
+                      );
+                    }}
+                    disabled={
+                      busy ||
+                      bulkPreviewing ||
+                      savedSessions.length === 0
+                    }
+                    style={sessionSelect}
+                    aria-label="Choose a saved Product Image Engine session"
+                  >
+                    {savedSessions.length === 0 ? (
+                      <option value="">
+                        NO SAVED SESSIONS
+                      </option>
+                    ) : (
+                      savedSessions.map(
+                        (session) => (
+                          <option
+                            key={session.id}
+                            value={session.id}
+                          >
+                            {session.label}
+                          </option>
+                        )
+                      )
+                    )}
+                  </select>
+
                   <button
                     type="button"
                     onClick={restoreSession}
-                    disabled={busy || bulkPreviewing}
+                    disabled={
+                      busy ||
+                      bulkPreviewing
+                    }
                     style={sessionRestoreButton}
                   >
-                    RESTORE SESSION
+                    LOAD SELECTED SESSION
                   </button>
 
                   <button
@@ -2900,9 +3665,8 @@ export default function ProductImagesAdminPage() {
                           />
 
                           <div style={editorPreviewNote}>
-                            Make an adjustment, then click{" "}
-                            <strong>RE-PREVIEW THIS VIAL</strong> to render the
-                            new lettering before approving it.
+                            Changes render automatically after a short pause.
+                            Review the updated vial, then approve it when ready.
                           </div>
                         </div>
 
@@ -3073,7 +3837,17 @@ export default function ProductImagesAdminPage() {
                           </label>
 
                           <EditorNumberControl
-                            label="Product Name Font"
+                            label={`Product Name Font${
+                              Number.isFinite(
+                                getMaximumRenderedNameFontSize(
+                                  editingItem.layout.labelText
+                                )
+                              )
+                                ? ` • MAX ${getMaximumRenderedNameFontSize(
+                                    editingItem.layout.labelText
+                                  )}`
+                                : ""
+                            }`}
                             value={editingItem.layout.nameFontSize}
                             onChange={(value) =>
                               updatePreviewLayout(
@@ -3166,21 +3940,7 @@ export default function ProductImagesAdminPage() {
                         >
                           ← BACK TO ALL VIALS
                         </button>
-
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() =>
-                            void rePreviewBulkProduct(editingItem.productId)
-                          }
-                          style={secondaryButton}
-                        >
-                          {busy
-                            ? "RENDERING..."
-                            : "RE-PREVIEW THIS VIAL"}
-                        </button>
-
-                        <button
+<button
                           type="button"
                           disabled={busy}
                           onClick={() =>
@@ -3192,7 +3952,7 @@ export default function ProductImagesAdminPage() {
                           style={
                             editingItem.approved
                               ? dangerButton
-                              : saveButton
+                              : approveVialButton
                           }
                         >
                           {editingItem.approved
@@ -3746,24 +4506,48 @@ const layoutActionButtons = {
 };
 
 const refreshPreviewButton = {
-  ...secondaryButton,
-  minHeight: 34,
-  padding: "7px 12px",
+  minHeight: 40,
+  padding: "0 13px",
+  borderRadius: 9,
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+  cursor: "pointer",
+  whiteSpace: "nowrap" as const,
+  border: "1px solid rgba(0,217,255,.48)",
+  background: "rgba(0,217,255,.07)",
+  color: "#7df9ff",
+  boxShadow: "0 3px 10px rgba(0,0,0,.24)",
 };
 
 const saveButton = {
-  ...primaryButton,
-  minHeight: 34,
-  padding: "7px 12px",
+  minHeight: 40,
+  padding: "0 13px",
+  borderRadius: 9,
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+  cursor: "pointer",
+  whiteSpace: "nowrap" as const,
+  border: "1px solid rgba(255,69,216,.5)",
+  background: "rgba(255,69,216,.07)",
+  color: "#ff75df",
+  boxShadow: "0 3px 10px rgba(0,0,0,.24)",
 };
 
 const sessionSaveButton = {
-  ...primaryButton,
-  minHeight: 34,
-  padding: "7px 12px",
-  borderColor: "rgba(0,255,153,.68)",
-  background: "rgba(0,255,153,.10)",
+  minHeight: 40,
+  padding: "0 13px",
+  borderRadius: 9,
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+  cursor: "pointer",
+  whiteSpace: "nowrap" as const,
+  border: "1px solid rgba(0,255,153,.5)",
+  background: "rgba(0,255,153,.07)",
   color: "#00ff99",
+  boxShadow: "0 3px 10px rgba(0,0,0,.24)",
 };
 
 const stepThreeSaveLayoutButton = {
@@ -3776,22 +4560,127 @@ const stepThreeSaveLayoutButton = {
   boxShadow: "0 0 18px rgba(0,255,153,.18)",
 };
 
+const sessionRenameEditor = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  minWidth: 0,
+};
+
+const sessionTitleInput = {
+  minHeight: 40,
+  minWidth: 210,
+  padding: "0 11px",
+  border: "1px solid rgba(255,255,255,.16)",
+  borderRadius: 9,
+  background: "#08090c",
+  color: "#ffffff",
+  fontSize: 11,
+  fontWeight: 800,
+  outline: "none",
+};
+
+const sessionRenameSaveButton = {
+  minHeight: 40,
+  padding: "0 13px",
+  borderRadius: 9,
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+  cursor: "pointer",
+  whiteSpace: "nowrap" as const,
+  border: "1px solid rgba(0,255,153,.5)",
+  background: "rgba(0,255,153,.07)",
+  color: "#00ff99",
+  boxShadow: "0 3px 10px rgba(0,0,0,.24)",
+};
+
+const sessionRenameButton = {
+  minHeight: 40,
+  padding: "0 13px",
+  borderRadius: 9,
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+  cursor: "pointer",
+  whiteSpace: "nowrap" as const,
+  border: "1px solid rgba(255,212,0,.5)",
+  background: "rgba(255,212,0,.07)",
+  color: "#ffd400",
+  boxShadow: "0 3px 10px rgba(0,0,0,.24)",
+};
+
+const sessionDeleteButton = {
+  minHeight: 40,
+  padding: "0 13px",
+  borderRadius: 9,
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+  cursor: "pointer",
+  whiteSpace: "nowrap" as const,
+  border: "1px solid rgba(255,92,92,.5)",
+  background: "rgba(255,92,92,.07)",
+  color: "#ff6b6b",
+  boxShadow: "0 3px 10px rgba(0,0,0,.24)",
+};
+
+const sessionSelect = {
+  minHeight: 40,
+  maxWidth: 290,
+  padding: "0 10px",
+  border: "1px solid rgba(0,217,255,.36)",
+  borderRadius: 9,
+  background: "#08090c",
+  color: "#dfe5ea",
+  fontSize: 10,
+  fontWeight: 800,
+  outline: "none",
+};
+
 const sessionRestoreButton = {
-  ...secondaryButton,
-  minHeight: 34,
-  padding: "7px 12px",
-  borderColor: "rgba(255,204,0,.58)",
-  background: "rgba(255,204,0,.08)",
-  color: "#ffd84d",
+  minHeight: 40,
+  padding: "0 13px",
+  borderRadius: 9,
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+  cursor: "pointer",
+  whiteSpace: "nowrap" as const,
+  border: "1px solid rgba(162,108,255,.5)",
+  background: "rgba(162,108,255,.07)",
+  color: "#c7a4ff",
+  boxShadow: "0 3px 10px rgba(0,0,0,.24)",
+};
+
+const approveVialButton = {
+  minHeight: 40,
+  padding: "0 13px",
+  borderRadius: 9,
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+  cursor: "pointer",
+  whiteSpace: "nowrap" as const,
+  boxShadow: "0 3px 10px rgba(0,0,0,.24)",
+  border: "1px solid rgba(0,255,153,.55)",
+  background: "rgba(0,255,153,.09)",
+  color: "#00ff99",
 };
 
 const dangerButton = {
-  ...primaryButton,
-  borderColor:
-    "rgba(255,69,216,.64)",
-  background:
-    "rgba(255,69,216,.07)",
-  color: "#ff8ee7",
+  minHeight: 40,
+  padding: "0 13px",
+  borderRadius: 9,
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+  cursor: "pointer",
+  whiteSpace: "nowrap" as const,
+  boxShadow: "0 3px 10px rgba(0,0,0,.24)",
+  border: "1px solid rgba(255,122,69,.55)",
+  background: "rgba(255,122,69,.09)",
+  color: "#ff9b6a",
 };
 
 const miniButtonRow = {
@@ -4295,16 +5184,18 @@ const letteringEditorSubtext = {
 };
 
 const editorCloseButton = {
-  minHeight: 38,
-  padding: "9px 12px",
-  border: "1px solid rgba(255,69,216,.38)",
+  minHeight: 40,
+  padding: "0 13px",
   borderRadius: 9,
-  background: "rgba(255,69,216,.07)",
-  color: "#ff75df",
+  fontSize: 9,
   fontWeight: 950,
-  fontSize: 10,
-  letterSpacing: ".06em",
+  letterSpacing: ".04em",
   cursor: "pointer",
+  whiteSpace: "nowrap" as const,
+  boxShadow: "0 3px 10px rgba(0,0,0,.24)",
+  border: "1px solid rgba(0,217,255,.52)",
+  background: "rgba(0,217,255,.08)",
+  color: "#7df9ff",
 };
 
 const letteringEditorGrid = {
