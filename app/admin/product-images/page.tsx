@@ -17,18 +17,27 @@ type Family =
   | "sprays"
   | "lab-materials";
 
+type ResearchFamily =
+  | "metabolism-research"
+  | "brain-nerve-research"
+  | "cell-energy-research"
+  | "peptide-molecular-research"
+  | "hormone-signaling-research";
+
 type Product = {
   id: string;
   name: string;
   slug: string;
   image: string | null;
   category: string;
+  product_family?: ResearchFamily | null;
   color?: string | null;
 };
 
 type Template = {
   id: string;
   family: Family;
+  product_family?: ResearchFamily | null;
   name: string;
   version: number;
   is_active: boolean;
@@ -121,6 +130,17 @@ const IMAGE_ENGINE_SESSIONS_KEY =
 
 const BULK_PREVIEW_CONCURRENCY = 4;
 
+const PRODUCT_FAMILY_OPTIONS: Array<{
+  value: ResearchFamily;
+  label: string;
+}> = [
+  { value: "metabolism-research", label: "Metabolism Research" },
+  { value: "brain-nerve-research", label: "Brain & Nerve Research" },
+  { value: "cell-energy-research", label: "Cell & Energy Research" },
+  { value: "peptide-molecular-research", label: "Peptide & Molecular Research" },
+  { value: "hormone-signaling-research", label: "Hormone & Signaling Research" },
+];
+
 const PALETTE_OPTIONS: Array<{
   key: PaletteChoice;
   label: string;
@@ -189,6 +209,16 @@ export default function ProductImagesAdminPage() {
     );
 
   const [
+    productFamilyFilter,
+    setProductFamilyFilter,
+  ] = useState<"all" | ResearchFamily>("all");
+
+  const [
+    uploadProductFamily,
+    setUploadProductFamily,
+  ] = useState<"all" | ResearchFamily>("all");
+
+  const [
     products,
     setProducts,
   ] =
@@ -217,11 +247,49 @@ export default function ProductImagesAdminPage() {
     useState("");
 
   const [
+    previewTemplateId,
+    setPreviewTemplateId,
+  ] =
+    useState("");
+
+  const [
     templateName,
     setTemplateName,
   ] =
     useState(
       "PugPep AI Master"
+    );
+
+  const [
+    renameTemplateName,
+    setRenameTemplateName,
+  ] =
+    useState(
+      ""
+    );
+
+  const [
+    renamingTemplate,
+    setRenamingTemplate,
+  ] =
+    useState(
+      false
+    );
+
+  const [
+    editingTemplateFamily,
+    setEditingTemplateFamily,
+  ] =
+    useState(
+      false
+    );
+
+  const [
+    templateFamilyEditValue,
+    setTemplateFamilyEditValue,
+  ] =
+    useState<"shared" | ResearchFamily>(
+      "shared"
     );
 
   const [
@@ -352,6 +420,14 @@ export default function ProductImagesAdminPage() {
     renamingSession,
     setRenamingSession,
   ] = useState(false);
+
+  const [
+    lastDeletedSession,
+    setLastDeletedSession,
+  ] = useState<{
+    session: SavedImageEngineSessionRecord;
+    index: number;
+  } | null>(null);
 
   const livePreviewSequenceRef =
     useRef(0);
@@ -742,6 +818,24 @@ export default function ProductImagesAdminPage() {
     }
 
     try {
+      const deletedIndex =
+        savedSessions.findIndex(
+          (session) =>
+            session.id ===
+            selectedSavedSessionId
+        );
+
+      if (selected) {
+        setLastDeletedSession({
+          session:
+            selected,
+          index:
+            deletedIndex >= 0
+              ? deletedIndex
+              : 0,
+        });
+      }
+
       const nextSessions =
         savedSessions.filter(
           (session) =>
@@ -784,6 +878,86 @@ export default function ProductImagesAdminPage() {
       console.error(error);
       setStatus(
         "Unable to delete the saved session."
+      );
+    }
+  }
+
+  function undoDeleteSession() {
+    if (
+      typeof window === "undefined" ||
+      !lastDeletedSession
+    ) {
+      return;
+    }
+
+    try {
+      const restoredSession =
+        lastDeletedSession.session;
+
+      const insertAt =
+        Math.max(
+          0,
+          Math.min(
+            lastDeletedSession.index,
+            savedSessions.length
+          )
+        );
+
+      const nextSessions = [
+        ...savedSessions.slice(
+          0,
+          insertAt
+        ),
+        restoredSession,
+        ...savedSessions.slice(
+          insertAt
+        ),
+      ]
+        .filter(
+          (session, index, all) =>
+            all.findIndex(
+              (candidate) =>
+                candidate.id ===
+                session.id
+            ) === index
+        )
+        .slice(0, 20);
+
+      window.localStorage.setItem(
+        IMAGE_ENGINE_SESSIONS_KEY,
+        JSON.stringify(
+          nextSessions
+        )
+      );
+
+      setSavedSessions(
+        nextSessions
+      );
+
+      setSelectedSavedSessionId(
+        restoredSession.id
+      );
+
+      setSessionTitle(
+        restoredSession.label
+      );
+
+      setRenamingSession(
+        false
+      );
+
+      setLastDeletedSession(
+        null
+      );
+
+      setStatus(
+        `Delete undone • ${restoredSession.label}`
+      );
+    } catch (error) {
+      console.error(error);
+
+      setStatus(
+        "Unable to restore the deleted saved session."
       );
     }
   }
@@ -860,7 +1034,30 @@ export default function ProductImagesAdminPage() {
       );
 
       if (savedTemplateExists) {
-        setSelectedTemplateId(session.selectedTemplateId);
+        const savedTemplate =
+          templates.find(
+            (template) =>
+              template.id ===
+              session.selectedTemplateId
+          );
+
+        const savedTemplateCompatible =
+          productFamilyFilter === "all" ||
+          family === "lab-materials" ||
+          Boolean(
+            savedTemplate &&
+            (
+              !savedTemplate.product_family ||
+              savedTemplate.product_family ===
+                productFamilyFilter
+            )
+          );
+
+        if (savedTemplateCompatible) {
+          setSelectedTemplateId(
+            session.selectedTemplateId
+          );
+        }
       }
 
       if (savedProductExists) {
@@ -939,13 +1136,16 @@ export default function ProductImagesAdminPage() {
             productJson.products ||
             [];
 
+          const productsWithFamilies =
+            loadedProducts;
+
           const loadedTemplates:
             Template[] =
             templateJson.templates ||
             [];
 
           setProducts(
-            loadedProducts
+            productsWithFamilies
           );
 
           setTemplates(
@@ -960,7 +1160,7 @@ export default function ProductImagesAdminPage() {
               : null;
 
           const requestedProduct =
-            loadedProducts.find(
+            productsWithFamilies.find(
               (product) =>
                 product.slug ===
                 requestedProductSlug
@@ -968,7 +1168,7 @@ export default function ProductImagesAdminPage() {
 
           const firstProduct =
             requestedProduct ||
-            loadedProducts[0];
+            productsWithFamilies[0];
 
           const activeTemplate =
             loadedTemplates.find(
@@ -989,7 +1189,7 @@ export default function ProductImagesAdminPage() {
 
           const restoredProduct =
             sessionForFamily
-              ? loadedProducts.find(
+              ? productsWithFamilies.find(
                   (product) =>
                     product.id === sessionForFamily.selectedProductId
                 )
@@ -1015,6 +1215,40 @@ export default function ProductImagesAdminPage() {
 
           setSelectedTemplateId(
             nextTemplate?.id || ""
+          );
+
+          const previewProductFamily =
+            nextProduct?.product_family;
+
+          const previewTemplate =
+            nextProduct?.category ===
+              "lab-material"
+              ? nextTemplate
+              : (
+                  loadedTemplates.find(
+                    (template) =>
+                      template.product_family ===
+                        previewProductFamily &&
+                      template.is_active
+                  ) ||
+                  loadedTemplates.find(
+                    (template) =>
+                      template.product_family ===
+                        previewProductFamily
+                  ) ||
+                  loadedTemplates.find(
+                    (template) =>
+                      !template.product_family &&
+                      template.is_active
+                  ) ||
+                  loadedTemplates.find(
+                    (template) =>
+                      !template.product_family
+                  )
+                );
+
+          setPreviewTemplateId(
+            previewTemplate?.id || ""
           );
 
           if (sessionForFamily) {
@@ -1111,11 +1345,35 @@ export default function ProductImagesAdminPage() {
             template
           ) =>
             template.id ===
-            selectedTemplateId
+            previewTemplateId
         );
 
       loadTemplateControls(
         selectedTemplate
+      );
+    },
+    [
+      selectedTemplateId,
+      templates,
+    ]
+  );
+
+  useEffect(
+    () => {
+      const selectedTemplate =
+        templates.find(
+          (template) =>
+            template.id ===
+            selectedTemplateId
+        );
+
+      setRenameTemplateName(
+        selectedTemplate?.name || ""
+      );
+
+      setTemplateFamilyEditValue(
+        selectedTemplate?.product_family ||
+          "shared"
       );
     },
     [
@@ -1144,7 +1402,15 @@ export default function ProductImagesAdminPage() {
       setBusy(true);
 
       setStatus(
-        "Uploading AI master template..."
+        family === "lab-materials"
+          ? "Uploading Lab Material template..."
+          : uploadProductFamily === "all"
+            ? "Uploading shared template for all research families..."
+            : `Uploading ${PRODUCT_FAMILY_OPTIONS.find(
+                (option) =>
+                  option.value ===
+                  uploadProductFamily
+              )?.label || uploadProductFamily} template...`
       );
 
       const headers =
@@ -1157,6 +1423,18 @@ export default function ProductImagesAdminPage() {
         "family",
         family
       );
+
+      if (
+        family !==
+          "lab-materials" &&
+        uploadProductFamily !==
+          "all"
+      ) {
+        form.append(
+          "product_family",
+          uploadProductFamily
+        );
+      }
 
       form.append(
         "name",
@@ -1203,6 +1481,24 @@ export default function ProductImagesAdminPage() {
         );
       }
 
+      let uploadedTemplate:
+        Template | null =
+        null;
+
+      try {
+        const responseJson =
+          JSON.parse(
+            responseText
+          );
+
+        uploadedTemplate =
+          responseJson?.template ||
+          null;
+      } catch {
+        uploadedTemplate =
+          null;
+      }
+
       setTemplateFile(
         null
       );
@@ -1211,11 +1507,64 @@ export default function ProductImagesAdminPage() {
         null
       );
 
-      setStatus(
-        "Template uploaded and activated."
-      );
+      /*
+        Keep Step 1 independent from the Step 3 filter,
+        but after a successful upload move Step 3 to the
+        uploaded template's family so the new template is
+        immediately visible and selected.
+      */
+      if (
+        family !==
+          "lab-materials"
+      ) {
+        setProductFamilyFilter(
+          uploadProductFamily
+        );
+      }
 
       await loadEngineData();
+
+      if (
+        uploadedTemplate
+      ) {
+        setSelectedTemplateId(
+          uploadedTemplate.id
+        );
+
+        setPreviewTemplateId(
+          uploadedTemplate.id
+        );
+
+        setTemplates(
+          (
+            currentTemplates
+          ) => {
+            const withoutUploaded =
+              currentTemplates.filter(
+                (
+                  template
+                ) =>
+                  template.id !==
+                  uploadedTemplate?.id
+              );
+
+            return [
+              uploadedTemplate as Template,
+              ...withoutUploaded,
+            ];
+          }
+        );
+
+        loadTemplateControls(
+          uploadedTemplate
+        );
+      }
+
+      setStatus(
+        uploadedTemplate
+          ? `Template uploaded and activated: ${uploadedTemplate.name}`
+          : "Template uploaded and activated."
+      );
     } catch (
       error
     ) {
@@ -1227,6 +1576,264 @@ export default function ProductImagesAdminPage() {
         error instanceof Error
           ? error.message
           : "Template upload failed."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateSelectedTemplateFamily() {
+    if (
+      !selectedTemplateId
+    ) {
+      setStatus(
+        "Choose a template first."
+      );
+      return;
+    }
+
+    try {
+      setBusy(true);
+      setStatus(
+        "Updating template Product Family..."
+      );
+
+      const response =
+        await fetch(
+          "/api/admin/product-image-engine/templates",
+          {
+            method:
+              "PATCH",
+            headers: {
+              ...(
+                await getAuthHeaders()
+              ),
+              "Content-Type":
+                "application/json",
+            },
+            body:
+              JSON.stringify({
+                templateId:
+                  selectedTemplateId,
+                product_family:
+                  templateFamilyEditValue ===
+                    "shared"
+                    ? null
+                    : templateFamilyEditValue,
+                nameY,
+                strengthY,
+                researchTextY:
+                  researchY,
+                nameFontSize,
+                strengthFontSize,
+                researchFontSize,
+              }),
+          }
+        );
+
+      const responseText =
+        await response.text();
+
+      if (!response.ok) {
+        throw new Error(
+          responseText ||
+            "Template Product Family update failed."
+        );
+      }
+
+      setEditingTemplateFamily(
+        false
+      );
+
+      setStatus(
+        "Template Product Family updated."
+      );
+
+      await loadEngineData();
+    } catch (error) {
+      console.error(error);
+
+      setStatus(
+        error instanceof Error
+          ? error.message
+          : "Template Product Family update failed."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteSelectedTemplate() {
+    if (
+      !selectedTemplateId
+    ) {
+      setStatus(
+        "Choose a template first."
+      );
+      return;
+    }
+
+    const selectedTemplate =
+      templates.find(
+        (template) =>
+          template.id ===
+          selectedTemplateId
+      );
+
+    const confirmed =
+      window.confirm(
+        `Delete template "${selectedTemplate?.name || "Selected Template"}"? This permanently removes the template and its stored image files.`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setBusy(true);
+      setStatus(
+        "Deleting template..."
+      );
+
+      const response =
+        await fetch(
+          "/api/admin/product-image-engine/templates",
+          {
+            method:
+              "DELETE",
+            headers: {
+              ...(
+                await getAuthHeaders()
+              ),
+              "Content-Type":
+                "application/json",
+            },
+            body:
+              JSON.stringify({
+                templateId:
+                  selectedTemplateId,
+              }),
+          }
+        );
+
+      const responseText =
+        await response.text();
+
+      if (!response.ok) {
+        throw new Error(
+          responseText ||
+            "Template delete failed."
+        );
+      }
+
+      setSelectedTemplateId(
+        ""
+      );
+
+      setRenameTemplateName(
+        ""
+      );
+
+      setRenamingTemplate(
+        false
+      );
+
+      setStatus(
+        "Template deleted."
+      );
+
+      await loadEngineData();
+    } catch (error) {
+      console.error(error);
+
+      setStatus(
+        error instanceof Error
+          ? error.message
+          : "Template delete failed."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function renameSelectedTemplate() {
+    if (
+      !selectedTemplateId
+    ) {
+      setStatus(
+        "Choose a template first."
+      );
+      return;
+    }
+
+    const nextName =
+      renameTemplateName.trim();
+
+    if (!nextName) {
+      setStatus(
+        "Enter a template name."
+      );
+      return;
+    }
+
+    try {
+      setBusy(true);
+      setStatus(
+        "Renaming template..."
+      );
+
+      const response =
+        await fetch(
+          "/api/admin/product-image-engine/templates",
+          {
+            method:
+              "PATCH",
+            headers: {
+              ...(
+                await getAuthHeaders()
+              ),
+              "Content-Type":
+                "application/json",
+            },
+            body:
+              JSON.stringify({
+                templateId:
+                  selectedTemplateId,
+                name:
+                  nextName,
+                nameY,
+                strengthY,
+                researchTextY:
+                  researchY,
+                nameFontSize,
+                strengthFontSize,
+                researchFontSize,
+              }),
+          }
+        );
+
+      const responseText =
+        await response.text();
+
+      if (!response.ok) {
+        throw new Error(
+          responseText ||
+            "Template rename failed."
+        );
+      }
+
+      setStatus(
+        "Template renamed."
+      );
+
+      await loadEngineData();
+    } catch (error) {
+      console.error(error);
+
+      setStatus(
+        error instanceof Error
+          ? error.message
+          : "Template rename failed."
       );
     } finally {
       setBusy(false);
@@ -1392,16 +1999,125 @@ export default function ProductImagesAdminPage() {
     );
   }
 
+  function getCompatibleTemplateForProduct(
+    product?: Product
+  ) {
+    if (!product) {
+      return undefined;
+    }
+
+    if (
+      product.category ===
+      "lab-material"
+    ) {
+      return (
+        templates.find(
+          (template) =>
+            template.id ===
+            previewTemplateId
+        ) ||
+        templates.find(
+          (template) =>
+            template.is_active
+        ) ||
+        templates[0]
+      );
+    }
+
+    const productFamily =
+      product.product_family;
+
+    if (!productFamily) {
+      return undefined;
+    }
+
+    const currentlySelected =
+      templates.find(
+        (template) =>
+          template.id ===
+          previewTemplateId
+      );
+
+    if (
+      currentlySelected &&
+      (
+        !currentlySelected.product_family ||
+        currentlySelected.product_family ===
+          productFamily
+      )
+    ) {
+      return currentlySelected;
+    }
+
+    const exactTemplates =
+      templates.filter(
+        (template) =>
+          template.product_family ===
+          productFamily
+      );
+
+    const sharedTemplates =
+      templates.filter(
+        (template) =>
+          !template.product_family
+      );
+
+    return (
+      exactTemplates.find(
+        (template) =>
+          template.is_active
+      ) ||
+      exactTemplates[0] ||
+      sharedTemplates.find(
+        (template) =>
+          template.is_active
+      ) ||
+      sharedTemplates[0]
+    );
+  }
+
   async function generatePreview() {
     if (
-      !selectedProductId ||
-      !selectedTemplateId
+      !selectedProductId
     ) {
       setStatus(
-        "Choose a product and template first."
+        "Choose a product first."
       );
 
       return;
+    }
+
+    const selectedPreviewProduct =
+      products.find(
+        (product) =>
+          product.id ===
+          selectedProductId
+      );
+
+    const compatibleTemplate =
+      getCompatibleTemplateForProduct(
+        selectedPreviewProduct
+      );
+
+    if (!compatibleTemplate) {
+      setStatus(
+        "No compatible template exists for this product's Product Family. Upload a matching template or use a shared template."
+      );
+
+      return;
+    }
+
+    if (
+      compatibleTemplate.id !==
+      previewTemplateId
+    ) {
+      setPreviewTemplateId(
+        compatibleTemplate.id
+      );
+
+      loadTemplateControls(
+        compatibleTemplate
+      );
     }
 
     try {
@@ -1410,13 +2126,6 @@ export default function ProductImagesAdminPage() {
       setStatus(
         "Generating preview..."
       );
-
-      const selectedPreviewProduct =
-        products.find(
-          (product) =>
-            product.id ===
-            selectedProductId
-        );
 
       const response =
         await fetch(
@@ -1443,7 +2152,7 @@ export default function ProductImagesAdminPage() {
                   selectedProductId,
 
                 templateId:
-                  selectedTemplateId,
+                  compatibleTemplate.id,
 
                 layout: {
                   nameY,
@@ -1837,10 +2546,107 @@ export default function ProductImagesAdminPage() {
     return response.blob();
   }
 
-  async function previewAllProducts() {
+  async function previewAllProducts(
+    productsOverride?: Product[],
+    templateIdOverride?: string
+  ) {
+    const targetProducts =
+      productsOverride ??
+      filteredProducts;
+
+    let targetTemplateId =
+      templateIdOverride !== undefined
+        ? templateIdOverride
+        : selectedTemplateId;
+
+    const targetResearchFamilies =
+      Array.from(
+        new Set(
+          targetProducts
+            .map(
+              (product) =>
+                product.product_family
+            )
+            .filter(
+              (
+                value
+              ): value is ResearchFamily =>
+                Boolean(value)
+            )
+        )
+      );
+
     if (
-      !selectedTemplateId ||
-      products.length === 0
+      family !== "lab-materials" &&
+      targetResearchFamilies.length === 1
+    ) {
+      const targetResearchFamily =
+        targetResearchFamilies[0];
+
+      const requestedTemplate =
+        templates.find(
+          (template) =>
+            template.id ===
+            targetTemplateId
+        );
+
+      const requestedTemplateIsCompatible =
+        Boolean(
+          requestedTemplate &&
+          (
+            !requestedTemplate.product_family ||
+            requestedTemplate.product_family ===
+              targetResearchFamily
+          )
+        );
+
+      if (
+        !requestedTemplateIsCompatible
+      ) {
+        const exactTemplates =
+          templates.filter(
+            (template) =>
+              template.product_family ===
+              targetResearchFamily
+          );
+
+        const sharedTemplates =
+          templates.filter(
+            (template) =>
+              !template.product_family
+          );
+
+        const compatibleTemplate =
+          exactTemplates.find(
+            (template) =>
+              template.is_active
+          ) ||
+          exactTemplates[0] ||
+          sharedTemplates.find(
+            (template) =>
+              template.is_active
+          ) ||
+          sharedTemplates[0];
+
+        targetTemplateId =
+          compatibleTemplate?.id ||
+          "";
+
+        if (compatibleTemplate) {
+          setSelectedTemplateId(
+            compatibleTemplate.id
+          );
+
+          loadTemplateControls(
+            compatibleTemplate
+          );
+        }
+      }
+    }
+
+    if (
+      !targetTemplateId ||
+      targetProducts.length === 0
     ) {
       setStatus(
         "Choose a template with products first."
@@ -1852,7 +2658,7 @@ export default function ProductImagesAdminPage() {
       templates.find(
         (item) =>
           item.id ===
-          selectedTemplateId
+          targetTemplateId
       );
 
     if (!template) {
@@ -1888,7 +2694,7 @@ export default function ProductImagesAdminPage() {
           | BulkPreviewItem
           | undefined
         )[] = new Array(
-          products.length
+          targetProducts.length
         );
 
       let completed = 0;
@@ -1941,7 +2747,7 @@ export default function ProductImagesAdminPage() {
             productId:
               product.id,
             templateId:
-              selectedTemplateId,
+              targetTemplateId,
             layout:
               productLayout,
             labelText:
@@ -1980,7 +2786,7 @@ export default function ProductImagesAdminPage() {
         completed += 1;
 
         setStatus(
-          `Safe-previewing ${completed} of ${products.length}: ${product.name}`
+          `Safe-previewing ${completed} of ${targetProducts.length}: ${product.name}`
         );
 
         setBulkPreviews(
@@ -1993,14 +2799,14 @@ export default function ProductImagesAdminPage() {
       async function worker() {
         while (
           cursor <
-          products.length
+          targetProducts.length
         ) {
           const index =
             cursor;
           cursor += 1;
 
           const product =
-            products[index];
+            targetProducts[index];
 
           await processProduct(
             product,
@@ -2044,7 +2850,7 @@ export default function ProductImagesAdminPage() {
       setStatus(
         `Bulk preflight complete: ${passing} passed automatically, ${review} need visual review. Preview concurrency: ${Math.min(
           BULK_PREVIEW_CONCURRENCY,
-          products.length
+          targetProducts.length
         )} at a time. Nothing was published.`
       );
     } catch (error) {
@@ -2406,6 +3212,9 @@ export default function ProductImagesAdminPage() {
     setBulkPreviews(
       (current) =>
         current.map((item) =>
+          filteredProductIds.has(
+            item.productId
+          ) &&
           item.fitStatus === "pass"
             ? {
                 ...item,
@@ -2419,10 +3228,16 @@ export default function ProductImagesAdminPage() {
   function setAllBulkApproval(approved: boolean) {
     setBulkPreviews(
       (current) =>
-        current.map((item) => ({
-          ...item,
-          approved,
-        }))
+        current.map((item) =>
+          filteredProductIds.has(
+            item.productId
+          )
+            ? {
+                ...item,
+                approved,
+              }
+            : item
+        )
     );
   }
 
@@ -2430,17 +3245,22 @@ export default function ProductImagesAdminPage() {
     setBulkPreviews(
       (current) =>
         current.map(
-          (item) => ({
-            ...item,
-            approved: false,
-          })
+          (item) =>
+            filteredProductIds.has(
+              item.productId
+            )
+              ? {
+                  ...item,
+                  approved: false,
+                }
+              : item
         )
     );
   }
 
   async function regenerateApproved() {
     const approvedIds =
-      bulkPreviews
+      filteredBulkPreviews
         .filter(
           (item) =>
             item.approved
@@ -2459,7 +3279,7 @@ export default function ProductImagesAdminPage() {
       return;
     }
 
-    const approvedItems = bulkPreviews.filter((item) =>
+    const approvedItems = filteredBulkPreviews.filter((item) =>
       approvedIds.includes(item.productId)
     );
 
@@ -2692,6 +3512,153 @@ export default function ProductImagesAdminPage() {
         selectedTemplateId
     );
 
+  const filteredTemplates =
+    useMemo(
+      () =>
+        family === "lab-materials" ||
+        productFamilyFilter === "all"
+          ? templates
+          : templates.filter(
+              (template) =>
+                !template.product_family ||
+                template.product_family ===
+                  productFamilyFilter
+            ),
+      [
+        templates,
+        family,
+        productFamilyFilter,
+      ]
+    );
+
+  const filteredProducts =
+    useMemo(
+      () =>
+        products.filter(
+          (product) =>
+            productFamilyFilter === "all" ||
+            product.product_family ===
+              productFamilyFilter
+        ),
+      [
+        products,
+        productFamilyFilter,
+      ]
+    );
+
+  useEffect(
+    () => {
+      if (
+        family === "lab-materials" ||
+        productFamilyFilter === "all" ||
+        templates.length === 0
+      ) {
+        return;
+      }
+
+      const selectedTemplate =
+        templates.find(
+          (template) =>
+            template.id ===
+            selectedTemplateId
+        );
+
+      const selectedIsCompatible =
+        Boolean(
+          selectedTemplate &&
+          (
+            !selectedTemplate.product_family ||
+            selectedTemplate.product_family ===
+              productFamilyFilter
+          )
+        );
+
+      if (selectedIsCompatible) {
+        return;
+      }
+
+      const exactTemplates =
+        templates.filter(
+          (template) =>
+            template.product_family ===
+            productFamilyFilter
+        );
+
+      const sharedTemplates =
+        templates.filter(
+          (template) =>
+            !template.product_family
+        );
+
+      const compatibleTemplate =
+        exactTemplates.find(
+          (template) =>
+            template.is_active
+        ) ||
+        exactTemplates[0] ||
+        sharedTemplates.find(
+          (template) =>
+            template.is_active
+        ) ||
+        sharedTemplates[0];
+
+      setSelectedTemplateId(
+        compatibleTemplate?.id ||
+        ""
+      );
+
+      if (compatibleTemplate) {
+        loadTemplateControls(
+          compatibleTemplate
+        );
+      }
+    },
+    [
+      family,
+      productFamilyFilter,
+      templates,
+      selectedTemplateId,
+    ]
+  );
+
+  const filteredProductIds =
+    useMemo(
+      () =>
+        new Set(
+          filteredProducts.map(
+            (product) =>
+              product.id
+          )
+        ),
+      [filteredProducts]
+    );
+
+  const filteredBulkPreviews =
+    useMemo(
+      () =>
+        bulkPreviews.filter(
+          (item) =>
+            filteredProductIds.has(
+              item.productId
+            )
+        ),
+      [
+        bulkPreviews,
+        filteredProductIds,
+      ]
+    );
+
+  useEffect(() => {
+    if (
+      family ===
+      "lab-materials"
+    ) {
+      setProductFamilyFilter(
+        "all"
+      );
+    }
+  }, [family]);
+
   const selectedProduct =
     products.find(
       (
@@ -2702,7 +3669,7 @@ export default function ProductImagesAdminPage() {
     );
 
   const approvedCount =
-    bulkPreviews.filter(
+    filteredBulkPreviews.filter(
       (item) => item.approved
     ).length;
 
@@ -2829,6 +3796,38 @@ export default function ProductImagesAdminPage() {
               />
             </label>
 
+            {family !== "lab-materials" && (
+              <label style={label}>
+                Product Family
+                <select
+                  value={uploadProductFamily}
+                  onChange={(event) =>
+                    setUploadProductFamily(
+                      event.target.value as
+                        | "all"
+                        | ResearchFamily
+                    )
+                  }
+                  style={input}
+                >
+                  <option value="all">
+                    Shared / All Research Families
+                  </option>
+
+                  {PRODUCT_FAMILY_OPTIONS.map(
+                    (option) => (
+                      <option
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </option>
+                    )
+                  )}
+                </select>
+              </label>
+            )}
+
             <button
               type="submit"
               disabled={busy}
@@ -2855,7 +3854,7 @@ export default function ProductImagesAdminPage() {
 
             <div style={previewFamilyInline}>
               <span style={previewFamilyLabel}>
-                PRODUCT FAMILY
+                PRODUCT TYPE
               </span>
 
           <div style={familyRow}>
@@ -2914,10 +3913,58 @@ export default function ProductImagesAdminPage() {
               </span>
 
               <select
-                value={selectedTemplateId}
-                onChange={(event) =>
-                  setSelectedTemplateId(event.target.value)
-                }
+                value={previewTemplateId}
+                onChange={(event) => {
+                  const nextTemplateId =
+                    event.target.value;
+
+                  setPreviewTemplateId(
+                    nextTemplateId
+                  );
+
+                  const nextTemplate =
+                    templates.find(
+                      (template) =>
+                        template.id ===
+                        nextTemplateId
+                    );
+
+                  if (nextTemplate) {
+                    loadTemplateControls(
+                      nextTemplate
+                    );
+
+                    if (
+                      nextTemplate.product_family
+                    ) {
+                      const currentProduct =
+                        products.find(
+                          (product) =>
+                            product.id ===
+                            selectedProductId
+                        );
+
+                      const currentProductMatches =
+                        currentProduct?.product_family ===
+                        nextTemplate.product_family;
+
+                      if (!currentProductMatches) {
+                        const matchingProduct =
+                          products.find(
+                            (product) =>
+                              product.product_family ===
+                              nextTemplate.product_family
+                          );
+
+                        if (matchingProduct) {
+                          setSelectedProductId(
+                            matchingProduct.id
+                          );
+                        }
+                      }
+                    }
+                  }
+                }}
                 style={input}
               >
                 <option value="">
@@ -2929,8 +3976,7 @@ export default function ProductImagesAdminPage() {
                     key={template.id}
                     value={template.id}
                   >
-                    {template.name} • v{template.version}
-                    {template.is_active ? " • ACTIVE" : ""}
+                    {template.name}
                   </option>
                 ))}
               </select>
@@ -2943,9 +3989,86 @@ export default function ProductImagesAdminPage() {
 
               <select
                 value={selectedProductId}
-                onChange={(event) =>
-                  setSelectedProductId(event.target.value)
-                }
+                onChange={(event) => {
+                  const nextProductId =
+                    event.target.value;
+
+                  setSelectedProductId(
+                    nextProductId
+                  );
+
+                  const nextProduct =
+                    products.find(
+                      (product) =>
+                        product.id ===
+                        nextProductId
+                    );
+
+                  if (!nextProduct) {
+                    return;
+                  }
+
+                  const productFamily =
+                    nextProduct.product_family;
+
+                  const currentTemplate =
+                    templates.find(
+                      (template) =>
+                        template.id ===
+                        previewTemplateId
+                    );
+
+                  const currentCompatible =
+                    nextProduct.category ===
+                      "lab-material" ||
+                    Boolean(
+                      currentTemplate &&
+                      (
+                        !currentTemplate.product_family ||
+                        currentTemplate.product_family ===
+                          productFamily
+                      )
+                    );
+
+                  if (currentCompatible) {
+                    return;
+                  }
+
+                  const exactTemplates =
+                    templates.filter(
+                      (template) =>
+                        template.product_family ===
+                        productFamily
+                    );
+
+                  const sharedTemplates =
+                    templates.filter(
+                      (template) =>
+                        !template.product_family
+                    );
+
+                  const nextTemplate =
+                    exactTemplates.find(
+                      (template) =>
+                        template.is_active
+                    ) ||
+                    exactTemplates[0] ||
+                    sharedTemplates.find(
+                      (template) =>
+                        template.is_active
+                    ) ||
+                    sharedTemplates[0];
+
+                  setPreviewTemplateId(
+                    nextTemplate?.id || ""
+                  );
+
+                  if (nextTemplate) {
+                    loadTemplateControls(
+                      nextTemplate
+                    );
+                  }
+                }}
                 style={input}
               >
                 <option value="">
@@ -3000,7 +4123,7 @@ export default function ProductImagesAdminPage() {
             type="button"
             disabled={
               busy ||
-              !selectedTemplateId ||
+              !previewTemplateId ||
               !selectedProductId
             }
             onClick={
@@ -3083,7 +4206,7 @@ export default function ProductImagesAdminPage() {
                     }
                     disabled={
                       busy ||
-                      !selectedTemplateId ||
+                      !previewTemplateId ||
                       !selectedProductId
                     }
                     style={refreshPreviewButton}
@@ -3182,6 +4305,31 @@ export default function ProductImagesAdminPage() {
                     style={sessionDeleteButton}
                   >
                     DELETE
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={
+                      undoDeleteSession
+                    }
+                    disabled={
+                      busy ||
+                      bulkPreviewing ||
+                      !lastDeletedSession
+                    }
+                    style={{
+                      ...sessionUndoDeleteButton,
+                      opacity:
+                        lastDeletedSession
+                          ? 1
+                          : 0.45,
+                      cursor:
+                        lastDeletedSession
+                          ? "pointer"
+                          : "not-allowed",
+                    }}
+                  >
+                    UNDO DELETE
                   </button>
 
                   <select
@@ -3337,9 +4485,359 @@ export default function ProductImagesAdminPage() {
           </div>
 
           <p style={helperText}>
-            Preview every product, approve the images that look correct, then publish directly
-            from the same action row. Nothing is published until you use one of the regenerate buttons.
+            Choose a Product Family to automatically render previews for that family. Approve the images
+            that look correct, then publish directly from the same action row. Nothing is published until you
+            use one of the regenerate buttons.
           </p>
+
+          <div style={bulkFilterBar}>
+            <div style={bulkFamilyFilterField}>
+              <span style={previewSetupLabel}>
+                PRODUCT FAMILY FILTER
+              </span>
+
+              <select
+                value={productFamilyFilter}
+                onChange={(event) => {
+                  const nextFamily =
+                    event.target.value as
+                      | "all"
+                      | ResearchFamily;
+
+                  setProductFamilyFilter(
+                    nextFamily
+                  );
+
+                  const nextProducts =
+                    nextFamily === "all"
+                      ? products
+                      : products.filter(
+                          (product) =>
+                            product.product_family ===
+                            nextFamily
+                        );
+
+                  const nextTemplates =
+                    family === "lab-materials" ||
+                    nextFamily === "all"
+                      ? templates
+                      : templates.filter(
+                          (template) =>
+                            !template.product_family ||
+                            template.product_family ===
+                              nextFamily
+                        );
+
+                  const exactTemplates =
+                    nextFamily === "all"
+                      ? nextTemplates
+                      : nextTemplates.filter(
+                          (template) =>
+                            template.product_family ===
+                            nextFamily
+                        );
+
+                  const sharedTemplates =
+                    nextTemplates.filter(
+                      (template) =>
+                        !template.product_family
+                    );
+
+                  const nextTemplate =
+                    exactTemplates.find(
+                      (template) =>
+                        template.is_active
+                    ) ||
+                    exactTemplates[0] ||
+                    sharedTemplates.find(
+                      (template) =>
+                        template.is_active
+                    ) ||
+                    sharedTemplates[0];
+
+                  if (nextTemplate) {
+                    setSelectedTemplateId(
+                      nextTemplate.id
+                    );
+                    loadTemplateControls(
+                      nextTemplate
+                    );
+                  } else {
+                    setSelectedTemplateId(
+                      ""
+                    );
+                  }
+
+                  if (nextTemplate) {
+                    void previewAllProducts(
+                      nextProducts,
+                      nextTemplate.id
+                    );
+                  } else {
+                    setStatus(
+                      nextFamily === "all"
+                        ? "No templates are available."
+                        : "No compatible template exists for this Product Family. Upload a family template or use a shared template."
+                    );
+                  }
+                }}
+                style={input}
+                disabled={
+                  family ===
+                  "lab-materials"
+                }
+              >
+                <option value="all">
+                  {family === "lab-materials"
+                    ? "Not used for Lab Materials"
+                    : "All Research Families"}
+                </option>
+
+                {family !== "lab-materials" &&
+                  PRODUCT_FAMILY_OPTIONS.map(
+                    (option) => (
+                      <option
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </option>
+                    )
+                  )}
+              </select>
+            </div>
+
+            <div style={bulkTemplateField}>
+              <span style={previewSetupLabel}>
+                TEMPLATE
+              </span>
+
+              <div style={templateSelectActionRow}>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(event) => {
+                    const nextTemplateId =
+                      event.target.value;
+
+                    setSelectedTemplateId(
+                      nextTemplateId
+                    );
+
+                    const nextTemplate =
+                      templates.find(
+                        (template) =>
+                          template.id ===
+                          nextTemplateId
+                      );
+
+                    if (nextTemplate) {
+                      loadTemplateControls(
+                        nextTemplate
+                      );
+                    }
+
+                    if (nextTemplateId) {
+                      void previewAllProducts(
+                        filteredProducts,
+                        nextTemplateId
+                      );
+                    }
+                  }}
+                  style={templateSelectInput}
+                >
+                  <option value="">
+                    Choose template
+                  </option>
+
+                  {(
+                    family === "lab-materials" ||
+                    productFamilyFilter === "all"
+                      ? templates
+                      : templates.filter(
+                          (template) =>
+                            !template.product_family ||
+                            template.product_family ===
+                              productFamilyFilter
+                        )
+                  ).map((template) => (
+                    <option
+                      key={template.id}
+                      value={template.id}
+                    >
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+
+                {selectedTemplateId &&
+                  !renamingTemplate &&
+                  !editingTemplateFamily && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingTemplateFamily(
+                          true
+                        )
+                      }
+                      style={templateFamilyButtonInline}
+                    >
+                      CHANGE FAMILY
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingTemplateFamily(
+                          false
+                        );
+                        setRenamingTemplate(
+                          true
+                        );
+                      }}
+                      style={templateRenameButtonInline}
+                    >
+                      RENAME TEMPLATE
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void deleteSelectedTemplate()
+                      }
+                      disabled={busy}
+                      style={templateDeleteButtonInline}
+                    >
+                      DELETE TEMPLATE
+                    </button>
+                  </>
+                )}
+
+                {selectedTemplateId &&
+                  editingTemplateFamily && (
+                  <>
+                    <select
+                      value={templateFamilyEditValue}
+                      onChange={(event) =>
+                        setTemplateFamilyEditValue(
+                          event.target.value as
+                            | "shared"
+                            | ResearchFamily
+                        )
+                      }
+                      style={templateFamilyEditSelect}
+                    >
+                      <option value="shared">
+                        Shared / All Families
+                      </option>
+
+                      {PRODUCT_FAMILY_OPTIONS.map(
+                        (option) => (
+                          <option
+                            key={option.value}
+                            value={option.value}
+                          >
+                            {option.label}
+                          </option>
+                        )
+                      )}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void updateSelectedTemplateFamily()
+                      }
+                      disabled={busy}
+                      style={templateRenameSaveButton}
+                    >
+                      SAVE
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingTemplateFamily(
+                          false
+                        )
+                      }
+                      style={templateRenameCancelButton}
+                    >
+                      CANCEL
+                    </button>
+                  </>
+                )}
+
+                {selectedTemplateId && renamingTemplate && (
+                  <>
+                    <input
+                      value={renameTemplateName}
+                      onChange={(event) =>
+                        setRenameTemplateName(
+                          event.target.value
+                        )
+                      }
+                      onKeyDown={(event) => {
+                        if (
+                          event.key ===
+                          "Enter"
+                        ) {
+                          event.preventDefault();
+                          void renameSelectedTemplate();
+                          setRenamingTemplate(
+                            false
+                          );
+                        }
+
+                        if (
+                          event.key ===
+                          "Escape"
+                        ) {
+                          setRenamingTemplate(
+                            false
+                          );
+                        }
+                      }}
+                      style={templateRenameInputInline}
+                      autoFocus
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void renameSelectedTemplate();
+                        setRenamingTemplate(
+                          false
+                        );
+                      }}
+                      disabled={busy}
+                      style={templateRenameSaveButton}
+                    >
+                      SAVE
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setRenamingTemplate(
+                          false
+                        )
+                      }
+                      style={templateRenameCancelButton}
+                    >
+                      CANCEL
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div style={bulkFilterCount}>
+              {family === "lab-materials"
+                ? `${products.length} lab material${products.length === 1 ? "" : "s"}`
+                : `${filteredProducts.length} of ${products.length} product${products.length === 1 ? "" : "s"}`}
+            </div>
+          </div>
 
           <div style={combinedActionRow}>
             <button
@@ -3355,9 +4853,15 @@ export default function ProductImagesAdminPage() {
             >
               {bulkPreviewing
                 ? "PREVIEWING ALL..."
-                : `PREVIEW ALL ${family
+                : productFamilyFilter === "all"
+                ? `PREVIEW ALL ${family
                     .replace("-", " ")
-                    .toUpperCase()}`}
+                    .toUpperCase()}`
+                : `PREVIEW ${PRODUCT_FAMILY_OPTIONS.find(
+                    (option) =>
+                      option.value ===
+                      productFamilyFilter
+                  )?.label.toUpperCase() || "SELECTED FAMILY"}`}
             </button>
 
             {bulkPreviews.length > 0 && (
@@ -3475,19 +4979,19 @@ export default function ProductImagesAdminPage() {
               SAVE LAYOUT
             </button>
 
-            {bulkPreviews.length > 0 && (
+            {filteredBulkPreviews.length > 0 && (
               <label style={selectAllInlineLabelShifted}>
                 <input
                   type="checkbox"
                   checked={
-                    bulkPreviews.length > 0 &&
-                    bulkPreviews.every((item) => item.approved)
+                    filteredBulkPreviews.length > 0 &&
+                    filteredBulkPreviews.every((item) => item.approved)
                   }
                   ref={(input) => {
                     if (input) {
                       input.indeterminate =
                         approvedCount > 0 &&
-                        approvedCount < bulkPreviews.length;
+                        approvedCount < filteredBulkPreviews.length;
                     }
                   }}
                   onChange={(event) =>
@@ -3506,33 +5010,41 @@ export default function ProductImagesAdminPage() {
             </div>
           )}
 
-          {bulkPreviews.length > 0 && (
+          {filteredBulkPreviews.length === 0 &&
+            !bulkPreviewing && (
+              <div style={bulkFamilyEmptyState}>
+                No previews are currently loaded for this Product Family.
+                Click the Preview button above to generate this family only.
+              </div>
+            )}
+
+          {filteredBulkPreviews.length > 0 && (
             <>
               <div style={bulkSummaryBar}>
                 <span>
                   <strong style={{ color: "#00ff99" }}>
-                    {bulkPreviews.filter((item) => item.fitStatus === "pass").length}
+                    {filteredBulkPreviews.filter((item) => item.fitStatus === "pass").length}
                   </strong>{" "}
                   automatic pass
                 </span>
 
                 <span>
                   <strong style={{ color: "#ffcc00" }}>
-                    {bulkPreviews.filter((item) => item.fitStatus === "review").length}
+                    {filteredBulkPreviews.filter((item) => item.fitStatus === "review").length}
                   </strong>{" "}
                   need review
                 </span>
 
                 <span>
                   <strong style={{ color: "#ff75df" }}>
-                    {bulkPreviews.filter((item) => item.approved).length}
+                    {filteredBulkPreviews.filter((item) => item.approved).length}
                   </strong>{" "}
                   approved to publish
                 </span>
               </div>
 
               <div style={bulkPreviewGrid}>
-                {bulkPreviews.map((item) => (
+                {filteredBulkPreviews.map((item) => (
                   <article
                     key={item.productId}
                     onClick={() => setEditingPreviewId(item.productId)}
@@ -3568,6 +5080,28 @@ export default function ProductImagesAdminPage() {
                         <h3 style={bulkProductTitle}>
                           {item.productName}
                         </h3>
+
+                        {(() => {
+                          const bulkProduct =
+                            products.find(
+                              (product) =>
+                                product.id ===
+                                item.productId
+                            );
+
+                          const familyOption =
+                            PRODUCT_FAMILY_OPTIONS.find(
+                              (option) =>
+                                option.value ===
+                                bulkProduct?.product_family
+                            );
+
+                          return familyOption ? (
+                            <span style={bulkProductFamilyTag}>
+                              {familyOption.label.toUpperCase()}
+                            </span>
+                          ) : null;
+                        })()}
                       </div>
 
                       <label
@@ -3646,6 +5180,28 @@ export default function ProductImagesAdminPage() {
                           <h3 style={letteringEditorTitle}>
                             {editingItem.productName}
                           </h3>
+
+                          {(() => {
+                            const editingProduct =
+                              products.find(
+                                (product) =>
+                                  product.id ===
+                                  editingItem.productId
+                              );
+
+                            const familyOption =
+                              PRODUCT_FAMILY_OPTIONS.find(
+                                (option) =>
+                                  option.value ===
+                                  editingProduct?.product_family
+                              );
+
+                            return familyOption ? (
+                              <span style={editorProductFamilyTag}>
+                                {familyOption.label.toUpperCase()}
+                              </span>
+                            ) : null;
+                          })()}
                           <p style={letteringEditorSubtext}>
                             Adjust only this vial. Changes here do not alter the
                             default layout for the other peptide previews.
@@ -4628,6 +6184,20 @@ const sessionDeleteButton = {
   boxShadow: "0 3px 10px rgba(0,0,0,.24)",
 };
 
+const sessionUndoDeleteButton = {
+  minHeight: 40,
+  padding: "0 13px",
+  borderRadius: 9,
+  fontSize: 9,
+  fontWeight: 950,
+  letterSpacing: ".04em",
+  whiteSpace: "nowrap" as const,
+  border: "1px solid rgba(255,171,64,.5)",
+  background: "rgba(255,171,64,.07)",
+  color: "#ffb35c",
+  boxShadow: "0 3px 10px rgba(0,0,0,.24)",
+};
+
 const sessionSelect = {
   minHeight: 40,
   maxWidth: 290,
@@ -4802,7 +6372,7 @@ const previewSetupInlinePanel = {
   borderRadius: 12,
   background: "rgba(255,255,255,.02)",
   display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gridTemplateColumns: "1.2fr 1.2fr .9fr",
   gap: 12,
   alignItems: "end",
 };
@@ -4951,6 +6521,142 @@ const actionRow = {
   display: "flex",
   gap: 9,
   flexWrap: "wrap" as const,
+};
+
+const bulkFilterBar = {
+  margin: "14px 0",
+  padding: "12px 14px",
+  border: "1px solid rgba(0,217,255,.18)",
+  borderRadius: 12,
+  background: "rgba(0,217,255,.035)",
+  display: "flex",
+  alignItems: "end",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "nowrap" as const,
+};
+
+const bulkFilterField = {
+  minWidth: 260,
+  flex: "1 1 300px",
+  display: "grid",
+  gap: 8,
+};
+
+const bulkFamilyFilterField = {
+  width: 300,
+  minWidth: 240,
+  flex: "0 0 300px",
+  display: "grid",
+  gap: 8,
+};
+
+const bulkTemplateField = {
+  minWidth: 0,
+  flex: "1 1 auto",
+  display: "grid",
+  gap: 8,
+};
+
+const templateSelectActionRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  minWidth: 0,
+};
+
+const templateSelectInput = {
+  ...input,
+  minWidth: 0,
+  flex: "1 1 auto",
+};
+
+const templateFamilyButtonInline = {
+  ...secondaryButton,
+  flex: "0 0 auto",
+  minHeight: 40,
+  padding: "9px 14px",
+  fontSize: 10,
+  whiteSpace: "nowrap" as const,
+};
+
+const templateFamilyEditSelect = {
+  ...input,
+  minWidth: 190,
+  flex: "0 1 230px",
+};
+
+const templateRenameButtonInline = {
+  ...secondaryButton,
+  flex: "0 0 auto",
+  minHeight: 40,
+  padding: "9px 14px",
+  fontSize: 10,
+  whiteSpace: "nowrap" as const,
+};
+
+const templateDeleteButtonInline = {
+  ...secondaryButton,
+  flex: "0 0 auto",
+  minHeight: 40,
+  padding: "9px 14px",
+  fontSize: 10,
+  whiteSpace: "nowrap" as const,
+  border: "1px solid rgba(255,92,92,.65)",
+  color: "#ff8080",
+  background:
+    "rgba(255,60,60,.08)",
+};
+
+const templateRenameInputInline = {
+  ...input,
+  minWidth: 150,
+  flex: "0 1 220px",
+};
+
+const templateRenameRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  marginTop: 8,
+  flexWrap: "wrap" as const,
+};
+
+const templateRenameInput = {
+  ...input,
+  flex: "1 1 180px",
+  minWidth: 0,
+};
+
+const templateRenameButton = {
+  ...secondaryButton,
+  minHeight: 34,
+  padding: "7px 12px",
+  fontSize: 10,
+};
+
+const templateRenameSaveButton = {
+  ...secondaryButton,
+  minHeight: 34,
+  padding: "7px 12px",
+  fontSize: 10,
+};
+
+const templateRenameCancelButton = {
+  ...secondaryButton,
+  minHeight: 34,
+  padding: "7px 12px",
+  fontSize: 10,
+};
+
+const bulkFilterCount = {
+  color: "#8eeeff",
+  fontSize: 11,
+  fontWeight: 850,
+  letterSpacing: ".35px",
+  whiteSpace: "nowrap" as const,
+  paddingBottom: 10,
+  flex: "0 0 auto",
 };
 
 const combinedActionRow = {
@@ -5335,6 +7041,18 @@ const editorFooterHelp = {
   lineHeight: 1.5,
 };
 
+const bulkFamilyEmptyState = {
+  marginTop: 14,
+  padding: "16px 18px",
+  borderRadius: 12,
+  border: "1px dashed rgba(0,217,255,.24)",
+  background: "rgba(0,217,255,.035)",
+  color: "#9bdbe8",
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.5,
+};
+
 const bulkSummaryBar = {
   marginTop: 14,
   padding: "10px 12px",
@@ -5387,6 +7105,33 @@ const bulkProductTitle = {
   fontSize: 14,
   lineHeight: 1.3,
 };
+
+const bulkProductFamilyTag = {
+  display: "inline-flex",
+  marginTop: 5,
+  padding: "4px 7px",
+  borderRadius: 999,
+  border: "1px solid rgba(0,217,255,.28)",
+  background: "rgba(0,217,255,.06)",
+  color: "#8eeeff",
+  fontSize: 9,
+  fontWeight: 850,
+  letterSpacing: ".45px",
+};
+
+const editorProductFamilyTag = {
+  display: "inline-flex",
+  marginTop: 7,
+  padding: "5px 9px",
+  borderRadius: 999,
+  border: "1px solid rgba(0,217,255,.32)",
+  background: "rgba(0,217,255,.07)",
+  color: "#9cefff",
+  fontSize: 10,
+  fontWeight: 900,
+  letterSpacing: ".5px",
+};
+
 
 const approvalToggle = {
   display: "flex",

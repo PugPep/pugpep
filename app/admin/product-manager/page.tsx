@@ -10,6 +10,7 @@ type Product = {
   slug: string;
   image: string | null;
   category: string | null;
+  product_family: string | null;
   color: string | null;
   short_description: string | null;
   description: string | null;
@@ -61,6 +62,14 @@ function normalize(value: string | null | undefined) {
   return String(value || "").trim().toLowerCase();
 }
 
+const PRODUCT_FAMILIES = [
+  { value: "metabolism-research", label: "Metabolism Research" },
+  { value: "brain-nerve-research", label: "Brain & Nerve Research" },
+  { value: "cell-energy-research", label: "Cell & Energy Research" },
+  { value: "peptide-molecular-research", label: "Peptide & Molecular Research" },
+  { value: "hormone-signaling-research", label: "Hormone & Signaling Research" },
+] as const;
+
 export default function ProductManagerPage() {
   const supabase = useMemo(() => createClient(), []);
 
@@ -88,6 +97,7 @@ export default function ProductManagerPage() {
     slug: "",
     image: "",
     category: "peptide",
+    product_family: "",
     color: "#ff45d8",
     short_description: "",
     description: "",
@@ -326,6 +336,7 @@ export default function ProductManagerPage() {
         .update({
           name: product.name,
           category: product.category,
+          product_family: product.product_family || null,
           color: product.color,
           short_description: product.short_description,
           description: product.description,
@@ -376,6 +387,7 @@ export default function ProductManagerPage() {
           slug,
           image: newProduct.image.trim(),
           category: newProduct.category,
+          product_family: newProduct.product_family || null,
           color: newProduct.color,
           short_description: newProduct.short_description.trim(),
           description: newProduct.description.trim(),
@@ -418,6 +430,7 @@ export default function ProductManagerPage() {
         slug: "",
         image: "",
         category: "peptide",
+        product_family: "",
         color: "#ff45d8",
         short_description: "",
         description: "",
@@ -674,6 +687,26 @@ export default function ProductManagerPage() {
                   <option value="peptide">Compound</option>
                   <option value="nasal-spray">Spray</option>
                   <option value="lab-material">Lab Material</option>
+                </select>
+              </Field>
+
+              <Field label="Product Family">
+                <select
+                  value={newProduct.product_family}
+                  onChange={(e) =>
+                    setNewProduct({
+                      ...newProduct,
+                      product_family: e.target.value,
+                    })
+                  }
+                  style={input}
+                >
+                  <option value="">Unassigned</option>
+                  {PRODUCT_FAMILIES.map((family) => (
+                    <option key={family.value} value={family.value}>
+                      {family.label}
+                    </option>
+                  ))}
                 </select>
               </Field>
 
@@ -1029,6 +1062,23 @@ export default function ProductManagerPage() {
                   <option value="peptide">Compound</option>
                   <option value="nasal-spray">Spray</option>
                   <option value="lab-material">Lab Material</option>
+                </select>
+              </Field>
+
+              <Field label="Product Family">
+                <select
+                  value={product.product_family || ""}
+                  onChange={(e) =>
+                    updateProduct("product_family", e.target.value || null)
+                  }
+                  style={input}
+                >
+                  <option value="">Unassigned</option>
+                  {PRODUCT_FAMILIES.map((family) => (
+                    <option key={family.value} value={family.value}>
+                      {family.label}
+                    </option>
+                  ))}
                 </select>
               </Field>
 

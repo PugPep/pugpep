@@ -29,6 +29,7 @@ export async function GET(request: Request) {
         slug,
         image,
         category,
+        product_family,
         color
         `
       )

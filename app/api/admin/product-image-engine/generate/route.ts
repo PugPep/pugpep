@@ -52,19 +52,21 @@ function getRequestedPalette(
         customColor
       );
 
-    const resolved =
-      normalized ||
-      "#ff45d8";
+    if (!normalized) {
+      throw new Error(
+        "Custom color must be a 6-digit hex color such as #ff45d8."
+      );
+    }
 
     return {
       key:
-        `custom:${resolved}`,
+        `custom:${normalized}`,
       primary:
-        resolved,
+        normalized,
       secondary:
-        resolved,
+        normalized,
       glow:
-        resolved,
+        normalized,
     };
   }
 
@@ -270,6 +272,10 @@ export async function POST(
       );
     }
 
+    const templateProductFamily =
+      template.product_family ||
+      null;
+
     const categories =
       categoryFiltersForFamily(
         family
@@ -285,6 +291,7 @@ export async function POST(
           slug,
           image,
           category,
+          product_family,
           color
           `
         )
@@ -429,6 +436,30 @@ export async function POST(
       const product
       of products
     ) {
+      const productFamily =
+        product.product_family ||
+        null;
+
+      const isLabMaterial =
+        product.category ===
+        "lab-material";
+
+      if (
+        !isLabMaterial &&
+        (
+          !productFamily ||
+          (
+            templateProductFamily &&
+            productFamily !==
+              templateProductFamily
+          )
+        )
+      ) {
+        throw new Error(
+          `Template Product Family mismatch for ${product.name}. Shared templates with no Product Family are allowed.`
+        );
+      }
+
       const palette =
         getRequestedPalette(
           paletteKey,
@@ -460,7 +491,7 @@ export async function POST(
       */
 
       const generatedPath =
-        `${family}/${product.slug}/template-v${template.version}-${Date.now()}.webp`;
+        `${family}/${product.product_family || "general"}/${product.slug}/template-v${template.version}-${Date.now()}.webp`;
 
       const {
         error: uploadError,

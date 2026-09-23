@@ -25,6 +25,7 @@ type Product = {
   image: string;
   color: string;
   category: string;
+  product_family?: string | null;
   is_new: boolean;
   feature_on_homepage: boolean;
   new_until?: string | null;
@@ -43,6 +44,7 @@ export default function HomePage() {
   const [saleMap, setSaleMap] = useState<Record<string, StorefrontSale>>({});
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [familyFilter, setFamilyFilter] = useState("all");
   const [sort, setSort] = useState("featured");
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [selectedNewProductSlug, setSelectedNewProductSlug] = useState("");
@@ -163,7 +165,7 @@ export default function HomePage() {
     const { data: productData, error: productError } = await supabase
       .from("products")
       .select(
-        "id, name, slug, color, image, category, is_new, feature_on_homepage, new_until, homepage_feature_order, is_coming_soon, coming_soon_date"
+        "id, name, slug, color, image, category, product_family, is_new, feature_on_homepage, new_until, homepage_feature_order, is_coming_soon, coming_soon_date"
       )
       .eq("is_active", true)
       .order("name", { ascending: true });
@@ -312,16 +314,31 @@ export default function HomePage() {
 
   const primaryCampaign = getPrimaryStorefrontCampaign(saleMap);
 
+  const productFamilies = [
+    { value: "all", label: "All Research" },
+    { value: "metabolism-research", label: "Metabolism Research" },
+    { value: "brain-nerve-research", label: "Brain & Nerve Research" },
+    { value: "cell-energy-research", label: "Cell & Energy Research" },
+    { value: "peptide-molecular-research", label: "Peptide & Molecular Research" },
+    { value: "hormone-signaling-research", label: "Hormone & Signaling Research" },
+  ];
+
   const visibleProducts = products
     .filter((product) => {
       const query = search.trim().toLowerCase();
       const category = String(product.category || "").toLowerCase().trim();
       const sale = saleMap[product.slug];
+      const productFamily = String(product.product_family || "").toLowerCase().trim();
 
       const matchesSearch =
         !query ||
         product.name.toLowerCase().includes(query) ||
         product.slug.toLowerCase().includes(query);
+
+      const matchesFamily =
+        familyFilter === "all"
+          ? true
+          : productFamily === familyFilter;
 
       const isSpray =
         category === "spray" ||
@@ -340,7 +357,7 @@ export default function HomePage() {
           ? category === "lab-material"
           : true;
 
-      return matchesSearch && matchesFilter;
+      return matchesSearch && matchesFilter && matchesFamily;
     })
     .sort((a, b) => {
       if (sort === "az") return a.name.localeCompare(b.name);
@@ -1031,6 +1048,47 @@ export default function HomePage() {
         </section>
       )}
 
+      <section style={familyFilterSection}>
+        <div style={familyFilterHeader}>
+          <div>
+            <span style={familyFilterEyebrow}>BROWSE BY RESEARCH FAMILY</span>
+            <h2 style={familyFilterTitle}>Find Products by Research Focus</h2>
+            <p style={familyFilterText}>
+              Choose a research family to instantly narrow the full catalog.
+            </p>
+          </div>
+        </div>
+
+        <div style={familyFilterScroller}>
+          <div style={familyFilterButtons}>
+            {productFamilies.map((family) => {
+              const active = familyFilter === family.value;
+
+              return (
+                <button
+                  key={family.value}
+                  type="button"
+                  onClick={() => {
+                    setFamilyFilter(family.value);
+                    setFilter("all");
+                    document
+                      .getElementById("catalog")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }}
+                  style={{
+                    ...familyFilterButton,
+                    ...(active ? familyFilterButtonActive : {}),
+                  }}
+                  aria-pressed={active}
+                >
+                  {family.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
       <section id="catalog" style={catalogShell}>
         <div style={catalogHeader}>
           <div>
@@ -1048,25 +1106,31 @@ export default function HomePage() {
         <div style={searchSection}>
           <div style={catalogControls}>
             <div style={filterButtons}>
-              {["all", "sale", "peptides", "sprays", "lab materials"].map((item) => (
+              {[
+                { value: "all", label: "ALL TYPES" },
+                { value: "sale", label: "SALE" },
+                { value: "peptides", label: "RESEARCH COMPOUNDS" },
+                { value: "sprays", label: "RESEARCH SPRAYS" },
+                { value: "lab materials", label: "LAB MATERIALS" },
+              ].map((item) => (
                 <button
-                  key={item}
+                  key={item.value}
                   type="button"
-                  onClick={() => setFilter(item)}
+                  onClick={() => setFilter(item.value)}
                   style={{
                     ...filterButton,
                     border:
-                      filter === item
+                      filter === item.value
                         ? "1px solid #00ff99"
                         : "1px solid rgba(255,255,255,.12)",
-                    color: filter === item ? "#00ff99" : "#ccc",
+                    color: filter === item.value ? "#00ff99" : "#ccc",
                     background:
-                      filter === item
+                      filter === item.value
                         ? "rgba(0,255,153,.07)"
                         : "rgba(255,255,255,.025)",
                   }}
                 >
-                  {item.toUpperCase()}
+                  {item.label}
                 </button>
               ))}
             </div>
@@ -1106,6 +1170,7 @@ export default function HomePage() {
               onClick={() => {
                 setSearch("");
                 setFilter("all");
+                setFamilyFilter("all");
                 setSort("featured");
               }}
               style={emptyButton}
@@ -1941,6 +2006,84 @@ const discoverPoints = {
   fontSize: 10,
   fontWeight: 900,
 };
+
+const familyFilterSection = {
+  maxWidth: "1320px",
+  margin: "0 auto 24px",
+  padding: "26px 28px",
+  border: "1px solid rgba(255,255,255,.10)",
+  borderRadius: "20px",
+  background:
+    "linear-gradient(135deg, rgba(0,217,255,.055), rgba(255,69,216,.035) 48%, rgba(0,255,153,.035))",
+  boxShadow: "0 18px 46px rgba(0,0,0,.26)",
+} as const;
+
+const familyFilterHeader = {
+  display: "flex",
+  alignItems: "flex-end",
+  justifyContent: "space-between",
+  gap: "20px",
+  marginBottom: "18px",
+} as const;
+
+const familyFilterEyebrow = {
+  display: "block",
+  color: "#00d9ff",
+  fontSize: "11px",
+  fontWeight: 900,
+  letterSpacing: "1.6px",
+  marginBottom: "7px",
+} as const;
+
+const familyFilterTitle = {
+  margin: 0,
+  color: "#fff",
+  fontSize: "clamp(22px, 3vw, 32px)",
+  lineHeight: 1.08,
+} as const;
+
+const familyFilterText = {
+  margin: "8px 0 0",
+  color: "#aaa",
+  fontSize: "14px",
+  lineHeight: 1.55,
+} as const;
+
+const familyFilterScroller = {
+  width: "100%",
+  overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
+  paddingBottom: "3px",
+} as const;
+
+const familyFilterButtons = {
+  display: "flex",
+  gap: "10px",
+  minWidth: "max-content",
+} as const;
+
+const familyFilterButton = {
+  minHeight: "42px",
+  padding: "10px 15px",
+  borderRadius: "999px",
+  border: "1px solid rgba(255,255,255,.13)",
+  background: "rgba(255,255,255,.025)",
+  color: "#d5d5d5",
+  fontSize: "12px",
+  fontWeight: 850,
+  letterSpacing: ".35px",
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+  transition:
+    "border-color 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease",
+} as const;
+
+const familyFilterButtonActive = {
+  border: "1px solid #00d9ff",
+  background: "rgba(0,217,255,.10)",
+  color: "#fff",
+  boxShadow: "0 0 22px rgba(0,217,255,.16)",
+} as const;
 
 const catalogShell = {
   maxWidth: 1320,

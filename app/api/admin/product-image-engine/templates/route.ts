@@ -10,6 +10,14 @@ const VALID_FAMILIES = [
   "lab-materials",
 ];
 
+const VALID_PRODUCT_FAMILIES = [
+  "metabolism-research",
+  "brain-nerve-research",
+  "cell-energy-research",
+  "peptide-molecular-research",
+  "hormone-signaling-research",
+];
+
 function safeNumber(
   value: unknown,
   fallback: number
@@ -50,6 +58,11 @@ export async function GET(
       ) ||
       "peptides";
 
+    const productFamily =
+      url.searchParams.get(
+        "product_family"
+      ) || "";
+
     if (
       !VALID_FAMILIES.includes(
         family
@@ -66,11 +79,25 @@ export async function GET(
       );
     }
 
-    const {
-      data,
-      error,
-    } =
-      await admin
+    if (
+      productFamily &&
+      !VALID_PRODUCT_FAMILIES.includes(
+        productFamily
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid research product family.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    let templateQuery =
+      admin
         .from(
           "product_image_templates"
         )
@@ -78,7 +105,23 @@ export async function GET(
         .eq(
           "family",
           family
-        )
+        );
+
+    if (
+      productFamily
+    ) {
+      templateQuery =
+        templateQuery.eq(
+          "product_family",
+          productFamily
+        );
+    }
+
+    const {
+      data,
+      error,
+    } =
+      await templateQuery
         .order(
           "version",
           {
@@ -148,6 +191,8 @@ export async function GET(
 
     return NextResponse.json({
       family,
+      product_family:
+        productFamily || null,
       templates,
     });
   } catch (
@@ -198,6 +243,13 @@ export async function POST(
         ) || ""
       );
 
+    const productFamily =
+      String(
+        form.get(
+          "product_family"
+        ) || ""
+      ).trim();
+
     const name =
       String(
         form.get(
@@ -233,6 +285,24 @@ export async function POST(
     }
 
     if (
+      family !==
+        "lab-materials" &&
+      !VALID_PRODUCT_FAMILIES.includes(
+        productFamily
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Choose a valid research Product Family for this template.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
       !(
         templateFile instanceof File
       )
@@ -248,6 +318,15 @@ export async function POST(
       );
     }
 
+    /*
+      IMPORTANT:
+      Version numbers remain global within the existing
+      image type bucket (peptides / sprays / lab-materials).
+
+      The database may already enforce uniqueness on
+      (family, version), so DO NOT restart version numbering
+      for each research Product Family.
+    */
     const {
       data:
         latestTemplate,
@@ -302,7 +381,7 @@ export async function POST(
       ) + 1;
 
     const folder =
-      `${family}/v${version}-${Date.now()}`;
+      `${family}/${productFamily || "general"}/v${version}-${Date.now()}`;
 
     const safeTemplateName =
       templateFile.name.replace(
@@ -422,11 +501,8 @@ export async function POST(
       }
     }
 
-    const {
-      error:
-        deactivateError,
-    } =
-      await admin
+    let deactivateQuery =
+      admin
         .from(
           "product_image_templates"
         )
@@ -438,6 +514,23 @@ export async function POST(
           "family",
           family
         );
+
+    deactivateQuery =
+      family === "lab-materials"
+        ? deactivateQuery.is(
+            "product_family",
+            null
+          )
+        : deactivateQuery.eq(
+            "product_family",
+            productFamily
+          );
+
+    const {
+      error:
+        deactivateError,
+    } =
+      await deactivateQuery;
 
     if (
       deactivateError
@@ -471,6 +564,11 @@ export async function POST(
         )
         .insert({
           family,
+
+          product_family:
+            family === "lab-materials"
+              ? null
+              : productFamily,
 
           name,
 
@@ -522,6 +620,20 @@ export async function POST(
         {
           error:
             "Template image uploaded, but template record could not be created.",
+          database: {
+            message:
+              insertError?.message ||
+              null,
+            code:
+              insertError?.code ||
+              null,
+            details:
+              insertError?.details ||
+              null,
+            hint:
+              insertError?.hint ||
+              null,
+          },
         },
         {
           status: 500,
@@ -611,6 +723,25 @@ export async function PATCH(
         ""
       );
 
+    const requestedName =
+      typeof body.name === "string"
+        ? body.name.trim()
+        : "";
+
+    const hasProductFamilyUpdate =
+      Object.prototype.hasOwnProperty.call(
+        body,
+        "product_family"
+      );
+
+    const requestedProductFamily =
+      body.product_family === null ||
+      body.product_family === ""
+        ? null
+        : typeof body.product_family === "string"
+          ? body.product_family.trim()
+          : null;
+
     if (
       !templateId
     ) {
@@ -618,6 +749,24 @@ export async function PATCH(
         {
           error:
             "Template ID is required.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      hasProductFamilyUpdate &&
+      requestedProductFamily !== null &&
+      !VALID_PRODUCT_FAMILIES.includes(
+        requestedProductFamily
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid research Product Family.",
         },
         {
           status: 400,
@@ -696,6 +845,163 @@ export async function PATCH(
       );
     }
 
+    if (
+      hasProductFamilyUpdate
+    ) {
+      const {
+        data:
+          currentTemplate,
+
+        error:
+          currentTemplateError,
+      } =
+        await admin
+          .from(
+            "product_image_templates"
+          )
+          .select(
+            "id,family,is_active,product_family"
+          )
+          .eq(
+            "id",
+            templateId
+          )
+          .single();
+
+      if (
+        currentTemplateError ||
+        !currentTemplate
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Template not found.",
+          },
+          {
+            status: 404,
+          }
+        );
+      }
+
+      if (
+        currentTemplate.family ===
+          "lab-materials"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Lab Material templates do not use a research Product Family.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      if (
+        currentTemplate.is_active
+      ) {
+        let targetActiveQuery =
+          admin
+            .from(
+              "product_image_templates"
+            )
+            .update({
+              is_active:
+                false,
+            })
+            .eq(
+              "family",
+              currentTemplate.family
+            )
+            .eq(
+              "is_active",
+              true
+            )
+            .neq(
+              "id",
+              templateId
+            );
+
+        targetActiveQuery =
+          requestedProductFamily === null
+            ? targetActiveQuery.is(
+                "product_family",
+                null
+              )
+            : targetActiveQuery.eq(
+                "product_family",
+                requestedProductFamily
+              );
+
+        const {
+          error:
+            deactivateTargetError,
+        } =
+          await targetActiveQuery;
+
+        if (
+          deactivateTargetError
+        ) {
+          console.error(
+            "Unable to deactivate target-family template:",
+            deactivateTargetError
+          );
+
+          return NextResponse.json(
+            {
+              error:
+                "Unable to move template into the selected Product Family.",
+            },
+            {
+              status: 500,
+            }
+          );
+        }
+      }
+    }
+
+    const updatePayload: {
+      name_y: number;
+      strength_y: number;
+      research_text_y: number;
+      name_font_size: number;
+      strength_font_size: number;
+      research_font_size: number;
+      name?: string;
+      product_family?: string | null;
+    } = {
+      name_y:
+        nameY,
+
+      strength_y:
+        strengthY,
+
+      research_text_y:
+        researchTextY,
+
+      name_font_size:
+        nameFontSize,
+
+      strength_font_size:
+        strengthFontSize,
+
+      research_font_size:
+        researchFontSize,
+    };
+
+    if (requestedName) {
+      updatePayload.name =
+        requestedName;
+    }
+
+    if (
+      hasProductFamilyUpdate
+    ) {
+      updatePayload.product_family =
+        requestedProductFamily;
+    }
+
     const {
       data:
         updatedTemplate,
@@ -707,25 +1013,9 @@ export async function PATCH(
         .from(
           "product_image_templates"
         )
-        .update({
-          name_y:
-            nameY,
-
-          strength_y:
-            strengthY,
-
-          research_text_y:
-            researchTextY,
-
-          name_font_size:
-            nameFontSize,
-
-          strength_font_size:
-            strengthFontSize,
-
-          research_font_size:
-            researchFontSize,
-        })
+        .update(
+          updatePayload
+        )
         .eq(
           "id",
           templateId
@@ -814,3 +1104,278 @@ export async function PATCH(
     );
   }
 }
+
+export async function DELETE(
+  request: Request
+) {
+  try {
+    const {
+      admin,
+    } =
+      await requireProductImageAdmin(
+        request
+      );
+
+    const body =
+      await request.json();
+
+    const templateId =
+      String(
+        body.templateId ||
+        ""
+      );
+
+    if (
+      !templateId
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Template ID is required.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    const {
+      data:
+        template,
+
+      error:
+        lookupError,
+    } =
+      await admin
+        .from(
+          "product_image_templates"
+        )
+        .select(
+          `
+          id,
+          name,
+          family,
+          product_family,
+          template_path,
+          mask_path
+          `
+        )
+        .eq(
+          "id",
+          templateId
+        )
+        .single();
+
+    if (
+      lookupError ||
+      !template
+    ) {
+      console.error(
+        "Template delete lookup failed:",
+        lookupError
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Template not found.",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    /*
+      Keep Product Image History intact.
+
+      The history table has a foreign key back to
+      product_image_templates, so a hard delete fails while
+      history rows still reference this template.
+
+      Clear those references first instead of deleting the
+      history itself.
+    */
+    const {
+      error:
+        historyDetachError,
+    } =
+      await admin
+        .from(
+          "product_image_history"
+        )
+        .update({
+          template_id:
+            null,
+        })
+        .eq(
+          "template_id",
+          templateId
+        );
+
+    if (
+      historyDetachError
+    ) {
+      console.error(
+        "Template history detach failed:",
+        historyDetachError
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Unable to delete this template because generated-image history still references it.",
+          database: {
+            message:
+              historyDetachError.message ||
+              null,
+            code:
+              historyDetachError.code ||
+              null,
+            details:
+              historyDetachError.details ||
+              null,
+            hint:
+              historyDetachError.hint ||
+              null,
+          },
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    const {
+      error:
+        deleteError,
+    } =
+      await admin
+        .from(
+          "product_image_templates"
+        )
+        .delete()
+        .eq(
+          "id",
+          templateId
+        );
+
+    if (
+      deleteError
+    ) {
+      console.error(
+        "Template database delete failed:",
+        deleteError
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Template could not be deleted from the database.",
+          database: {
+            message:
+              deleteError.message ||
+              null,
+            code:
+              deleteError.code ||
+              null,
+            details:
+              deleteError.details ||
+              null,
+            hint:
+              deleteError.hint ||
+              null,
+          },
+        },
+        {
+          status: 500,
+        }
+      );
+    }
+
+    /*
+      Delete storage files only after the database row is gone.
+      This prevents the previous failure mode where the files
+      disappeared but the template record remained.
+    */
+    const storagePaths =
+      [
+        template.template_path,
+        template.mask_path,
+      ].filter(
+        (
+          value
+        ): value is string =>
+          typeof value ===
+            "string" &&
+          value.length > 0
+      );
+
+    let storageWarning:
+      string | null =
+      null;
+
+    if (
+      storagePaths.length > 0
+    ) {
+      const {
+        error:
+          storageDeleteError,
+      } =
+        await admin.storage
+          .from(
+            "product-image-templates"
+          )
+          .remove(
+            storagePaths
+          );
+
+      if (
+        storageDeleteError
+      ) {
+        console.error(
+          "Template storage cleanup failed:",
+          storageDeleteError
+        );
+
+        storageWarning =
+          "Template record was deleted, but one or more stored template files could not be removed.";
+      }
+    }
+
+    return NextResponse.json({
+      success:
+        true,
+      deletedTemplateId:
+        templateId,
+      deletedTemplateName:
+        template.name,
+      warning:
+        storageWarning,
+    });
+  } catch (
+    error
+  ) {
+    if (
+      error instanceof Response
+    ) {
+      return error;
+    }
+
+    console.error(
+      "Product Image Engine template DELETE failed:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          "Unable to delete template.",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
