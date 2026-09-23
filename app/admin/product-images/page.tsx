@@ -3509,7 +3509,7 @@ export default function ProductImagesAdminPage() {
         template
       ) =>
         template.id ===
-        selectedTemplateId
+        previewTemplateId
     );
 
   const filteredTemplates =

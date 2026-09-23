@@ -112,6 +112,43 @@ function safeNumber(
   );
 }
 
+async function verifyPublicAsset(
+  url: string,
+  label: string
+) {
+  const response =
+    await fetch(
+      url,
+      {
+        method: "GET",
+        cache: "no-store",
+      }
+    );
+
+  if (
+    !response.ok
+  ) {
+    throw new Error(
+      `${label} could not be loaded from storage (${response.status} ${response.statusText}). The template database record may point to a file that no longer exists.`
+    );
+  }
+
+  const contentType =
+    response.headers.get(
+      "content-type"
+    ) || "";
+
+  if (
+    !contentType.startsWith(
+      "image/"
+    )
+  ) {
+    throw new Error(
+      `${label} did not return an image. Received content type "${contentType || "unknown"}".`
+    );
+  }
+}
+
 export async function POST(
   request: Request
 ) {
@@ -123,8 +160,23 @@ export async function POST(
         request
       );
 
-    const body =
-      await request.json();
+    let body:
+      Record<string, unknown>;
+
+    try {
+      body =
+        await request.json();
+    } catch {
+      return NextResponse.json(
+        {
+          error:
+            "Preview request body is not valid JSON.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
     const productId =
       String(
@@ -148,12 +200,22 @@ export async function POST(
       body.customColor;
 
     const labelText =
-      typeof body.labelText === "string"
+      typeof body.labelText ===
+      "string"
         ? body.labelText
         : null;
 
     const layout =
-      body.layout || {};
+      (
+        body.layout &&
+        typeof body.layout ===
+          "object"
+      )
+        ? body.layout as Record<
+            string,
+            unknown
+          >
+        : {};
 
     if (
       !productId ||
@@ -169,16 +231,6 @@ export async function POST(
         }
       );
     }
-
-    /*
-      IMPORTANT:
-      THIS ROUTE IS PREVIEW ONLY.
-
-      It intentionally does NOT:
-      - upload to Storage
-      - insert image history
-      - update products.image
-    */
 
     const [
       productResult,
@@ -210,7 +262,22 @@ export async function POST(
           .from(
             "product_image_templates"
           )
-          .select("*")
+          .select(
+            `
+            id,
+            name,
+            family,
+            product_family,
+            template_path,
+            mask_path,
+            name_y,
+            strength_y,
+            research_text_y,
+            name_font_size,
+            strength_font_size,
+            research_font_size
+            `
+          )
           .eq(
             "id",
             templateId
@@ -243,6 +310,8 @@ export async function POST(
         {
           error:
             "Product not found.",
+          product_id:
+            productId,
         },
         {
           status: 404,
@@ -263,6 +332,8 @@ export async function POST(
         {
           error:
             "Template not found.",
+          template_id:
+            templateId,
         },
         {
           status: 404,
@@ -284,14 +355,28 @@ export async function POST(
 
     if (
       !isLabMaterial &&
-      (
-        !productFamily ||
-        (
-          templateProductFamily &&
-          productFamily !==
-            templateProductFamily
-        )
-      )
+      !productFamily
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "This product does not have a Product Family assigned.",
+          product_id:
+            product.id,
+          product_name:
+            product.name,
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (
+      !isLabMaterial &&
+      templateProductFamily &&
+      productFamily !==
+        templateProductFamily
     ) {
       return NextResponse.json(
         {
@@ -301,9 +386,31 @@ export async function POST(
             productFamily,
           template_product_family:
             templateProductFamily,
+          product_name:
+            product.name,
+          template_name:
+            template.name,
         },
         {
           status: 400,
+        }
+      );
+    }
+
+    if (
+      !template.template_path
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Selected template has no template image path.",
+          template_id:
+            template.id,
+          template_name:
+            template.name,
+        },
+        {
+          status: 409,
         }
       );
     }
@@ -329,6 +436,26 @@ export async function POST(
             )
             .data.publicUrl
         : null;
+
+    /*
+      Verify the stored files before entering the renderer.
+      This catches template rows left behind by the older
+      delete behavior where Storage could be removed before
+      the database row was deleted.
+    */
+    await verifyPublicAsset(
+      templateUrl,
+      `Template "${template.name}"`
+    );
+
+    if (
+      maskUrl
+    ) {
+      await verifyPublicAsset(
+        maskUrl,
+        `Mask for "${template.name}"`
+      );
+    }
 
     const palette =
       getRequestedPalette(
@@ -399,6 +526,15 @@ export async function POST(
         labelText,
       });
 
+    if (
+      !image ||
+      image.length === 0
+    ) {
+      throw new Error(
+        "Renderer returned an empty image."
+      );
+    }
+
     return new Response(
       new Uint8Array(
         image
@@ -430,6 +566,17 @@ export async function POST(
 
           "X-Palette-Secondary":
             palette.secondary,
+
+          "X-Template-Id":
+            template.id,
+
+          "X-Template-Family":
+            templateProductFamily ||
+            "shared",
+
+          "X-Product-Family":
+            productFamily ||
+            "none",
         },
       }
     );
@@ -456,6 +603,10 @@ export async function POST(
       },
       {
         status: 500,
+        headers: {
+          "Cache-Control":
+            "no-store",
+        },
       }
     );
   }
