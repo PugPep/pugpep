@@ -1862,6 +1862,9 @@ export default function ProductImagesAdminPage() {
       return;
     }
 
+    const selectedTemplate =
+      template;
+
     bulkPreviews.forEach(
       (item) => {
         if (item.previewUrl) {
@@ -1949,7 +1952,7 @@ export default function ProductImagesAdminPage() {
         const fit =
           runFitCheck(
             product,
-            template,
+            selectedTemplate,
             productLayout
           );
 
