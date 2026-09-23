@@ -262,22 +262,7 @@ export async function POST(
           .from(
             "product_image_templates"
           )
-          .select(
-            `
-            id,
-            name,
-            family,
-            product_family,
-            template_path,
-            mask_path,
-            name_y,
-            strength_y,
-            research_text_y,
-            name_font_size,
-            strength_font_size,
-            research_font_size
-            `
-          )
+          .select("*")
           .eq(
             "id",
             templateId
