@@ -2248,6 +2248,36 @@ export default function ProductImagesAdminPage() {
     }
   }
 
+  useEffect(() => {
+    if (
+      !selectedProductId ||
+      !previewTemplateId ||
+      bulkPreviewing
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(
+      () => {
+        void generatePreview();
+      },
+      450
+    );
+
+    return () =>
+      window.clearTimeout(timer);
+  }, [
+    selectedProductId,
+    previewTemplateId,
+    customPickerColor,
+    nameY,
+    strengthY,
+    researchY,
+    nameFontSize,
+    strengthFontSize,
+    researchFontSize,
+  ]);
+
   function splitProductLabel(productName: string) {
     const cleaned = productName.trim();
 
@@ -4162,22 +4192,6 @@ export default function ProductImagesAdminPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            disabled={
-              busy ||
-              !previewTemplateId ||
-              !selectedProductId
-            }
-            onClick={
-              () =>
-                void generatePreview()
-            }
-            style={secondaryButton}
-          >
-            GENERATE PREVIEW
-          </button>
-
           <div style={previewGrid}>
             <div style={previewCard}>
               <span style={previewLabel}>
@@ -4235,28 +4249,12 @@ export default function ProductImagesAdminPage() {
                   </span>
 
                   <p style={textLayoutSideHelp}>
-                    Adjust the label positioning and font sizes while viewing
-                    the Master Template and Generated Preview side by side above.
+                    Adjust the label positioning, font sizes, or product color.
+                    The Generated Preview updates automatically after each change.
                   </p>
                 </div>
 
                 <div style={layoutActionButtons}>
-                  <button
-                    type="button"
-                    onClick={
-                      () =>
-                        void generatePreview()
-                    }
-                    disabled={
-                      busy ||
-                      !previewTemplateId ||
-                      !selectedProductId
-                    }
-                    style={refreshPreviewButton}
-                  >
-                    REFRESH PREVIEW
-                  </button>
-
                   {!renamingSession ? (
                     <button
                       type="button"
@@ -4335,46 +4333,6 @@ export default function ProductImagesAdminPage() {
                     </div>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={
-                      deleteSelectedSession
-                    }
-                    disabled={
-                      busy ||
-                      bulkPreviewing ||
-                      !selectedSavedSessionId
-                    }
-                    style={sessionDeleteButton}
-                  >
-                    DELETE
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={
-                      undoDeleteSession
-                    }
-                    disabled={
-                      busy ||
-                      bulkPreviewing ||
-                      !lastDeletedSession
-                    }
-                    style={{
-                      ...sessionUndoDeleteButton,
-                      opacity:
-                        lastDeletedSession
-                          ? 1
-                          : 0.45,
-                      cursor:
-                        lastDeletedSession
-                          ? "pointer"
-                          : "not-allowed",
-                    }}
-                  >
-                    UNDO DELETE
-                  </button>
-
                   <select
                     value={selectedSavedSessionId}
                     onChange={(event) => {
@@ -4440,11 +4398,17 @@ export default function ProductImagesAdminPage() {
 
                   <button
                     type="button"
-                    onClick={saveSession}
-                    disabled={busy || bulkPreviewing}
-                    style={sessionSaveButton}
+                    onClick={
+                      deleteSelectedSession
+                    }
+                    disabled={
+                      busy ||
+                      bulkPreviewing ||
+                      !selectedSavedSessionId
+                    }
+                    style={sessionDeleteButton}
                   >
-                    SAVE SESSION
+                    DELETE
                   </button>
 
                   <button
@@ -4460,6 +4424,15 @@ export default function ProductImagesAdminPage() {
                     style={saveButton}
                   >
                     SAVE LAYOUT
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={saveSession}
+                    disabled={busy || bulkPreviewing}
+                    style={sessionSaveButton}
+                  >
+                    SAVE SESSION
                   </button>
                 </div>
               </div>
@@ -6074,8 +6047,9 @@ const primaryButton = {
   width: "fit-content",
   minHeight: 40,
   padding: "9px 14px",
-  border:
-    "1px solid rgba(0,255,153,.72)",
+  borderWidth: 1,
+  borderStyle: "solid",
+  borderColor: "rgba(0,255,153,.72)",
   borderRadius: 999,
   background:
     "rgba(0,255,153,.08)",
@@ -6088,8 +6062,9 @@ const primaryButton = {
 const secondaryButton = {
   minHeight: 40,
   padding: "9px 14px",
-  border:
-    "1px solid rgba(0,217,255,.48)",
+  borderWidth: 1,
+  borderStyle: "solid",
+  borderColor: "rgba(0,217,255,.48)",
   borderRadius: 999,
   background:
     "rgba(0,217,255,.07)",
@@ -6102,7 +6077,7 @@ const secondaryButton = {
 const layoutActionButtons = {
   display: "flex",
   alignItems: "center",
-  justifyContent: "flex-end",
+  justifyContent: "flex-start",
   gap: 8,
   flexWrap: "wrap" as const,
 };
@@ -6294,7 +6269,9 @@ const dangerButton = {
   cursor: "pointer",
   whiteSpace: "nowrap" as const,
   boxShadow: "0 3px 10px rgba(0,0,0,.24)",
-  border: "1px solid rgba(255,122,69,.55)",
+  borderWidth: 1,
+  borderStyle: "solid",
+  borderColor: "rgba(255,122,69,.55)",
   background: "rgba(255,122,69,.09)",
   color: "#ff9b6a",
 };
@@ -6806,7 +6783,9 @@ const colorModeStatus = {
 const miniActionButton = {
   minHeight: 40,
   padding: "9px 12px",
-  border: "1px solid rgba(255,255,255,.18)",
+  borderWidth: 1,
+  borderStyle: "solid",
+  borderColor: "rgba(255,255,255,.18)",
   borderRadius: 999,
   background: "rgba(255,255,255,.035)",
   color: "#c8cbd3",

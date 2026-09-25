@@ -323,12 +323,107 @@ export default function HomePage() {
     { value: "hormone-signaling-research", label: "Hormone & Signaling Research" },
   ];
 
+  function normalizeProductCategory(value?: string | null) {
+    return String(value || "")
+      .toLowerCase()
+      .trim()
+      .replace(/[_–—]/g, "-")
+      .replace(/\s+/g, " ");
+  }
+
+  function isResearchSprayCategory(value?: string | null) {
+    const category = normalizeProductCategory(value);
+
+    return (
+      category === "spray" ||
+      category === "sprays" ||
+      category === "nasal-spray" ||
+      category === "nasal spray" ||
+      category === "research-spray" ||
+      category === "research spray" ||
+      category === "research sprays"
+    );
+  }
+
+  function isLabMaterialCategory(value?: string | null) {
+    const category = normalizeProductCategory(value);
+
+    return (
+      category === "lab-material" ||
+      category === "lab material" ||
+      category === "lab-materials" ||
+      category === "lab materials" ||
+      category === "laboratory-material" ||
+      category === "laboratory material" ||
+      category === "laboratory-materials" ||
+      category === "laboratory materials"
+    );
+  }
+
+  function getResearchFamily(product: Product) {
+    const savedFamily = String(product.product_family || "")
+      .toLowerCase()
+      .trim();
+
+    if (savedFamily) {
+      return savedFamily;
+    }
+
+    const isSpray =
+      isResearchSprayCategory(product.category);
+
+    if (!isSpray) {
+      return "";
+    }
+
+    const identity = `${product.name} ${product.slug}`
+      .toLowerCase()
+      .replace(/[_–—]/g, "-");
+
+    // Research Sprays: fallback mapping for products that do not yet
+    // have product_family populated in the database.
+    if (
+      identity.includes("semax") ||
+      identity.includes("selank") ||
+      identity.includes("adamax")
+    ) {
+      return "brain-nerve-research";
+    }
+
+    if (
+      identity.includes("nad") ||
+      identity.includes("nad+")
+    ) {
+      return "cell-energy-research";
+    }
+
+    if (
+      identity.includes("bpc") ||
+      identity.includes("kpv")
+    ) {
+      return "peptide-molecular-research";
+    }
+
+    if (
+      identity.includes("pt-141") ||
+      identity.includes("pt141") ||
+      identity.includes("kisspeptin") ||
+      identity.includes("mt-2") ||
+      identity.includes("mt2") ||
+      identity.includes("mt-ii")
+    ) {
+      return "hormone-signaling-research";
+    }
+
+    return "";
+  }
+
   const visibleProducts = products
     .filter((product) => {
       const query = search.trim().toLowerCase();
-      const category = String(product.category || "").toLowerCase().trim();
+      const category = normalizeProductCategory(product.category);
       const sale = saleMap[product.slug];
-      const productFamily = String(product.product_family || "").toLowerCase().trim();
+      const productFamily = getResearchFamily(product);
 
       const matchesSearch =
         !query ||
@@ -341,8 +436,10 @@ export default function HomePage() {
           : productFamily === familyFilter;
 
       const isSpray =
-        category === "spray" ||
-        category === "nasal-spray";
+        isResearchSprayCategory(product.category);
+
+      const isLabMaterial =
+        isLabMaterialCategory(product.category);
 
       const matchesFilter =
         filter === "all"
@@ -350,11 +447,11 @@ export default function HomePage() {
           : filter === "sale"
           ? Boolean(sale?.isOnSale)
           : filter === "peptides"
-          ? category === "peptide" && !isSpray
+          ? !isSpray && !isLabMaterial
           : filter === "sprays"
           ? isSpray
           : filter === "lab materials"
-          ? category === "lab-material"
+          ? isLabMaterial
           : true;
 
       return matchesSearch && matchesFilter && matchesFamily;
@@ -384,11 +481,9 @@ export default function HomePage() {
       eyebrow: "CORE RESEARCH CATALOG",
       title: "Research Compounds",
       products: visibleProducts.filter((product) => {
-        const category = String(product.category || "").toLowerCase().trim();
         return (
-          category !== "spray" &&
-          category !== "nasal-spray" &&
-          category !== "lab-material"
+          !isResearchSprayCategory(product.category) &&
+          !isLabMaterialCategory(product.category)
         );
       }),
     },
@@ -396,19 +491,17 @@ export default function HomePage() {
       key: "sprays",
       eyebrow: "DELIVERY FORMATS",
       title: "Research Sprays",
-      products: visibleProducts.filter((product) => {
-        const category = String(product.category || "").toLowerCase().trim();
-        return category === "spray" || category === "nasal-spray";
-      }),
+      products: visibleProducts.filter((product) =>
+        isResearchSprayCategory(product.category)
+      ),
     },
     {
       key: "materials",
       eyebrow: "LAB ESSENTIALS",
       title: "Lab Materials",
-      products: visibleProducts.filter((product) => {
-        const category = String(product.category || "").toLowerCase().trim();
-        return category === "lab-material";
-      }),
+      products: visibleProducts.filter((product) =>
+        isLabMaterialCategory(product.category)
+      ),
     },
   ].filter((group) => group.products.length > 0);
 
@@ -1048,58 +1141,48 @@ export default function HomePage() {
         </section>
       )}
 
-      <section style={familyFilterSection}>
-        <div style={familyFilterHeader}>
-          <div>
-            <span style={familyFilterEyebrow}>BROWSE BY RESEARCH FAMILY</span>
-            <h2 style={familyFilterTitle}>Find Products by Research Focus</h2>
-            <p style={familyFilterText}>
-              Choose a research family to instantly narrow the full catalog.
-            </p>
-          </div>
-        </div>
-
-        <div style={familyFilterScroller}>
-          <div style={familyFilterButtons}>
-            {productFamilies.map((family) => {
-              const active = familyFilter === family.value;
-
-              return (
-                <button
-                  key={family.value}
-                  type="button"
-                  onClick={() => {
-                    setFamilyFilter(family.value);
-                    setFilter("all");
-                    document
-                      .getElementById("catalog")
-                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-                  }}
-                  style={{
-                    ...familyFilterButton,
-                    ...(active ? familyFilterButtonActive : {}),
-                  }}
-                  aria-pressed={active}
-                >
-                  {family.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
       <section id="catalog" style={catalogShell}>
         <div style={catalogHeader}>
           <div>
-            <span style={catalogEyebrow}></span>
+            <span style={catalogEyebrow}>BROWSE BY RESEARCH FAMILY</span>
             <h2 style={catalogTitle}>Browse the Full Catalog</h2>
+            <p style={catalogIntroText}>
+              Choose a research family or product type to instantly narrow the catalog.
+            </p>
           </div>
 
           <div style={catalogStats}>
             <span>{products.length} Products</span>
             <span>{saleCount} On Sale</span>
             <span>{visibleProducts.length} Showing</span>
+          </div>
+        </div>
+
+        <div style={catalogFamilyRow}>
+          <div style={familyFilterScroller}>
+            <div style={familyFilterButtons}>
+              {productFamilies.map((family) => {
+                const active = familyFilter === family.value;
+
+                return (
+                  <button
+                    key={family.value}
+                    type="button"
+                    onClick={() => {
+                      setFamilyFilter(family.value);
+                      setFilter("all");
+                    }}
+                    style={{
+                      ...familyFilterButton,
+                      ...(active ? familyFilterButtonActive : {}),
+                    }}
+                    aria-pressed={active}
+                  >
+                    {family.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -1116,7 +1199,10 @@ export default function HomePage() {
                 <button
                   key={item.value}
                   type="button"
-                  onClick={() => setFilter(item.value)}
+                  onClick={() => {
+                    setFilter(item.value);
+                    setFamilyFilter("all");
+                  }}
                   style={{
                     ...filterButton,
                     border:
@@ -2058,13 +2144,17 @@ const familyFilterScroller = {
 
 const familyFilterButtons = {
   display: "flex",
-  gap: "10px",
+  gap: "8px",
+  width: "100%",
   minWidth: "max-content",
+  flexWrap: "nowrap" as const,
+  alignItems: "center",
 } as const;
 
 const familyFilterButton = {
-  minHeight: "42px",
-  padding: "10px 15px",
+  minHeight: "38px",
+  padding: "8px 12px",
+  flex: "0 0 auto",
   borderRadius: "999px",
   border: "1px solid rgba(255,255,255,.13)",
   background: "rgba(255,255,255,.025)",
@@ -2088,9 +2178,14 @@ const familyFilterButtonActive = {
 const catalogShell = {
   maxWidth: 1320,
   margin: "20px auto 0",
-  padding: "0 14px",
+  padding: "22px 18px 18px",
   boxSizing: "border-box" as const,
   scrollMarginTop: 110,
+  border: "1px solid rgba(255,255,255,.10)",
+  borderRadius: 18,
+  background:
+    "linear-gradient(135deg, rgba(0,217,255,.04), rgba(255,69,216,.022) 48%, rgba(0,255,153,.025))",
+  boxShadow: "0 18px 46px rgba(0,0,0,.22)",
 };
 
 const catalogHeader = {
@@ -2114,6 +2209,21 @@ const catalogTitle = {
   fontSize: "clamp(24px, 3vw, 34px)",
   letterSpacing: "-.025em",
   lineHeight: 1.08,
+};
+
+const catalogIntroText = {
+  margin: "7px 0 0",
+  color: "#aaa",
+  fontSize: 13,
+  lineHeight: 1.5,
+};
+
+const catalogFamilyRow = {
+  marginTop: 16,
+  padding: "11px 12px",
+  border: "1px solid rgba(0,217,255,.16)",
+  borderRadius: 13,
+  background: "rgba(0,0,0,.18)",
 };
 
 const catalogStats = {
@@ -2162,18 +2272,23 @@ const catalogControls = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: 9,
-  flexWrap: "wrap" as const,
+  flexWrap: "nowrap" as const,
+  overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
 };
 
 const filterButtons = {
   display: "flex",
   gap: 5,
-  flexWrap: "wrap" as const,
+  flexWrap: "nowrap" as const,
+  minWidth: "max-content",
 };
 
 const filterButton = {
   minHeight: 32,
   padding: "6px 9px",
+  flex: "0 0 auto",
+  whiteSpace: "nowrap",
   borderRadius: 999,
   cursor: "pointer",
   fontWeight: 900,
