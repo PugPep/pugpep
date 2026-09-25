@@ -2477,8 +2477,8 @@ const productsGrid = {
   display: "grid",
   gridTemplateColumns:
     "repeat(4, minmax(0, 1fr))",
-  columnGap: 24,
-  rowGap: 28,
+  columnGap: 30,
+  rowGap: 34,
 };
 
 const productCard = {
