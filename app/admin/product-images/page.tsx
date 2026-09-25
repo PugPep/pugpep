@@ -128,7 +128,7 @@ const IMAGE_ENGINE_SESSION_KEY =
 const IMAGE_ENGINE_SESSIONS_KEY =
   "pugpep-product-image-engine-sessions-v1";
 
-const BULK_PREVIEW_CONCURRENCY = 4;
+const BULK_PREVIEW_CONCURRENCY = 1;
 
 const PRODUCT_FAMILY_OPTIONS: Array<{
   value: ResearchFamily;
@@ -2488,6 +2488,46 @@ export default function ProductImagesAdminPage() {
     };
   }
 
+  async function readApiError(
+    response: Response,
+    fallback: string
+  ) {
+    const contentType =
+      response.headers.get("content-type") || "";
+
+    const text =
+      await response.text();
+
+    if (
+      contentType.includes("application/json")
+    ) {
+      try {
+        const json = JSON.parse(text);
+        return (
+          json?.error ||
+          json?.message ||
+          fallback
+        );
+      } catch {
+        return fallback;
+      }
+    }
+
+    const looksLikeHtml =
+      /<!doctype html|<html[\s>]/i.test(text);
+
+    if (looksLikeHtml) {
+      return `${fallback} The preview server returned a 500 page instead of an image. Try again; if it repeats, check the server log for /api/admin/product-image-engine/preview.`;
+    }
+
+    const cleanText =
+      text.trim();
+
+    return cleanText
+      ? cleanText.slice(0, 500)
+      : fallback;
+  }
+
   async function requestPreviewBlob(
     args: {
       headers: Record<string, string>;
@@ -2528,7 +2568,10 @@ export default function ProductImagesAdminPage() {
 
     if (!response.ok) {
       throw new Error(
-        await response.text()
+        await readApiError(
+          response,
+          `Preview failed for product ${args.productId}.`
+        )
       );
     }
 
@@ -2821,7 +2864,7 @@ export default function ProductImagesAdminPage() {
             length:
               Math.min(
                 BULK_PREVIEW_CONCURRENCY,
-                products.length
+                targetProducts.length
               ),
           },
           () => worker()
@@ -2851,7 +2894,7 @@ export default function ProductImagesAdminPage() {
         `Bulk preflight complete: ${passing} passed automatically, ${review} need visual review. Preview concurrency: ${Math.min(
           BULK_PREVIEW_CONCURRENCY,
           targetProducts.length
-        )} at a time. Nothing was published.`
+        )} at a time for stability. Nothing was published.`
       );
     } catch (error) {
       console.error(error);
