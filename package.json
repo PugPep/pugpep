@@ -35,5 +35,11 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^3.2.4"
+  },
+  "allowScripts": {
+    "sharp@0.34.5": true,
+    "sharp@0.35.4": true,
+    "esbuild@0.28.2": true,
+    "unrs-resolver@1.11.1": true
   }
 }
