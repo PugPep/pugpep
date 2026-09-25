@@ -323,6 +323,86 @@ export default function HomePage() {
     { value: "hormone-signaling-research", label: "Hormone & Signaling Research" },
   ];
 
+  const researchFamilyThemes: Record<
+    string,
+    {
+      color: string;
+      soft: string;
+      border: string;
+      glow: string;
+      cardBackground: string;
+    }
+  > = {
+    all: {
+      color: "#00d9ff",
+      soft: "rgba(0,217,255,.10)",
+      border: "rgba(0,217,255,.72)",
+      glow: "rgba(0,217,255,.18)",
+      cardBackground:
+        "linear-gradient(180deg, rgba(0,217,255,.055), rgba(5,5,7,.96) 62%)",
+    },
+    "metabolism-research": {
+      color: "#ff45d8",
+      soft: "rgba(255,69,216,.10)",
+      border: "rgba(255,69,216,.72)",
+      glow: "rgba(255,69,216,.18)",
+      cardBackground:
+        "linear-gradient(180deg, rgba(255,69,216,.075), rgba(5,5,7,.96) 62%)",
+    },
+    "brain-nerve-research": {
+      color: "#14b8ff",
+      soft: "rgba(20,184,255,.10)",
+      border: "rgba(20,184,255,.72)",
+      glow: "rgba(20,184,255,.18)",
+      cardBackground:
+        "linear-gradient(180deg, rgba(20,184,255,.075), rgba(5,5,7,.96) 62%)",
+    },
+    "cell-energy-research": {
+      color: "#00ff99",
+      soft: "rgba(0,255,153,.10)",
+      border: "rgba(0,255,153,.72)",
+      glow: "rgba(0,255,153,.18)",
+      cardBackground:
+        "linear-gradient(180deg, rgba(0,255,153,.07), rgba(5,5,7,.96) 62%)",
+    },
+    "peptide-molecular-research": {
+      color: "#c455ff",
+      soft: "rgba(196,85,255,.10)",
+      border: "rgba(196,85,255,.72)",
+      glow: "rgba(196,85,255,.18)",
+      cardBackground:
+        "linear-gradient(180deg, rgba(196,85,255,.075), rgba(5,5,7,.96) 62%)",
+    },
+    "hormone-signaling-research": {
+      color: "#ff9f1a",
+      soft: "rgba(255,159,26,.10)",
+      border: "rgba(255,159,26,.72)",
+      glow: "rgba(255,159,26,.18)",
+      cardBackground:
+        "linear-gradient(180deg, rgba(255,159,26,.075), rgba(5,5,7,.96) 62%)",
+    },
+    "lab-materials": {
+      color: "#a8b7c9",
+      soft: "rgba(168,183,201,.10)",
+      border: "rgba(168,183,201,.64)",
+      glow: "rgba(168,183,201,.14)",
+      cardBackground:
+        "linear-gradient(180deg, rgba(168,183,201,.065), rgba(5,5,7,.96) 62%)",
+    },
+  };
+
+  function getThemeForFamily(value: string) {
+    return researchFamilyThemes[value] || researchFamilyThemes.all;
+  }
+
+  function getProductTheme(product: Product) {
+    if (isLabMaterialCategory(product.category)) {
+      return researchFamilyThemes["lab-materials"];
+    }
+
+    return getThemeForFamily(getResearchFamily(product) || "all");
+  }
+
   function normalizeProductCategory(value?: string | null) {
     return String(value || "")
       .toLowerCase()
@@ -1174,7 +1254,19 @@ export default function HomePage() {
                     }}
                     style={{
                       ...familyFilterButton,
-                      ...(active ? familyFilterButtonActive : {}),
+                      borderColor: active
+                        ? getThemeForFamily(family.value).border
+                        : `${getThemeForFamily(family.value).color}55`,
+                      color: active
+                        ? "#ffffff"
+                        : getThemeForFamily(family.value).color,
+                      background: active
+                        ? getThemeForFamily(family.value).soft
+                        : "rgba(255,255,255,.018)",
+                      boxShadow: active
+                        ? `0 0 22px ${getThemeForFamily(family.value).glow}`
+                        : "none",
+                      transform: active ? "translateY(-1px)" : "none",
                     }}
                     aria-pressed={active}
                   >
@@ -1297,6 +1389,7 @@ export default function HomePage() {
                 >
                   {group.products.map((product) => {
                     const effectiveSale = saleMap[product.slug];
+                    const productTheme = getProductTheme(product);
 
                     return (
                       <Link
@@ -1312,7 +1405,9 @@ export default function HomePage() {
                           className="catalog-product-card"
                           style={{
                             ...productCard,
-                            borderColor: `${product.color || "#ff45d8"}65`,
+                            borderColor: productTheme.border,
+                            background: productTheme.cardBackground,
+                            boxShadow: `0 12px 30px rgba(0,0,0,.30), 0 0 20px ${productTheme.glow}`,
                           }}
                         >
                           <div style={productImageWrap}>
@@ -2144,7 +2239,7 @@ const familyFilterScroller = {
 
 const familyFilterButtons = {
   display: "flex",
-  gap: "8px",
+  gap: "10px",
   width: "100%",
   minWidth: "max-content",
   flexWrap: "nowrap" as const,
@@ -2152,11 +2247,13 @@ const familyFilterButtons = {
 } as const;
 
 const familyFilterButton = {
-  minHeight: "38px",
-  padding: "8px 12px",
+  minHeight: "40px",
+  padding: "9px 14px",
   flex: "0 0 auto",
   borderRadius: "999px",
-  border: "1px solid rgba(255,255,255,.13)",
+  borderWidth: 1,
+  borderStyle: "solid",
+  borderColor: "rgba(255,255,255,.13)",
   background: "rgba(255,255,255,.025)",
   color: "#d5d5d5",
   fontSize: "12px",
@@ -2168,15 +2265,8 @@ const familyFilterButton = {
     "border-color 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease",
 } as const;
 
-const familyFilterButtonActive = {
-  border: "1px solid #00d9ff",
-  background: "rgba(0,217,255,.10)",
-  color: "#fff",
-  boxShadow: "0 0 22px rgba(0,217,255,.16)",
-} as const;
-
 const catalogShell = {
-  maxWidth: 1320,
+  maxWidth: 1440,
   margin: "20px auto 0",
   padding: "22px 18px 18px",
   boxSizing: "border-box" as const,
@@ -2219,8 +2309,8 @@ const catalogIntroText = {
 };
 
 const catalogFamilyRow = {
-  marginTop: 16,
-  padding: "11px 12px",
+  marginTop: 20,
+  padding: "13px 14px",
   border: "1px solid rgba(0,217,255,.16)",
   borderRadius: 13,
   background: "rgba(0,0,0,.18)",
@@ -2257,8 +2347,8 @@ const catalogSearchInput = {
 };
 
 const searchSection = {
-  marginTop: 9,
-  padding: 10,
+  marginTop: 14,
+  padding: 12,
   display: "grid",
   gap: 8,
   border: "1px solid rgba(255,255,255,.09)",
@@ -2273,8 +2363,8 @@ const catalogControls = {
   alignItems: "center",
   gap: 9,
   flexWrap: "nowrap" as const,
-  overflowX: "auto",
-  WebkitOverflowScrolling: "touch",
+  overflowX: "auto" as const,
+  WebkitOverflowScrolling: "touch" as const,
 };
 
 const filterButtons = {
@@ -2313,13 +2403,13 @@ const campaignLoadingText = {
 };
 
 const groupedCatalog = {
-  marginTop: 14,
+  marginTop: 22,
   display: "grid",
-  gap: 28,
+  gap: 36,
 };
 
 const catalogGroup = {
-  padding: "20px",
+  padding: "24px",
   border: "1px solid rgba(255,255,255,.08)",
   borderRadius: 20,
   overflow: "hidden",
@@ -2383,11 +2473,12 @@ const catalogGroupCount = {
 };
 
 const productsGrid = {
-  margin: "18px 0 0",
+  margin: "22px 0 0",
   display: "grid",
   gridTemplateColumns:
     "repeat(4, minmax(0, 1fr))",
-  gap: 18,
+  columnGap: 24,
+  rowGap: 28,
 };
 
 const productCard = {
