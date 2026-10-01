@@ -9,7 +9,6 @@ import {
 
 import { createClient } from "../../../../lib/supabaseClient";
 
-
 type CampaignType =
   | "percent"
   | "fixed"
@@ -52,6 +51,24 @@ type CampaignForm = {
   allowReferralDiscount: boolean;
 };
 
+type CampaignPreset = {
+  id: string;
+  group:
+    | "Holiday"
+    | "Storewide"
+    | "Product Family"
+    | "BOGO"
+    | "Special";
+  name: string;
+  campaignType: CampaignType;
+  discountValue?: number;
+  buyQuantity?: number;
+  getQuantity?: number;
+  minimumSpend?: number;
+  isStorewide: boolean;
+  priority?: number;
+};
+
 const emptyForm: CampaignForm = {
   name: "",
   slug: "",
@@ -63,11 +80,358 @@ const emptyForm: CampaignForm = {
   priority: "50",
   minimumSpend: "0",
   isActive: false,
+
+  /*
+   * Campaign stacking rule:
+   *
+   * Sale + Hero Appreciation + Pug Points
+   *
+   * Hero Appreciation is handled separately
+   * by the pricing engine.
+   */
   allowRewardPoints: true,
   allowGeneralPromos: false,
   allowSalesRepDiscount: false,
   allowReferralDiscount: false,
 };
+
+const campaignPresets: CampaignPreset[] = [
+  // ------------------------------------------------------------
+  // HOLIDAYS
+  // ------------------------------------------------------------
+
+  {
+    id: "new-year",
+    group: "Holiday",
+    name: "New Year Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: true,
+    priority: 70,
+  },
+  {
+    id: "valentines",
+    group: "Holiday",
+    name: "Valentine's Day Sale",
+    campaignType: "percent",
+    discountValue: 15,
+    isStorewide: true,
+    priority: 65,
+  },
+  {
+    id: "presidents-day",
+    group: "Holiday",
+    name: "Presidents' Day Sale",
+    campaignType: "percent",
+    discountValue: 15,
+    isStorewide: true,
+    priority: 65,
+  },
+  {
+    id: "st-patricks",
+    group: "Holiday",
+    name: "St. Patrick's Day Sale",
+    campaignType: "percent",
+    discountValue: 15,
+    isStorewide: true,
+    priority: 65,
+  },
+  {
+    id: "spring-easter",
+    group: "Holiday",
+    name: "Spring / Easter Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: true,
+    priority: 70,
+  },
+  {
+    id: "mothers-day",
+    group: "Holiday",
+    name: "Mother's Day Sale",
+    campaignType: "percent",
+    discountValue: 15,
+    isStorewide: true,
+    priority: 65,
+  },
+  {
+    id: "memorial-day",
+    group: "Holiday",
+    name: "Memorial Day Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: true,
+    priority: 75,
+  },
+  {
+    id: "fathers-day",
+    group: "Holiday",
+    name: "Father's Day Sale",
+    campaignType: "percent",
+    discountValue: 15,
+    isStorewide: true,
+    priority: 65,
+  },
+  {
+    id: "independence-day",
+    group: "Holiday",
+    name: "Independence Day Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: true,
+    priority: 75,
+  },
+  {
+    id: "labor-day",
+    group: "Holiday",
+    name: "Labor Day Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: true,
+    priority: 75,
+  },
+  {
+    id: "halloween",
+    group: "Holiday",
+    name: "Halloween Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: true,
+    priority: 70,
+  },
+  {
+    id: "veterans-day",
+    group: "Holiday",
+    name: "Veterans Day Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: true,
+    priority: 80,
+  },
+  {
+    id: "thanksgiving",
+    group: "Holiday",
+    name: "Thanksgiving Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: true,
+    priority: 80,
+  },
+  {
+    id: "black-friday",
+    group: "Holiday",
+    name: "Black Friday Sale",
+    campaignType: "percent",
+    discountValue: 25,
+    isStorewide: true,
+    priority: 95,
+  },
+  {
+    id: "cyber-monday",
+    group: "Holiday",
+    name: "Cyber Monday Sale",
+    campaignType: "percent",
+    discountValue: 25,
+    isStorewide: true,
+    priority: 95,
+  },
+  {
+    id: "christmas",
+    group: "Holiday",
+    name: "Christmas Sale",
+    campaignType: "percent",
+    discountValue: 25,
+    isStorewide: true,
+    priority: 90,
+  },
+
+  // ------------------------------------------------------------
+  // STOREWIDE
+  // ------------------------------------------------------------
+
+  {
+    id: "storewide-10",
+    group: "Storewide",
+    name: "Storewide 10% Off",
+    campaignType: "percent",
+    discountValue: 10,
+    isStorewide: true,
+    priority: 50,
+  },
+  {
+    id: "storewide-15",
+    group: "Storewide",
+    name: "Storewide 15% Off",
+    campaignType: "percent",
+    discountValue: 15,
+    isStorewide: true,
+    priority: 55,
+  },
+  {
+    id: "storewide-20",
+    group: "Storewide",
+    name: "Storewide 20% Off",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: true,
+    priority: 60,
+  },
+  {
+    id: "storewide-25",
+    group: "Storewide",
+    name: "Storewide 25% Off",
+    campaignType: "percent",
+    discountValue: 25,
+    isStorewide: true,
+    priority: 70,
+  },
+
+  // ------------------------------------------------------------
+  // PRODUCT FAMILIES
+  // ------------------------------------------------------------
+
+  {
+    id: "metabolism-research",
+    group: "Product Family",
+    name: "Metabolism Research Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: false,
+    priority: 65,
+  },
+  {
+    id: "brain-nerve-research",
+    group: "Product Family",
+    name: "Brain & Nerve Research Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: false,
+    priority: 65,
+  },
+  {
+    id: "cell-energy-research",
+    group: "Product Family",
+    name: "Cell & Energy Research Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: false,
+    priority: 65,
+  },
+  {
+    id: "peptide-molecular-research",
+    group: "Product Family",
+    name: "Peptide & Molecular Research Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: false,
+    priority: 65,
+  },
+  {
+    id: "hormone-signaling-research",
+    group: "Product Family",
+    name: "Hormone & Signaling Research Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: false,
+    priority: 65,
+  },
+  {
+    id: "lab-materials",
+    group: "Product Family",
+    name: "Lab Materials Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: false,
+    priority: 65,
+  },
+
+  // ------------------------------------------------------------
+  // BOGO
+  // ------------------------------------------------------------
+
+  {
+    id: "bogo",
+    group: "BOGO",
+    name: "Buy 1 Get 1 Free",
+    campaignType: "buy_x_get_y",
+    buyQuantity: 1,
+    getQuantity: 1,
+    isStorewide: false,
+    priority: 85,
+  },
+  {
+    id: "buy-2-get-1",
+    group: "BOGO",
+    name: "Buy 2 Get 1 Free",
+    campaignType: "buy_x_get_y",
+    buyQuantity: 2,
+    getQuantity: 1,
+    isStorewide: false,
+    priority: 80,
+  },
+  {
+    id: "buy-3-get-1",
+    group: "BOGO",
+    name: "Buy 3 Get 1 Free",
+    campaignType: "buy_x_get_y",
+    buyQuantity: 3,
+    getQuantity: 1,
+    isStorewide: false,
+    priority: 75,
+  },
+
+  // ------------------------------------------------------------
+  // SPECIAL
+  // ------------------------------------------------------------
+
+  {
+    id: "weekend-sale",
+    group: "Special",
+    name: "Weekend Sale",
+    campaignType: "percent",
+    discountValue: 15,
+    isStorewide: true,
+    priority: 60,
+  },
+  {
+    id: "flash-sale",
+    group: "Special",
+    name: "Flash Sale",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: true,
+    priority: 80,
+  },
+  {
+    id: "sale-of-week",
+    group: "Special",
+    name: "Sale of the Week",
+    campaignType: "percent",
+    discountValue: 20,
+    isStorewide: false,
+    priority: 70,
+  },
+  {
+    id: "spend-150",
+    group: "Special",
+    name: "Spend $150, Save 15%",
+    campaignType: "percent",
+    discountValue: 15,
+    minimumSpend: 150,
+    isStorewide: true,
+    priority: 70,
+  },
+  {
+    id: "spend-250",
+    group: "Special",
+    name: "Spend $250, Save 20%",
+    campaignType: "percent",
+    discountValue: 20,
+    minimumSpend: 250,
+    isStorewide: true,
+    priority: 75,
+  },
+];
 
 function toSlug(value: string) {
   return value
@@ -162,13 +526,20 @@ export default function CampaignsPage() {
       emptyForm
     );
 
+  const [
+    selectedPreset,
+    setSelectedPreset,
+  ] = useState("");
+
   const [search, setSearch] =
     useState("");
 
-  const [statusFilter, setStatusFilter] =
-    useState<
-      "all" | "active" | "inactive"
-    >("all");
+  const [
+    statusFilter,
+    setStatusFilter,
+  ] = useState<
+    "all" | "active" | "inactive"
+  >("all");
 
   useEffect(() => {
     async function initialize() {
@@ -177,20 +548,32 @@ export default function CampaignsPage() {
       } =
         await supabase.auth.getSession();
 
-            const {
-              data: adminAccess,
-              error: adminAccessError,
-            } = await supabase.rpc("is_pugpep_admin");
+      if (!session?.user) {
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
 
-            if (adminAccessError || !adminAccess) {
-              setAuthorized(false);
-              setLoading(false);
-              return;
-            }
+      const {
+        data: adminAccess,
+        error: adminAccessError,
+      } = await supabase.rpc(
+        "is_pugpep_admin"
+      );
 
-            setAuthorized(true);
+      if (
+        adminAccessError ||
+        !adminAccess
+      ) {
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
+
+      setAuthorized(true);
 
       await loadCampaigns();
+
       setLoading(false);
     }
 
@@ -257,6 +640,7 @@ export default function CampaignsPage() {
 
   function startCreate() {
     setEditingCampaignId(null);
+    setSelectedPreset("");
     setForm(emptyForm);
 
     window.scrollTo({
@@ -265,9 +649,106 @@ export default function CampaignsPage() {
     });
   }
 
+  function applyPreset() {
+    if (!selectedPreset) {
+      return;
+    }
+
+    const preset =
+      campaignPresets.find(
+        (item) =>
+          item.id ===
+          selectedPreset
+      );
+
+    if (!preset) {
+      return;
+    }
+
+    setEditingCampaignId(null);
+
+    setForm({
+      ...emptyForm,
+
+      name:
+        preset.name,
+
+      slug:
+        toSlug(
+          preset.name
+        ),
+
+      campaignType:
+        preset.campaignType,
+
+      discountValue:
+        String(
+          preset.discountValue ??
+            0
+        ),
+
+      buyQuantity:
+        String(
+          preset.buyQuantity ??
+            1
+        ),
+
+      getQuantity:
+        String(
+          preset.getQuantity ??
+            1
+        ),
+
+      isStorewide:
+        preset.isStorewide,
+
+      priority:
+        String(
+          preset.priority ??
+            50
+        ),
+
+      minimumSpend:
+        String(
+          preset.minimumSpend ??
+            0
+        ),
+
+      /*
+       * Presets do NOT activate
+       * automatically.
+       */
+      isActive:
+        false,
+
+      /*
+       * Sale stacking:
+       *
+       * Campaign +
+       * Hero Appreciation +
+       * Pug Points
+       *
+       * Everything else blocked.
+       */
+      allowRewardPoints:
+        true,
+
+      allowGeneralPromos:
+        false,
+
+      allowSalesRepDiscount:
+        false,
+
+      allowReferralDiscount:
+        false,
+    });
+  }
+
   function startEdit(
     campaign: Campaign
   ) {
+    setSelectedPreset("");
+
     setEditingCampaignId(
       campaign.id
     );
@@ -312,14 +793,16 @@ export default function CampaignsPage() {
       priority:
         String(
           Number(
-            campaign.priority || 0
+            campaign.priority ||
+              0
           )
         ),
 
       minimumSpend:
         String(
           Number(
-            campaign.minimum_spend || 0
+            campaign.minimum_spend ||
+              0
           )
         ),
 
@@ -347,6 +830,7 @@ export default function CampaignsPage() {
 
   function cancelEdit() {
     setEditingCampaignId(null);
+    setSelectedPreset("");
     setForm(emptyForm);
   }
 
@@ -360,7 +844,8 @@ export default function CampaignsPage() {
 
     const slug =
       toSlug(
-        form.slug || form.name
+        form.slug ||
+          form.name
       );
 
     if (!name) {
@@ -381,14 +866,16 @@ export default function CampaignsPage() {
       Math.max(
         0,
         Number(
-          form.discountValue || 0
+          form.discountValue ||
+            0
         )
       );
 
     const priority =
       Math.floor(
         Number(
-          form.priority || 0
+          form.priority ||
+            0
         )
       );
 
@@ -396,11 +883,16 @@ export default function CampaignsPage() {
       Math.max(
         0,
         Number(
-          form.minimumSpend || 0
+          form.minimumSpend ||
+            0
         )
       );
 
-    if (!Number.isFinite(minimumSpend)) {
+    if (
+      !Number.isFinite(
+        minimumSpend
+      )
+    ) {
       alert(
         "Minimum spend must be a valid number."
       );
@@ -412,7 +904,8 @@ export default function CampaignsPage() {
         1,
         Math.floor(
           Number(
-            form.buyQuantity || 1
+            form.buyQuantity ||
+              1
           )
         )
       );
@@ -422,7 +915,8 @@ export default function CampaignsPage() {
         1,
         Math.floor(
           Number(
-            form.getQuantity || 1
+            form.getQuantity ||
+              1
           )
         )
       );
@@ -494,8 +988,12 @@ export default function CampaignsPage() {
         const {
           error,
         } = await supabase
-          .from("sale_campaigns")
-          .update(payload)
+          .from(
+            "sale_campaigns"
+          )
+          .update(
+            payload
+          )
           .eq(
             "id",
             editingCampaignId
@@ -512,8 +1010,12 @@ export default function CampaignsPage() {
         const {
           error,
         } = await supabase
-          .from("sale_campaigns")
-          .insert(payload);
+          .from(
+            "sale_campaigns"
+          )
+          .insert(
+            payload
+          );
 
         if (error) {
           throw error;
@@ -524,18 +1026,29 @@ export default function CampaignsPage() {
         );
       }
 
-      setEditingCampaignId(null);
-      setForm(emptyForm);
+      setEditingCampaignId(
+        null
+      );
+
+      setSelectedPreset("");
+
+      setForm(
+        emptyForm
+      );
 
       await loadCampaigns();
-    } catch (error: unknown) {
+    } catch (
+      error: unknown
+    ) {
       console.error(
         "Unable to save campaign:",
         error
       );
 
       alert(
-        getErrorMessage(error)
+        getErrorMessage(
+          error
+        )
       );
     } finally {
       setSaving(false);
@@ -548,15 +1061,22 @@ export default function CampaignsPage() {
     const {
       error,
     } = await supabase
-      .from("sale_campaigns")
+      .from(
+        "sale_campaigns"
+      )
       .update({
         is_active:
           !campaign.is_active,
       })
-      .eq("id", campaign.id);
+      .eq(
+        "id",
+        campaign.id
+      );
 
     if (error) {
-      alert(error.message);
+      alert(
+        error.message
+      );
       return;
     }
 
@@ -578,9 +1098,14 @@ export default function CampaignsPage() {
     const {
       error,
     } = await supabase
-      .from("sale_campaigns")
+      .from(
+        "sale_campaigns"
+      )
       .delete()
-      .eq("id", campaign.id);
+      .eq(
+        "id",
+        campaign.id
+      );
 
     if (error) {
       alert(
@@ -612,20 +1137,28 @@ export default function CampaignsPage() {
             !query ||
             campaign.name
               .toLowerCase()
-              .includes(query) ||
+              .includes(
+                query
+              ) ||
             campaign.slug
               .toLowerCase()
-              .includes(query);
+              .includes(
+                query
+              );
 
           const matchesStatus =
             statusFilter ===
               "all" ||
-            (statusFilter ===
-              "active" &&
-              campaign.is_active) ||
-            (statusFilter ===
-              "inactive" &&
-              !campaign.is_active);
+            (
+              statusFilter ===
+                "active" &&
+              campaign.is_active
+            ) ||
+            (
+              statusFilter ===
+                "inactive" &&
+              !campaign.is_active
+            );
 
           return (
             matchesSearch &&
@@ -647,7 +1180,11 @@ export default function CampaignsPage() {
 
   if (loading) {
     return (
-      <main style={styles.page}>
+      <main
+        style={
+          styles.page
+        }
+      >
         Loading campaigns...
       </main>
     );
@@ -655,8 +1192,16 @@ export default function CampaignsPage() {
 
   if (!authorized) {
     return (
-      <main style={styles.page}>
-        <h1 style={styles.title}>
+      <main
+        style={
+          styles.page
+        }
+      >
+        <h1
+          style={
+            styles.title
+          }
+        >
           Access Denied
         </h1>
       </main>
@@ -664,99 +1209,431 @@ export default function CampaignsPage() {
   }
 
   return (
-    <main style={styles.page}>
-      <div style={styles.container}>
-        <div style={styles.topBar}>
+    <main
+      style={
+        styles.page
+      }
+    >
+      <div
+        style={
+          styles.container
+        }
+      >
+        <div
+          style={
+            styles.topBar
+          }
+        >
           <Link
             href="/admin/promotions"
-            style={styles.backLink}
+            style={
+              styles.backLink
+            }
           >
             ← Marketing Center
           </Link>
 
-          <div style={styles.topLinks}>
+          <div
+            style={
+              styles.topLinks
+            }
+          >
             <Link
               href="/admin/promotions/assignments"
-              style={styles.secondaryLink}
+              style={
+                styles.secondaryLink
+              }
             >
               Product Assignments
             </Link>
 
             <Link
               href="/admin/promotions/simulator"
-              style={styles.secondaryLink}
+              style={
+                styles.secondaryLink
+              }
             >
               Profit Simulator
             </Link>
           </div>
         </div>
 
-        <header style={styles.header}>
+        <header
+          style={
+            styles.header
+          }
+        >
           <div>
-            <p style={styles.eyebrow}>
+            <p
+              style={
+                styles.eyebrow
+              }
+            >
               MARKETING CENTER
             </p>
 
-            <h1 style={styles.title}>
+            <h1
+              style={
+                styles.title
+              }
+            >
               Campaigns
             </h1>
 
-            <p style={styles.subtitle}>
-              Create and manage sale
-              campaigns, priorities,
-              product eligibility, and
-              discount-stacking rules.
+            <p
+              style={
+                styles.subtitle
+              }
+            >
+              Create and manage
+              sale campaigns,
+              priorities, product
+              eligibility, and
+              discount-stacking
+              rules.
             </p>
           </div>
 
-          <div style={styles.stats}>
+          <div
+            style={
+              styles.stats
+            }
+          >
             <Stat
               label="Total"
-              value={campaigns.length}
+              value={
+                campaigns.length
+              }
             />
 
             <Stat
               label="Active"
-              value={activeCount}
+              value={
+                activeCount
+              }
             />
           </div>
         </header>
 
-        <section style={styles.editor}>
-          <div style={styles.editorHeader}>
+        <section
+          style={
+            styles.editor
+          }
+        >
+          <div
+            style={
+              styles.editorHeader
+            }
+          >
             <div>
-              <h2 style={styles.heading}>
+              <h2
+                style={
+                  styles.heading
+                }
+              >
                 {editingCampaignId
                   ? "Edit Campaign"
                   : "Create Campaign"}
               </h2>
 
-              <p style={styles.helpText}>
-                Product assignments are
-                managed separately after
-                the campaign is created.
+              <p
+                style={
+                  styles.helpText
+                }
+              >
+                Product assignments
+                are managed
+                separately after
+                the campaign is
+                created.
               </p>
             </div>
 
             {editingCampaignId && (
               <button
                 type="button"
-                onClick={cancelEdit}
-                style={styles.cancelButton}
+                onClick={
+                  cancelEdit
+                }
+                style={
+                  styles.cancelButton
+                }
               >
                 Cancel Edit
               </button>
             )}
           </div>
 
-          <div style={styles.formGrid}>
-            <label style={styles.label}>
+          {!editingCampaignId && (
+            <div
+              style={
+                styles.presetBar
+              }
+            >
+              <div
+                style={
+                  styles.presetText
+                }
+              >
+                <strong
+                  style={
+                    styles.presetTitle
+                  }
+                >
+                  Preset Campaign
+                </strong>
+
+                <span
+                  style={
+                    styles.presetHelp
+                  }
+                >
+                  Choose a preset to
+                  prefill the form.
+                  Nothing activates
+                  automatically.
+                </span>
+              </div>
+
+              <div
+                style={
+                  styles.presetControls
+                }
+              >
+                <select
+                  value={
+                    selectedPreset
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setSelectedPreset(
+                      event
+                        .target
+                        .value
+                    )
+                  }
+                  style={
+                    styles.presetSelect
+                  }
+                >
+                  <option value="">
+                    Select a preset...
+                  </option>
+
+                  <optgroup label="Holiday Sales">
+                    {campaignPresets
+                      .filter(
+                        (
+                          preset
+                        ) =>
+                          preset.group ===
+                          "Holiday"
+                      )
+                      .map(
+                        (
+                          preset
+                        ) => (
+                          <option
+                            key={
+                              preset.id
+                            }
+                            value={
+                              preset.id
+                            }
+                          >
+                            {
+                              preset.name
+                            }
+                          </option>
+                        )
+                      )}
+                  </optgroup>
+
+                  <optgroup label="Storewide Sales">
+                    {campaignPresets
+                      .filter(
+                        (
+                          preset
+                        ) =>
+                          preset.group ===
+                          "Storewide"
+                      )
+                      .map(
+                        (
+                          preset
+                        ) => (
+                          <option
+                            key={
+                              preset.id
+                            }
+                            value={
+                              preset.id
+                            }
+                          >
+                            {
+                              preset.name
+                            }
+                          </option>
+                        )
+                      )}
+                  </optgroup>
+
+                  <optgroup label="Product Family Sales">
+                    {campaignPresets
+                      .filter(
+                        (
+                          preset
+                        ) =>
+                          preset.group ===
+                          "Product Family"
+                      )
+                      .map(
+                        (
+                          preset
+                        ) => (
+                          <option
+                            key={
+                              preset.id
+                            }
+                            value={
+                              preset.id
+                            }
+                          >
+                            {
+                              preset.name
+                            }
+                          </option>
+                        )
+                      )}
+                  </optgroup>
+
+                  <optgroup label="BOGO">
+                    {campaignPresets
+                      .filter(
+                        (
+                          preset
+                        ) =>
+                          preset.group ===
+                          "BOGO"
+                      )
+                      .map(
+                        (
+                          preset
+                        ) => (
+                          <option
+                            key={
+                              preset.id
+                            }
+                            value={
+                              preset.id
+                            }
+                          >
+                            {
+                              preset.name
+                            }
+                          </option>
+                        )
+                      )}
+                  </optgroup>
+
+                  <optgroup label="Special Campaigns">
+                    {campaignPresets
+                      .filter(
+                        (
+                          preset
+                        ) =>
+                          preset.group ===
+                          "Special"
+                      )
+                      .map(
+                        (
+                          preset
+                        ) => (
+                          <option
+                            key={
+                              preset.id
+                            }
+                            value={
+                              preset.id
+                            }
+                          >
+                            {
+                              preset.name
+                            }
+                          </option>
+                        )
+                      )}
+                  </optgroup>
+                </select>
+
+                <button
+                  type="button"
+                  disabled={
+                    !selectedPreset
+                  }
+                  onClick={
+                    applyPreset
+                  }
+                  style={{
+                    ...styles.applyPresetButton,
+
+                    opacity:
+                      selectedPreset
+                        ? 1
+                        : 0.45,
+
+                    cursor:
+                      selectedPreset
+                        ? "pointer"
+                        : "not-allowed",
+                  }}
+                >
+                  Apply Preset
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div
+            style={
+              styles.stackNotice
+            }
+          >
+            <strong>
+              Sale stacking:
+            </strong>{" "}
+            Hero Appreciation +
+            Pug Points are allowed.
+            General promos,
+            sales-rep discounts,
+            and referral discounts
+            are blocked by default.
+          </div>
+
+          <div
+            style={
+              styles.formGrid
+            }
+          >
+            <label
+              style={
+                styles.label
+              }
+            >
               Campaign name
+
               <input
-                value={form.name}
-                onChange={(event) => {
+                value={
+                  form.name
+                }
+                onChange={(
+                  event
+                ) => {
                   const nextName =
-                    event.target.value;
+                    event
+                      .target
+                      .value;
 
                   updateForm(
                     "name",
@@ -775,41 +1652,66 @@ export default function CampaignsPage() {
                   }
                 }}
                 placeholder="Christmas Sale"
-                style={styles.input}
+                style={
+                  styles.input
+                }
               />
             </label>
 
-            <label style={styles.label}>
+            <label
+              style={
+                styles.label
+              }
+            >
               Slug
+
               <input
-                value={form.slug}
-                onChange={(event) =>
+                value={
+                  form.slug
+                }
+                onChange={(
+                  event
+                ) =>
                   updateForm(
                     "slug",
                     toSlug(
-                      event.target.value
+                      event
+                        .target
+                        .value
                     )
                   )
                 }
                 placeholder="christmas-sale"
-                style={styles.input}
+                style={
+                  styles.input
+                }
               />
             </label>
 
-            <label style={styles.label}>
+            <label
+              style={
+                styles.label
+              }
+            >
               Campaign type
+
               <select
                 value={
                   form.campaignType
                 }
-                onChange={(event) =>
+                onChange={(
+                  event
+                ) =>
                   updateForm(
                     "campaignType",
-                    event.target
+                    event
+                      .target
                       .value as CampaignType
                   )
                 }
-                style={styles.input}
+                style={
+                  styles.input
+                }
               >
                 <option value="percent">
                   Percentage discount
@@ -827,7 +1729,11 @@ export default function CampaignsPage() {
 
             {form.campaignType !==
               "buy_x_get_y" && (
-              <label style={styles.label}>
+              <label
+                style={
+                  styles.label
+                }
+              >
                 {form.campaignType ===
                 "percent"
                   ? "Discount percent"
@@ -846,13 +1752,19 @@ export default function CampaignsPage() {
                   value={
                     form.discountValue
                   }
-                  onChange={(event) =>
+                  onChange={(
+                    event
+                  ) =>
                     updateForm(
                       "discountValue",
-                      event.target.value
+                      event
+                        .target
+                        .value
                     )
                   }
-                  style={styles.input}
+                  style={
+                    styles.input
+                  }
                 />
               </label>
             )}
@@ -860,8 +1772,13 @@ export default function CampaignsPage() {
             {form.campaignType ===
               "buy_x_get_y" && (
               <>
-                <label style={styles.label}>
+                <label
+                  style={
+                    styles.label
+                  }
+                >
                   Buy quantity
+
                   <input
                     type="number"
                     min="1"
@@ -869,18 +1786,29 @@ export default function CampaignsPage() {
                     value={
                       form.buyQuantity
                     }
-                    onChange={(event) =>
+                    onChange={(
+                      event
+                    ) =>
                       updateForm(
                         "buyQuantity",
-                        event.target.value
+                        event
+                          .target
+                          .value
                       )
                     }
-                    style={styles.input}
+                    style={
+                      styles.input
+                    }
                   />
                 </label>
 
-                <label style={styles.label}>
+                <label
+                  style={
+                    styles.label
+                  }
+                >
                   Free quantity
+
                   <input
                     type="number"
                     min="1"
@@ -888,59 +1816,99 @@ export default function CampaignsPage() {
                     value={
                       form.getQuantity
                     }
-                    onChange={(event) =>
+                    onChange={(
+                      event
+                    ) =>
                       updateForm(
                         "getQuantity",
-                        event.target.value
+                        event
+                          .target
+                          .value
                       )
                     }
-                    style={styles.input}
+                    style={
+                      styles.input
+                    }
                   />
                 </label>
               </>
             )}
 
-            <label style={styles.label}>
+            <label
+              style={
+                styles.label
+              }
+            >
               Priority
+
               <input
                 type="number"
                 step="1"
-                value={form.priority}
-                onChange={(event) =>
+                value={
+                  form.priority
+                }
+                onChange={(
+                  event
+                ) =>
                   updateForm(
                     "priority",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
                 }
-                style={styles.input}
+                style={
+                  styles.input
+                }
               />
             </label>
 
-            <label style={styles.label}>
+            <label
+              style={
+                styles.label
+              }
+            >
               Minimum spend ($)
+
               <input
                 type="number"
                 min="0"
                 step="0.01"
-                value={form.minimumSpend}
-                onChange={(event) =>
+                value={
+                  form.minimumSpend
+                }
+                onChange={(
+                  event
+                ) =>
                   updateForm(
                     "minimumSpend",
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
                 }
                 placeholder="0.00"
-                style={styles.input}
+                style={
+                  styles.input
+                }
               />
             </label>
           </div>
 
-          <div style={styles.toggleGrid}>
+          <div
+            style={
+              styles.toggleGrid
+            }
+          >
             <Toggle
               label="Active"
               description="Campaign can be selected by the pricing engine."
-              checked={form.isActive}
-              onChange={(checked) =>
+              checked={
+                form.isActive
+              }
+              onChange={(
+                checked
+              ) =>
                 updateForm(
                   "isActive",
                   checked
@@ -951,8 +1919,12 @@ export default function CampaignsPage() {
             <Toggle
               label="Storewide"
               description="Apply to all eligible product options."
-              checked={form.isStorewide}
-              onChange={(checked) =>
+              checked={
+                form.isStorewide
+              }
+              onChange={(
+                checked
+              ) =>
                 updateForm(
                   "isStorewide",
                   checked
@@ -961,12 +1933,14 @@ export default function CampaignsPage() {
             />
 
             <Toggle
-              label="Allow reward points"
-              description="Rewards may be used on campaign items."
+              label="Allow Pug Points"
+              description="Pug Points may be used with campaign pricing."
               checked={
                 form.allowRewardPoints
               }
-              onChange={(checked) =>
+              onChange={(
+                checked
+              ) =>
                 updateForm(
                   "allowRewardPoints",
                   checked
@@ -980,7 +1954,9 @@ export default function CampaignsPage() {
               checked={
                 form.allowGeneralPromos
               }
-              onChange={(checked) =>
+              onChange={(
+                checked
+              ) =>
                 updateForm(
                   "allowGeneralPromos",
                   checked
@@ -990,11 +1966,13 @@ export default function CampaignsPage() {
 
             <Toggle
               label="Allow sales-rep discount"
-              description="A sales-rep introductory discount may stack."
+              description="Sales-rep introductory discounts may stack."
               checked={
                 form.allowSalesRepDiscount
               }
-              onChange={(checked) =>
+              onChange={(
+                checked
+              ) =>
                 updateForm(
                   "allowSalesRepDiscount",
                   checked
@@ -1008,7 +1986,9 @@ export default function CampaignsPage() {
               checked={
                 form.allowReferralDiscount
               }
-              onChange={(checked) =>
+              onChange={(
+                checked
+              ) =>
                 updateForm(
                   "allowReferralDiscount",
                   checked
@@ -1019,14 +1999,19 @@ export default function CampaignsPage() {
 
           <button
             type="button"
-            disabled={saving}
+            disabled={
+              saving
+            }
             onClick={() => {
               void saveCampaign();
             }}
             style={{
               ...styles.saveButton,
+
               opacity:
-                saving ? 0.65 : 1,
+                saving
+                  ? 0.65
+                  : 1,
             }}
           >
             {saving
@@ -1037,36 +2022,69 @@ export default function CampaignsPage() {
           </button>
         </section>
 
-        <section style={styles.listSection}>
-          <div style={styles.filterGrid}>
-            <label style={styles.label}>
+        <section
+          style={
+            styles.listSection
+          }
+        >
+          <div
+            style={
+              styles.filterGrid
+            }
+          >
+            <label
+              style={
+                styles.label
+              }
+            >
               Search
+
               <input
-                value={search}
-                onChange={(event) =>
+                value={
+                  search
+                }
+                onChange={(
+                  event
+                ) =>
                   setSearch(
-                    event.target.value
+                    event
+                      .target
+                      .value
                   )
                 }
                 placeholder="Search campaigns"
-                style={styles.input}
+                style={
+                  styles.input
+                }
               />
             </label>
 
-            <label style={styles.label}>
+            <label
+              style={
+                styles.label
+              }
+            >
               Status
+
               <select
-                value={statusFilter}
-                onChange={(event) =>
+                value={
+                  statusFilter
+                }
+                onChange={(
+                  event
+                ) =>
                   setStatusFilter(
-                    event.target
+                    event
+                      .target
                       .value as
                       | "all"
                       | "active"
                       | "inactive"
                   )
                 }
-                style={styles.input}
+                style={
+                  styles.input
+                }
               >
                 <option value="all">
                   All campaigns
@@ -1083,15 +2101,27 @@ export default function CampaignsPage() {
             </label>
           </div>
 
-          <div style={styles.listHeader}>
-            <h2 style={styles.heading}>
+          <div
+            style={
+              styles.listHeader
+            }
+          >
+            <h2
+              style={
+                styles.heading
+              }
+            >
               Existing Campaigns
             </h2>
 
             <button
               type="button"
-              onClick={startCreate}
-              style={styles.newButton}
+              onClick={
+                startCreate
+              }
+              style={
+                styles.newButton
+              }
             >
               + New Campaign
             </button>
@@ -1099,26 +2129,56 @@ export default function CampaignsPage() {
 
           {filteredCampaigns.length ===
           0 ? (
-            <div style={styles.empty}>
-              No campaigns match the
-              selected filters.
+            <div
+              style={
+                styles.empty
+              }
+            >
+              No campaigns match
+              the selected filters.
             </div>
           ) : (
-            <div style={styles.campaignGrid}>
+            <div
+              style={
+                styles.campaignGrid
+              }
+            >
               {filteredCampaigns.map(
-                (campaign) => (
+                (
+                  campaign
+                ) => (
                   <article
-                    key={campaign.id}
-                    style={styles.campaignCard}
+                    key={
+                      campaign.id
+                    }
+                    style={
+                      styles.campaignCard
+                    }
                   >
-                    <div style={styles.cardHeader}>
+                    <div
+                      style={
+                        styles.cardHeader
+                      }
+                    >
                       <div>
-                        <h3 style={styles.cardTitle}>
-                          {campaign.name}
+                        <h3
+                          style={
+                            styles.cardTitle
+                          }
+                        >
+                          {
+                            campaign.name
+                          }
                         </h3>
 
-                        <p style={styles.cardSlug}>
-                          {campaign.slug}
+                        <p
+                          style={
+                            styles.cardSlug
+                          }
+                        >
+                          {
+                            campaign.slug
+                          }
                         </p>
                       </div>
 
@@ -1143,7 +2203,11 @@ export default function CampaignsPage() {
                       </span>
                     </div>
 
-                    <div style={styles.discountBox}>
+                    <div
+                      style={
+                        styles.discountBox
+                      }
+                    >
                       <strong>
                         {getCampaignDescription(
                           campaign
@@ -1152,19 +2216,27 @@ export default function CampaignsPage() {
 
                       <span>
                         Priority{" "}
-                        {campaign.priority}
+                        {
+                          campaign.priority
+                        }
                       </span>
 
                       <span>
-                        Min spend {money(
+                        Min spend{" "}
+                        {money(
                           Number(
-                            campaign.minimum_spend || 0
+                            campaign.minimum_spend ||
+                              0
                           )
                         )}
                       </span>
                     </div>
 
-                    <div style={styles.ruleGrid}>
+                    <div
+                      style={
+                        styles.ruleGrid
+                      }
+                    >
                       <Rule
                         label="Storewide"
                         enabled={
@@ -1173,7 +2245,7 @@ export default function CampaignsPage() {
                       />
 
                       <Rule
-                        label="Rewards"
+                        label="Pug Points"
                         enabled={
                           campaign.allow_reward_points
                         }
@@ -1201,7 +2273,11 @@ export default function CampaignsPage() {
                       />
                     </div>
 
-                    <div style={styles.actions}>
+                    <div
+                      style={
+                        styles.actions
+                      }
+                    >
                       <button
                         type="button"
                         onClick={() =>
@@ -1209,14 +2285,18 @@ export default function CampaignsPage() {
                             campaign
                           )
                         }
-                        style={styles.editButton}
+                        style={
+                          styles.editButton
+                        }
                       >
                         Edit
                       </button>
 
                       <Link
                         href={`/admin/promotions/assignments?campaign=${campaign.id}`}
-                        style={styles.assignButton}
+                        style={
+                          styles.assignButton
+                        }
                       >
                         Assign Products
                       </Link>
@@ -1246,7 +2326,9 @@ export default function CampaignsPage() {
                             campaign
                           );
                         }}
-                        style={styles.deleteButton}
+                        style={
+                          styles.deleteButton
+                        }
                       >
                         Delete
                       </button>
@@ -1276,16 +2358,28 @@ function Toggle({
   ) => void;
 }) {
   return (
-    <label style={styles.toggleCard}>
+    <label
+      style={
+        styles.toggleCard
+      }
+    >
       <input
         type="checkbox"
-        checked={checked}
-        onChange={(event) =>
+        checked={
+          checked
+        }
+        onChange={(
+          event
+        ) =>
           onChange(
-            event.target.checked
+            event
+              .target
+              .checked
           )
         }
-        style={styles.checkbox}
+        style={
+          styles.checkbox
+        }
       />
 
       <span>
@@ -1293,15 +2387,20 @@ function Toggle({
           style={{
             ...styles.toggleTitle,
 
-            color: checked
-              ? "#00ff99"
-              : "#ffffff",
+            color:
+              checked
+                ? "#00ff99"
+                : "#ffffff",
           }}
         >
           {label}
         </strong>
 
-        <span style={styles.toggleDescription}>
+        <span
+          style={
+            styles.toggleDescription
+          }
+        >
           {description}
         </span>
       </span>
@@ -1317,17 +2416,26 @@ function Rule({
   enabled: boolean;
 }) {
   return (
-    <div style={styles.rule}>
-      <span>{label}</span>
+    <div
+      style={
+        styles.rule
+      }
+    >
+      <span>
+        {label}
+      </span>
 
       <strong
         style={{
-          color: enabled
-            ? "#00ff99"
-            : "#777777",
+          color:
+            enabled
+              ? "#00ff99"
+              : "#777777",
         }}
       >
-        {enabled ? "YES" : "NO"}
+        {enabled
+          ? "YES"
+          : "NO"}
       </strong>
     </div>
   );
@@ -1341,12 +2449,24 @@ function Stat({
   value: number;
 }) {
   return (
-    <div style={styles.statCard}>
-      <span style={styles.statLabel}>
+    <div
+      style={
+        styles.statCard
+      }
+    >
+      <span
+        style={
+          styles.statLabel
+        }
+      >
         {label}
       </span>
 
-      <strong style={styles.statValue}>
+      <strong
+        style={
+          styles.statValue
+        }
+      >
         {value}
       </strong>
     </div>
@@ -1375,18 +2495,21 @@ const styles = {
       "space-between",
     alignItems: "center",
     gap: 12,
-    flexWrap: "wrap" as const,
+    flexWrap:
+      "wrap" as const,
   },
 
   topLinks: {
     display: "flex",
     gap: 10,
-    flexWrap: "wrap" as const,
+    flexWrap:
+      "wrap" as const,
   },
 
   backLink: {
     color: "#00d9ff",
-    textDecoration: "none",
+    textDecoration:
+      "none",
     fontWeight: 800,
   },
 
@@ -1396,7 +2519,8 @@ const styles = {
       "1px solid #444444",
     borderRadius: 9,
     color: "#dddddd",
-    textDecoration: "none",
+    textDecoration:
+      "none",
     fontWeight: 700,
   },
 
@@ -1404,9 +2528,11 @@ const styles = {
     display: "flex",
     justifyContent:
       "space-between",
-    alignItems: "flex-end",
+    alignItems:
+      "flex-end",
     gap: 20,
-    flexWrap: "wrap" as const,
+    flexWrap:
+      "wrap" as const,
     marginTop: 28,
   },
 
@@ -1415,11 +2541,13 @@ const styles = {
     color: "#888888",
     fontSize: 12,
     fontWeight: 800,
-    letterSpacing: "0.14em",
+    letterSpacing:
+      "0.14em",
   },
 
   title: {
-    margin: "6px 0 8px",
+    margin:
+      "6px 0 8px",
     color: "#ff45d8",
     fontSize:
       "clamp(34px, 7vw, 52px)",
@@ -1440,11 +2568,13 @@ const styles = {
 
   statCard: {
     minWidth: 92,
-    padding: "13px 15px",
+    padding:
+      "13px 15px",
     border:
       "1px solid #333333",
     borderRadius: 12,
-    background: "#0a0a0a",
+    background:
+      "#0a0a0a",
     display: "grid",
     gap: 4,
   },
@@ -1478,8 +2608,10 @@ const styles = {
     justifyContent:
       "space-between",
     gap: 14,
-    alignItems: "start",
-    flexWrap: "wrap" as const,
+    alignItems:
+      "start",
+    flexWrap:
+      "wrap" as const,
   },
 
   heading: {
@@ -1493,6 +2625,89 @@ const styles = {
     margin:
       "6px 0 0",
     color: "#999999",
+  },
+
+  presetBar: {
+    marginTop: 18,
+    padding: 14,
+    display: "flex",
+    justifyContent:
+      "space-between",
+    alignItems:
+      "center",
+    gap: 14,
+    flexWrap:
+      "wrap" as const,
+    border:
+      "1px solid rgba(0,217,255,.28)",
+    borderRadius: 11,
+    background:
+      "rgba(0,217,255,.045)",
+  },
+
+  presetText: {
+    display: "grid",
+    gap: 4,
+  },
+
+  presetTitle: {
+    color: "#00d9ff",
+    fontSize: 14,
+  },
+
+  presetHelp: {
+    color: "#999999",
+    fontSize: 12,
+  },
+
+  presetControls: {
+    display: "flex",
+    alignItems:
+      "center",
+    gap: 9,
+    flexWrap:
+      "wrap" as const,
+  },
+
+  presetSelect: {
+    minWidth: 260,
+    minHeight: 43,
+    padding:
+      "9px 11px",
+    border:
+      "1px solid #444444",
+    borderRadius: 8,
+    background:
+      "#080808",
+    color: "#ffffff",
+    fontSize: 14,
+  },
+
+  applyPresetButton: {
+    minHeight: 43,
+    padding:
+      "9px 14px",
+    border:
+      "1px solid #00d9ff",
+    borderRadius: 8,
+    background:
+      "#00171d",
+    color: "#00d9ff",
+    fontWeight: 800,
+  },
+
+  stackNotice: {
+    marginTop: 12,
+    padding:
+      "10px 12px",
+    border:
+      "1px solid rgba(0,255,153,.22)",
+    borderRadius: 9,
+    background:
+      "rgba(0,255,153,.035)",
+    color: "#aebdb5",
+    fontSize: 12,
+    lineHeight: 1.5,
   },
 
   formGrid: {
@@ -1516,11 +2731,13 @@ const styles = {
     minHeight: 49,
     boxSizing:
       "border-box" as const,
-    padding: "11px 12px",
+    padding:
+      "11px 12px",
     border:
       "1px solid #444444",
     borderRadius: 9,
-    background: "#080808",
+    background:
+      "#080808",
     color: "#ffffff",
     fontSize: 16,
   },
@@ -1538,11 +2755,13 @@ const styles = {
     padding: 14,
     display: "flex",
     gap: 12,
-    alignItems: "flex-start",
+    alignItems:
+      "flex-start",
     border:
       "1px solid #363636",
     borderRadius: 11,
-    background: "#080808",
+    background:
+      "#080808",
     cursor: "pointer",
   },
 
@@ -1550,7 +2769,8 @@ const styles = {
     width: 22,
     height: 22,
     minWidth: 22,
-    accentColor: "#00ff99",
+    accentColor:
+      "#00ff99",
     cursor: "pointer",
   },
 
@@ -1581,11 +2801,13 @@ const styles = {
   },
 
   cancelButton: {
-    padding: "9px 13px",
+    padding:
+      "9px 13px",
     border:
       "1px solid #ffcc66",
     borderRadius: 9,
-    background: "#211600",
+    background:
+      "#211600",
     color: "#ffcc66",
     fontWeight: 800,
     cursor: "pointer",
@@ -1614,17 +2836,21 @@ const styles = {
     display: "flex",
     justifyContent:
       "space-between",
-    alignItems: "center",
+    alignItems:
+      "center",
     gap: 12,
-    flexWrap: "wrap" as const,
+    flexWrap:
+      "wrap" as const,
   },
 
   newButton: {
-    padding: "10px 14px",
+    padding:
+      "10px 14px",
     border:
       "1px solid #00d9ff",
     borderRadius: 9,
-    background: "#00171d",
+    background:
+      "#00171d",
     color: "#00d9ff",
     fontWeight: 800,
     cursor: "pointer",
@@ -1643,14 +2869,16 @@ const styles = {
     border:
       "1px solid #343434",
     borderRadius: 13,
-    background: "#080808",
+    background:
+      "#080808",
   },
 
   cardHeader: {
     display: "flex",
     justifyContent:
       "space-between",
-    alignItems: "flex-start",
+    alignItems:
+      "flex-start",
     gap: 12,
   },
 
@@ -1661,14 +2889,17 @@ const styles = {
   },
 
   cardSlug: {
-    margin: "4px 0 0",
+    margin:
+      "4px 0 0",
     color: "#777777",
     fontSize: 13,
   },
 
   statusBadge: {
-    padding: "5px 8px",
-    border: "1px solid",
+    padding:
+      "5px 8px",
+    border:
+      "1px solid",
     borderRadius: 999,
     fontSize: 11,
     fontWeight: 800,
@@ -1681,7 +2912,8 @@ const styles = {
     justifyContent:
       "space-between",
     gap: 12,
-    flexWrap: "wrap" as const,
+    flexWrap:
+      "wrap" as const,
     borderRadius: 9,
     background:
       "rgba(0,217,255,.07)",
@@ -1712,56 +2944,68 @@ const styles = {
   },
 
   editButton: {
-    padding: "9px 10px",
+    padding:
+      "9px 10px",
     border:
       "1px solid #00d9ff",
     borderRadius: 8,
-    background: "#00171d",
+    background:
+      "#00171d",
     color: "#00d9ff",
     fontWeight: 800,
     cursor: "pointer",
   },
 
   assignButton: {
-    padding: "9px 10px",
+    padding:
+      "9px 10px",
     border:
       "1px solid #a575ff",
     borderRadius: 8,
-    background: "#130823",
+    background:
+      "#130823",
     color: "#c7a6ff",
-    textAlign: "center" as const,
-    textDecoration: "none",
+    textAlign:
+      "center" as const,
+    textDecoration:
+      "none",
     fontWeight: 800,
   },
 
   enableButton: {
-    padding: "9px 10px",
+    padding:
+      "9px 10px",
     border:
       "1px solid #00ff99",
     borderRadius: 8,
-    background: "#00271a",
+    background:
+      "#00271a",
     color: "#00ff99",
     fontWeight: 800,
     cursor: "pointer",
   },
 
   disableButton: {
-    padding: "9px 10px",
+    padding:
+      "9px 10px",
     border:
       "1px solid #ffcc66",
     borderRadius: 8,
-    background: "#241700",
+    background:
+      "#241700",
     color: "#ffcc66",
     fontWeight: 800,
     cursor: "pointer",
   },
 
   deleteButton: {
-    padding: "9px 10px",
+    padding:
+      "9px 10px",
     border:
       "1px solid #ff5d5d",
     borderRadius: 8,
-    background: "#250000",
+    background:
+      "#250000",
     color: "#ff7777",
     fontWeight: 800,
     cursor: "pointer",
@@ -1774,6 +3018,7 @@ const styles = {
       "1px dashed #444444",
     borderRadius: 11,
     color: "#999999",
-    textAlign: "center" as const,
+    textAlign:
+      "center" as const,
   },
 };
