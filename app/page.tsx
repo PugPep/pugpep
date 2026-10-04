@@ -316,11 +316,11 @@ export default function HomePage() {
 
   const productFamilies = [
     { value: "all", label: "All Research" },
-    { value: "metabolism-research", label: "Metabolism Research" },
-    { value: "brain-nerve-research", label: "Brain & Nerve Research" },
-    { value: "cell-energy-research", label: "Cell & Energy Research" },
-    { value: "peptide-molecular-research", label: "Peptide & Molecular Research" },
-    { value: "hormone-signaling-research", label: "Hormone & Signaling Research" },
+    { value: "metabolism-research", label: "Compound Series A" },
+    { value: "brain-nerve-research", label: "Compound Series B" },
+    { value: "cell-energy-research", label: "Compound Series C" },
+    { value: "peptide-molecular-research", label: "Compound Series D" },
+    { value: "hormone-signaling-research", label: "Compound Series E" },
   ];
 
   const researchFamilyThemes: Record<

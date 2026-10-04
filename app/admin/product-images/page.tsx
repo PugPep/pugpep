@@ -134,11 +134,11 @@ const PRODUCT_FAMILY_OPTIONS: Array<{
   value: ResearchFamily;
   label: string;
 }> = [
-  { value: "metabolism-research", label: "Metabolism Research" },
-  { value: "brain-nerve-research", label: "Brain & Nerve Research" },
-  { value: "cell-energy-research", label: "Cell & Energy Research" },
-  { value: "peptide-molecular-research", label: "Peptide & Molecular Research" },
-  { value: "hormone-signaling-research", label: "Hormone & Signaling Research" },
+  { value: "metabolism-research", label: "Compound Series A" },
+  { value: "brain-nerve-research", label: "Compound Series B" },
+  { value: "cell-energy-research", label: "Compound Series C" },
+  { value: "peptide-molecular-research", label: "Compound Series D" },
+  { value: "hormone-signaling-research", label: "Compound Series E" },
 ];
 
 const PALETTE_OPTIONS: Array<{
@@ -1078,9 +1078,12 @@ export default function ProductImagesAdminPage() {
     }
   }
 
+  const engineLoadRequestRef = useRef(0);
+
   const loadEngineData =
     useCallback(
       async () => {
+        const requestId = ++engineLoadRequestRef.current;
         try {
           setStatus(
             "Loading Product Image Engine..."
@@ -1105,6 +1108,7 @@ export default function ProductImagesAdminPage() {
                 `/api/admin/product-image-engine/templates?family=${family}`,
                 {
                   headers,
+                  cache: "no-store",
                 }
               ),
             ]);
@@ -1130,6 +1134,11 @@ export default function ProductImagesAdminPage() {
 
           const templateJson =
             await templateResponse.json();
+
+          // An upload or newer load takes precedence over this response.
+          if (requestId !== engineLoadRequestRef.current) {
+            return;
+          }
 
           const loadedProducts:
             Product[] =
@@ -1299,6 +1308,9 @@ export default function ProductImagesAdminPage() {
         } catch (
           error
         ) {
+          if (requestId !== engineLoadRequestRef.current) {
+            return;
+          }
           console.error(
             error
           );
@@ -1499,6 +1511,13 @@ export default function ProductImagesAdminPage() {
           null;
       }
 
+      if (!uploadedTemplate?.id) {
+        throw new Error("The server did not return the uploaded template. Check the templates upload route before trying again.");
+      }
+
+      // Ignore data loads started before this upload completed.
+      ++engineLoadRequestRef.current;
+
       setTemplateFile(
         null
       );
@@ -1522,7 +1541,6 @@ export default function ProductImagesAdminPage() {
         );
       }
 
-      await loadEngineData();
 
       if (
         uploadedTemplate
@@ -1550,7 +1568,12 @@ export default function ProductImagesAdminPage() {
 
             return [
               uploadedTemplate as Template,
-              ...withoutUploaded,
+              ...withoutUploaded.map((template) =>
+                template.family === uploadedTemplate?.family &&
+                (template.product_family || null) === (uploadedTemplate?.product_family || null)
+                  ? { ...template, is_active: false }
+                  : template
+              ),
             ];
           }
         );
@@ -2617,6 +2640,94 @@ export default function ProductImagesAdminPage() {
     }
 
     return response.blob();
+  }
+
+  async function editSingleProduct(productId: string) {
+    if (busy || bulkPreviewing) return;
+    const product = products.find((item) => item.id === productId);
+    if (!product) {
+      setStatus("Choose the product you want to edit first.");
+      return;
+    }
+    const currentTemplate = templates.find((item) => item.id === selectedTemplateId);
+    const compatibleCurrent = currentTemplate && (
+      product.category === "lab-material" ||
+      (product.product_family && (!currentTemplate.product_family || currentTemplate.product_family === product.product_family))
+    );
+    const template = compatibleCurrent ? currentTemplate : getCompatibleTemplateForProduct(product);
+    if (!template) {
+      setStatus("No compatible template exists for this product. Choose or upload a matching template first.");
+      return;
+    }
+    const sameTemplate = template.id === selectedTemplateId;
+    const existing = bulkPreviews.find((item) => item.productId === product.id);
+    if (existing && sameTemplate) {
+      setProductFamilyFilter(product.product_family || "all");
+      setEditingPreviewId(product.id);
+      setStatus(`Editing ${product.name} only. Other vial previews are unchanged.`);
+      return;
+    }
+    if (!sameTemplate && bulkPreviews.length > 0 && !window.confirm(
+      "This product needs a different template. Opening it will replace the current preview list. Save your session first if you want to keep those previews. Continue?"
+    )) return;
+
+    setBusy(true);
+    setRestoreBulkRequested(false);
+    try {
+      setStatus(`Preparing the editor for ${product.name} only...`);
+      const restored = restoredBulkStateRef.current.get(product.id);
+      const baseLayout: ProductLayout = existing?.layout || restored?.layout || {
+        labelText: splitProductLabel(product.name).name,
+        nameY: sameTemplate ? nameY : template.name_y,
+        strengthY: sameTemplate ? strengthY : template.strength_y,
+        researchTextY: sameTemplate ? researchY : template.research_text_y,
+        nameFontSize: sameTemplate ? nameFontSize : template.name_font_size,
+        strengthFontSize: sameTemplate ? strengthFontSize : template.strength_font_size,
+        researchFontSize: sameTemplate ? researchFontSize : template.research_font_size,
+      };
+      const layout: ProductLayout = {
+        ...baseLayout,
+        nameFontSize: clampNameFontSizeToRenderer(baseLayout.labelText, baseLayout.nameFontSize),
+      };
+      const letteringColor = getValidHexColor(existing?.letteringColor || restored?.letteringColor) || getManualOrProductColor(product);
+      const blob = await requestPreviewBlob({
+        headers: await getAuthHeaders(),
+        productId: product.id,
+        templateId: template.id,
+        layout,
+        labelText: layout.labelText,
+        letteringColor,
+      });
+      const fit = runFitCheck(product, template, layout);
+      const nextItem: BulkPreviewItem = {
+        productId: product.id,
+        productName: product.name,
+        previewUrl: URL.createObjectURL(blob),
+        fitStatus: fit.fitStatus,
+        reasons: fit.reasons,
+        approved: false,
+        layout,
+        letteringColor,
+      };
+      const priorItems = bulkPreviewsRef.current;
+      for (const item of priorItems) {
+        if ((!sameTemplate || item.productId === product.id) && item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      }
+      const nextItems = sameTemplate
+        ? [...priorItems.filter((item) => item.productId !== product.id), nextItem]
+        : [nextItem];
+      bulkPreviewsRef.current = nextItems;
+      setBulkPreviews(nextItems);
+      setSelectedTemplateId(template.id);
+      setProductFamilyFilter(product.product_family || "all");
+      setEditingPreviewId(product.id);
+      setStatus(`Editing ${product.name} only. Change the product name on the label, review the preview, then approve it. Nothing was published.`);
+    } catch (error) {
+      console.error(error);
+      setStatus(error instanceof Error ? error.message : "Unable to open this product's image editor.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function previewAllProducts(
@@ -3758,6 +3869,13 @@ export default function ProductImagesAdminPage() {
 
   return (
     <main style={page}>
+      <style>{`
+        @media (max-width: 760px) {
+          .image-engine-product-setup { grid-template-columns: minmax(0, 1fr) auto !important; }
+          .image-engine-product-setup > :first-child,
+          .image-engine-product-setup > :last-child { grid-column: 1 / -1; }
+        }
+      `}</style>
       <div style={shell}>
         <header style={header}>
           <div style={headerTopRow}>
@@ -3979,7 +4097,7 @@ export default function ProductImagesAdminPage() {
             </div>
           </div>
 
-          <div style={previewSetupInlinePanel}>
+          <div className="image-engine-product-setup" style={previewSetupInlinePanel}>
             <div style={previewSetupFieldGroup}>
               <span style={previewSetupLabel}>
                 TEMPLATE
@@ -4158,6 +4276,14 @@ export default function ProductImagesAdminPage() {
                 ))}
               </select>
             </div>
+
+            <button
+              type="button"
+              onClick={() => void editSingleProduct(selectedProductId)}
+              disabled={busy || bulkPreviewing || !selectedProductId}
+              style={{ ...productEditInlineButton, opacity: busy || bulkPreviewing || !selectedProductId ? .5 : 1 }}
+              aria-label="Edit selected product image lettering"
+            >Edit</button>
 
             <div style={previewSetupColorGroup}>
               <span style={previewSetupLabel}>
@@ -4499,6 +4625,8 @@ export default function ProductImagesAdminPage() {
               </h2>
             </div>
           </div>
+
+
 
           <p style={helperText}>
             Choose a Product Family to automatically render previews for that family. Approve the images
@@ -6392,7 +6520,7 @@ const previewSetupInlinePanel = {
   borderRadius: 12,
   background: "rgba(255,255,255,.02)",
   display: "grid",
-  gridTemplateColumns: "1.2fr 1.2fr .9fr",
+  gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1.2fr) auto minmax(0, .9fr)",
   gap: 12,
   alignItems: "end",
 };
@@ -7232,3 +7360,6 @@ const selectAllInlineLabelShifted: React.CSSProperties = {
   marginLeft: 18,
   flexShrink: 0,
 };
+
+
+const productEditInlineButton = { padding: "8px 13px", minHeight: 42, borderRadius: 9, border: "1px solid rgba(0,217,255,.5)", background: "rgba(0,217,255,.08)", color: "#7df9ff", fontSize: 13, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" as const };

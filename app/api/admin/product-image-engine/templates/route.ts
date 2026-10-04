@@ -1,15 +1,12 @@
 import { NextResponse } from "next/server";
-
 import {
   requireProductImageAdmin,
 } from "../../../../../lib/productImageEngine/server";
-
 const VALID_FAMILIES = [
   "peptides",
   "sprays",
   "lab-materials",
 ];
-
 const VALID_PRODUCT_FAMILIES = [
   "metabolism-research",
   "brain-nerve-research",
@@ -17,25 +14,21 @@ const VALID_PRODUCT_FAMILIES = [
   "peptide-molecular-research",
   "hormone-signaling-research",
 ];
-
 function safeNumber(
   value: unknown,
   fallback: number
 ): number {
   const parsed =
     Number(value);
-
   if (
     !Number.isFinite(parsed)
   ) {
     return fallback;
   }
-
   return Math.round(
     parsed
   );
 }
-
 export async function GET(
   request: Request
 ) {
@@ -46,23 +39,19 @@ export async function GET(
       await requireProductImageAdmin(
         request
       );
-
     const url =
       new URL(
         request.url
       );
-
     const family =
       url.searchParams.get(
         "family"
       ) ||
       "peptides";
-
     const productFamily =
       url.searchParams.get(
         "product_family"
       ) || "";
-
     if (
       !VALID_FAMILIES.includes(
         family
@@ -78,7 +67,6 @@ export async function GET(
         }
       );
     }
-
     if (
       productFamily &&
       !VALID_PRODUCT_FAMILIES.includes(
@@ -95,7 +83,6 @@ export async function GET(
         }
       );
     }
-
     let templateQuery =
       admin
         .from(
@@ -106,7 +93,6 @@ export async function GET(
           "family",
           family
         );
-
     if (
       productFamily
     ) {
@@ -116,7 +102,6 @@ export async function GET(
           productFamily
         );
     }
-
     const {
       data,
       error,
@@ -128,7 +113,6 @@ export async function GET(
             ascending: false,
           }
         );
-
     if (
       error
     ) {
@@ -136,7 +120,6 @@ export async function GET(
         "Product Image Engine template lookup failed:",
         error
       );
-
       return NextResponse.json(
         {
           error:
@@ -147,7 +130,6 @@ export async function GET(
         }
       );
     }
-
     const templates =
       (
         data || []
@@ -164,7 +146,6 @@ export async function GET(
                 template.template_path
               )
               .data.publicUrl;
-
           const maskUrl =
             template.mask_path
               ? admin.storage
@@ -176,19 +157,15 @@ export async function GET(
                   )
                   .data.publicUrl
               : null;
-
           return {
             ...template,
-
             template_url:
               templateUrl,
-
             mask_url:
               maskUrl,
           };
         }
       );
-
     return NextResponse.json({
       family,
       product_family:
@@ -203,12 +180,10 @@ export async function GET(
     ) {
       return error;
     }
-
     console.error(
       "Product Image Engine templates GET failed:",
       error
     );
-
     return NextResponse.json(
       {
         error:
@@ -220,7 +195,6 @@ export async function GET(
     );
   }
 }
-
 export async function POST(
   request: Request
 ) {
@@ -232,24 +206,20 @@ export async function POST(
       await requireProductImageAdmin(
         request
       );
-
     const form =
       await request.formData();
-
     const family =
       String(
         form.get(
           "family"
         ) || ""
       );
-
     const productFamily =
       String(
         form.get(
           "product_family"
         ) || ""
       ).trim();
-
     const name =
       String(
         form.get(
@@ -257,17 +227,14 @@ export async function POST(
         ) ||
           "PugPep AI Master"
       );
-
     const templateFile =
       form.get(
         "template"
       );
-
     const maskFile =
       form.get(
         "mask"
       );
-
     if (
       !VALID_FAMILIES.includes(
         family
@@ -283,10 +250,10 @@ export async function POST(
         }
       );
     }
-
     if (
       family !==
         "lab-materials" &&
+      productFamily &&
       !VALID_PRODUCT_FAMILIES.includes(
         productFamily
       )
@@ -301,7 +268,6 @@ export async function POST(
         }
       );
     }
-
     if (
       !(
         templateFile instanceof File
@@ -317,12 +283,10 @@ export async function POST(
         }
       );
     }
-
     /*
       IMPORTANT:
       Version numbers remain global within the existing
       image type bucket (peptides / sprays / lab-materials).
-
       The database may already enforce uniqueness on
       (family, version), so DO NOT restart version numbering
       for each research Product Family.
@@ -330,7 +294,6 @@ export async function POST(
     const {
       data:
         latestTemplate,
-
       error:
         latestError,
     } =
@@ -354,7 +317,6 @@ export async function POST(
         )
         .limit(1)
         .maybeSingle();
-
     if (
       latestError
     ) {
@@ -362,7 +324,6 @@ export async function POST(
         "Unable to determine latest template version:",
         latestError
       );
-
       return NextResponse.json(
         {
           error:
@@ -373,30 +334,24 @@ export async function POST(
         }
       );
     }
-
     const version =
       (
         latestTemplate?.version ||
         0
       ) + 1;
-
     const folder =
       `${family}/${productFamily || "general"}/v${version}-${Date.now()}`;
-
     const safeTemplateName =
       templateFile.name.replace(
         /[^a-zA-Z0-9._-]/g,
         "-"
       );
-
     const templatePath =
       `${folder}/template-${safeTemplateName}`;
-
     const templateBytes =
       Buffer.from(
         await templateFile.arrayBuffer()
       );
-
     const {
       error:
         templateUploadError,
@@ -412,12 +367,10 @@ export async function POST(
             contentType:
               templateFile.type ||
               "image/png",
-
             upsert:
               false,
           }
         );
-
     if (
       templateUploadError
     ) {
@@ -425,7 +378,6 @@ export async function POST(
         "AI template upload failed:",
         templateUploadError
       );
-
       return NextResponse.json(
         {
           error:
@@ -436,12 +388,10 @@ export async function POST(
         }
       );
     }
-
     let maskPath:
       | string
       | null =
       null;
-
     if (
       maskFile instanceof File &&
       maskFile.size > 0
@@ -451,15 +401,12 @@ export async function POST(
           /[^a-zA-Z0-9._-]/g,
           "-"
         );
-
       maskPath =
         `${folder}/mask-${safeMaskName}`;
-
       const maskBytes =
         Buffer.from(
           await maskFile.arrayBuffer()
         );
-
       const {
         error:
           maskUploadError,
@@ -475,12 +422,10 @@ export async function POST(
               contentType:
                 maskFile.type ||
                 "image/png",
-
               upsert:
                 false,
             }
           );
-
       if (
         maskUploadError
       ) {
@@ -488,7 +433,6 @@ export async function POST(
           "Vial mask upload failed:",
           maskUploadError
         );
-
         return NextResponse.json(
           {
             error:
@@ -500,7 +444,6 @@ export async function POST(
         );
       }
     }
-
     let deactivateQuery =
       admin
         .from(
@@ -514,9 +457,8 @@ export async function POST(
           "family",
           family
         );
-
     deactivateQuery =
-      family === "lab-materials"
+      (family === "lab-materials" || !productFamily)
         ? deactivateQuery.is(
             "product_family",
             null
@@ -525,13 +467,11 @@ export async function POST(
             "product_family",
             productFamily
           );
-
     const {
       error:
         deactivateError,
     } =
       await deactivateQuery;
-
     if (
       deactivateError
     ) {
@@ -539,7 +479,6 @@ export async function POST(
         "Unable to deactivate previous templates:",
         deactivateError
       );
-
       return NextResponse.json(
         {
           error:
@@ -550,11 +489,9 @@ export async function POST(
         }
       );
     }
-
     const {
       data:
         insertedTemplate,
-
       error:
         insertError,
     } =
@@ -564,49 +501,35 @@ export async function POST(
         )
         .insert({
           family,
-
           product_family:
             family === "lab-materials"
               ? null
-              : productFamily,
-
+              : productFamily || null,
           name,
-
           version,
-
           is_active:
             true,
-
           template_path:
             templatePath,
-
           mask_path:
             maskPath,
-
           name_y:
             1110,
-
           strength_y:
             1170,
-
           research_text_y:
             1228,
-
           name_font_size:
             54,
-
           strength_font_size:
             42,
-
           research_font_size:
             22,
-
           created_by:
             user.id,
         })
         .select("*")
         .single();
-
     if (
       insertError ||
       !insertedTemplate
@@ -615,7 +538,6 @@ export async function POST(
         "Template database insert failed:",
         insertError
       );
-
       return NextResponse.json(
         {
           error:
@@ -640,7 +562,6 @@ export async function POST(
         }
       );
     }
-
     const templateUrl =
       admin.storage
         .from(
@@ -650,7 +571,6 @@ export async function POST(
           insertedTemplate.template_path
         )
         .data.publicUrl;
-
     const maskUrl =
       insertedTemplate.mask_path
         ? admin.storage
@@ -662,17 +582,13 @@ export async function POST(
             )
             .data.publicUrl
         : null;
-
     return NextResponse.json({
       success:
         true,
-
       template: {
         ...insertedTemplate,
-
         template_url:
           templateUrl,
-
         mask_url:
           maskUrl,
       },
@@ -685,12 +601,10 @@ export async function POST(
     ) {
       return error;
     }
-
     console.error(
       "Product Image Engine templates POST failed:",
       error
     );
-
     return NextResponse.json(
       {
         error:
@@ -702,7 +616,6 @@ export async function POST(
     );
   }
 }
-
 export async function PATCH(
   request: Request
 ) {
@@ -713,27 +626,22 @@ export async function PATCH(
       await requireProductImageAdmin(
         request
       );
-
     const body =
       await request.json();
-
     const templateId =
       String(
         body.templateId ||
         ""
       );
-
     const requestedName =
       typeof body.name === "string"
         ? body.name.trim()
         : "";
-
     const hasProductFamilyUpdate =
       Object.prototype.hasOwnProperty.call(
         body,
         "product_family"
       );
-
     const requestedProductFamily =
       body.product_family === null ||
       body.product_family === ""
@@ -741,7 +649,6 @@ export async function PATCH(
         : typeof body.product_family === "string"
           ? body.product_family.trim()
           : null;
-
     if (
       !templateId
     ) {
@@ -755,7 +662,6 @@ export async function PATCH(
         }
       );
     }
-
     if (
       hasProductFamilyUpdate &&
       requestedProductFamily !== null &&
@@ -773,43 +679,36 @@ export async function PATCH(
         }
       );
     }
-
     const nameY =
       safeNumber(
         body.nameY,
         1110
       );
-
     const strengthY =
       safeNumber(
         body.strengthY,
         1170
       );
-
     const researchTextY =
       safeNumber(
         body.researchTextY,
         1228
       );
-
     const nameFontSize =
       safeNumber(
         body.nameFontSize,
         54
       );
-
     const strengthFontSize =
       safeNumber(
         body.strengthFontSize,
         42
       );
-
     const researchFontSize =
       safeNumber(
         body.researchFontSize,
         22
       );
-
     if (
       nameY < 0 ||
       strengthY < 0 ||
@@ -825,7 +724,6 @@ export async function PATCH(
         }
       );
     }
-
     if (
       nameFontSize < 8 ||
       nameFontSize > 120 ||
@@ -844,14 +742,12 @@ export async function PATCH(
         }
       );
     }
-
     if (
       hasProductFamilyUpdate
     ) {
       const {
         data:
           currentTemplate,
-
         error:
           currentTemplateError,
       } =
@@ -867,7 +763,6 @@ export async function PATCH(
             templateId
           )
           .single();
-
       if (
         currentTemplateError ||
         !currentTemplate
@@ -882,7 +777,6 @@ export async function PATCH(
           }
         );
       }
-
       if (
         currentTemplate.family ===
           "lab-materials"
@@ -897,7 +791,6 @@ export async function PATCH(
           }
         );
       }
-
       if (
         currentTemplate.is_active
       ) {
@@ -922,7 +815,6 @@ export async function PATCH(
               "id",
               templateId
             );
-
         targetActiveQuery =
           requestedProductFamily === null
             ? targetActiveQuery.is(
@@ -933,13 +825,11 @@ export async function PATCH(
                 "product_family",
                 requestedProductFamily
               );
-
         const {
           error:
             deactivateTargetError,
         } =
           await targetActiveQuery;
-
         if (
           deactivateTargetError
         ) {
@@ -947,7 +837,6 @@ export async function PATCH(
             "Unable to deactivate target-family template:",
             deactivateTargetError
           );
-
           return NextResponse.json(
             {
               error:
@@ -960,7 +849,6 @@ export async function PATCH(
         }
       }
     }
-
     const updatePayload: {
       name_y: number;
       strength_y: number;
@@ -973,39 +861,30 @@ export async function PATCH(
     } = {
       name_y:
         nameY,
-
       strength_y:
         strengthY,
-
       research_text_y:
         researchTextY,
-
       name_font_size:
         nameFontSize,
-
       strength_font_size:
         strengthFontSize,
-
       research_font_size:
         researchFontSize,
     };
-
     if (requestedName) {
       updatePayload.name =
         requestedName;
     }
-
     if (
       hasProductFamilyUpdate
     ) {
       updatePayload.product_family =
         requestedProductFamily;
     }
-
     const {
       data:
         updatedTemplate,
-
       error:
         updateError,
     } =
@@ -1022,7 +901,6 @@ export async function PATCH(
         )
         .select("*")
         .single();
-
     if (
       updateError ||
       !updatedTemplate
@@ -1031,7 +909,6 @@ export async function PATCH(
         "Template layout update failed:",
         updateError
       );
-
       return NextResponse.json(
         {
           error:
@@ -1042,7 +919,6 @@ export async function PATCH(
         }
       );
     }
-
     const templateUrl =
       admin.storage
         .from(
@@ -1052,7 +928,6 @@ export async function PATCH(
           updatedTemplate.template_path
         )
         .data.publicUrl;
-
     const maskUrl =
       updatedTemplate.mask_path
         ? admin.storage
@@ -1064,17 +939,13 @@ export async function PATCH(
             )
             .data.publicUrl
         : null;
-
     return NextResponse.json({
       success:
         true,
-
       template: {
         ...updatedTemplate,
-
         template_url:
           templateUrl,
-
         mask_url:
           maskUrl,
       },
@@ -1087,12 +958,10 @@ export async function PATCH(
     ) {
       return error;
     }
-
     console.error(
       "Product Image Engine templates PATCH failed:",
       error
     );
-
     return NextResponse.json(
       {
         error:
@@ -1104,7 +973,6 @@ export async function PATCH(
     );
   }
 }
-
 export async function DELETE(
   request: Request
 ) {
@@ -1115,16 +983,13 @@ export async function DELETE(
       await requireProductImageAdmin(
         request
       );
-
     const body =
       await request.json();
-
     const templateId =
       String(
         body.templateId ||
         ""
       );
-
     if (
       !templateId
     ) {
@@ -1138,11 +1003,9 @@ export async function DELETE(
         }
       );
     }
-
     const {
       data:
         template,
-
       error:
         lookupError,
     } =
@@ -1165,7 +1028,6 @@ export async function DELETE(
           templateId
         )
         .single();
-
     if (
       lookupError ||
       !template
@@ -1174,7 +1036,6 @@ export async function DELETE(
         "Template delete lookup failed:",
         lookupError
       );
-
       return NextResponse.json(
         {
           error:
@@ -1185,14 +1046,11 @@ export async function DELETE(
         }
       );
     }
-
     /*
       Keep Product Image History intact.
-
       The history table has a foreign key back to
       product_image_templates, so a hard delete fails while
       history rows still reference this template.
-
       Clear those references first instead of deleting the
       history itself.
     */
@@ -1212,7 +1070,6 @@ export async function DELETE(
           "template_id",
           templateId
         );
-
     if (
       historyDetachError
     ) {
@@ -1220,7 +1077,6 @@ export async function DELETE(
         "Template history detach failed:",
         historyDetachError
       );
-
       return NextResponse.json(
         {
           error:
@@ -1245,7 +1101,6 @@ export async function DELETE(
         }
       );
     }
-
     const {
       error:
         deleteError,
@@ -1259,7 +1114,6 @@ export async function DELETE(
           "id",
           templateId
         );
-
     if (
       deleteError
     ) {
@@ -1267,7 +1121,6 @@ export async function DELETE(
         "Template database delete failed:",
         deleteError
       );
-
       return NextResponse.json(
         {
           error:
@@ -1292,7 +1145,6 @@ export async function DELETE(
         }
       );
     }
-
     /*
       Delete storage files only after the database row is gone.
       This prevents the previous failure mode where the files
@@ -1310,11 +1162,9 @@ export async function DELETE(
             "string" &&
           value.length > 0
       );
-
     let storageWarning:
       string | null =
       null;
-
     if (
       storagePaths.length > 0
     ) {
@@ -1329,7 +1179,6 @@ export async function DELETE(
           .remove(
             storagePaths
           );
-
       if (
         storageDeleteError
       ) {
@@ -1337,12 +1186,10 @@ export async function DELETE(
           "Template storage cleanup failed:",
           storageDeleteError
         );
-
         storageWarning =
           "Template record was deleted, but one or more stored template files could not be removed.";
       }
     }
-
     return NextResponse.json({
       success:
         true,
@@ -1361,12 +1208,10 @@ export async function DELETE(
     ) {
       return error;
     }
-
     console.error(
       "Product Image Engine template DELETE failed:",
       error
     );
-
     return NextResponse.json(
       {
         error:
@@ -1378,4 +1223,3 @@ export async function DELETE(
     );
   }
 }
-
