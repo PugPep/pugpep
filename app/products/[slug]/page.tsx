@@ -1584,6 +1584,54 @@ export default function ProductDetailPage() {
             </div>
 
             <div style={imageOptionSection}>
+            {selectedOption && !product.is_coming_soon && (
+              <section aria-label="Quantity">
+                  <div style={quantitySection}>
+                    <span style={quantityLabel}>
+                      Quantity
+                    </span>
+
+                    <div style={quantityRow}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setQuantity((previous) =>
+                            Math.max(
+                              1,
+                              previous - 1
+                            )
+                          )
+                        }
+                        style={qtyButton}
+                        aria-label="Decrease quantity"
+                      >
+                        −
+                      </button>
+
+                      <span style={quantityNumber}>
+                        {quantity}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setQuantity(
+                            (previous) =>
+                              previous + 1
+                          )
+                        }
+                        style={qtyButton}
+                        aria-label="Increase quantity"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+
+              </section>
+            )}
+
               <h2 style={selectOptionTitle}>
                 Select Option
               </h2>
@@ -2222,53 +2270,7 @@ export default function ProductDetailPage() {
                 </aside>
               )}
 
-            {selectedOption && !product.is_coming_soon && (
-              <section aria-label="Quantity">
-                  <div style={quantitySection}>
-                    <span style={quantityLabel}>
-                      Quantity
-                    </span>
 
-                    <div style={quantityRow}>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setQuantity((previous) =>
-                            Math.max(
-                              1,
-                              previous - 1
-                            )
-                          )
-                        }
-                        style={qtyButton}
-                        aria-label="Decrease quantity"
-                      >
-                        −
-                      </button>
-
-                      <span style={quantityNumber}>
-                        {quantity}
-                      </span>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setQuantity(
-                            (previous) =>
-                              previous + 1
-                          )
-                        }
-                        style={qtyButton}
-                        aria-label="Increase quantity"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-
-
-              </section>
-            )}
 
             <section style={productSearchCard}>
               <div style={productSearchHeader}>
@@ -2444,7 +2446,7 @@ const regularPrice = { textDecoration: "line-through", color: "#888", marginRigh
 const salePrice = { color: "#00ff99", fontWeight: 800, };
 
 
-const quantitySection = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, marginTop: 25, padding: "14px 0", borderTop: "1px solid rgba(255,255,255,.12)", borderBottom: "1px solid rgba(255,255,255,.12)", };
+const quantitySection = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, marginTop: 0, marginBottom: 20, padding: "14px 0", borderTop: "1px solid rgba(255,255,255,.12)", borderBottom: "1px solid rgba(255,255,255,.12)", };
 
 const quantityLabel = { color: "#ddd", fontWeight: 700, };
 
