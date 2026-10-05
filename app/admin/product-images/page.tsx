@@ -77,6 +77,7 @@ type ProductLayout = {
   nameFontSize: number;
   strengthFontSize: number;
   researchFontSize: number;
+  showResearchText?: boolean;
 };
 
 type BulkPreviewItem = {
@@ -112,6 +113,7 @@ type SavedImageEngineSession = {
     nameFontSize: number;
     strengthFontSize: number;
     researchFontSize: number;
+    showResearchText?: boolean;
   };
   bulk: SavedBulkState[];
 };
@@ -246,11 +248,9 @@ export default function ProductImagesAdminPage() {
   ] =
     useState("");
 
-  const [
-    previewTemplateId,
-    setPreviewTemplateId,
-  ] =
-    useState("");
+  // Both dropdowns, previews, and publishing share one template selection.
+  const previewTemplateId = selectedTemplateId;
+  const setPreviewTemplateId = setSelectedTemplateId;
 
   const [
     templateName,
@@ -381,6 +381,8 @@ export default function ProductImagesAdminPage() {
     setResearchFontSize,
   ] =
     useState(22);
+
+  const [showResearchText, setShowResearchText] = useState(true);
 
   const [
     paletteChoice,
@@ -649,6 +651,7 @@ export default function ProductImagesAdminPage() {
           nameFontSize,
           strengthFontSize,
           researchFontSize,
+          showResearchText,
         },
         bulk: bulkPreviews.map((item) => ({
           productId: item.productId,
@@ -1019,6 +1022,7 @@ export default function ProductImagesAdminPage() {
       setNameFontSize(session.layout?.nameFontSize ?? 54);
       setStrengthFontSize(session.layout?.strengthFontSize ?? 42);
       setResearchFontSize(session.layout?.researchFontSize ?? 22);
+      setShowResearchText(session.layout?.showResearchText !== false);
 
       if (family !== session.family) {
         setStatus("Restoring saved session...");
@@ -1068,7 +1072,7 @@ export default function ProductImagesAdminPage() {
 
       if ((session.bulk || []).length > 0) {
         setRestoreBulkRequested(true);
-        setStatus("Session restored. Rebuilding saved bulk previews...");
+        setStatus("Session restored. Click Preview All Products to rebuild saved previews.");
       } else {
         setStatus("Saved session restored.");
       }
@@ -1226,38 +1230,14 @@ export default function ProductImagesAdminPage() {
             nextTemplate?.id || ""
           );
 
-          const previewProductFamily =
-            nextProduct?.product_family;
-
-          const previewTemplate =
-            nextProduct?.category ===
-              "lab-material"
-              ? nextTemplate
-              : (
-                  loadedTemplates.find(
-                    (template) =>
-                      template.product_family ===
-                        previewProductFamily &&
-                      template.is_active
-                  ) ||
-                  loadedTemplates.find(
-                    (template) =>
-                      template.product_family ===
-                        previewProductFamily
-                  ) ||
-                  loadedTemplates.find(
-                    (template) =>
-                      !template.product_family &&
-                      template.is_active
-                  ) ||
-                  loadedTemplates.find(
-                    (template) =>
-                      !template.product_family
-                  )
-                );
+          const previewTemplate = nextTemplate;
 
           setPreviewTemplateId(
             previewTemplate?.id || ""
+          );
+          setSelectedTemplateId(previewTemplate?.id || "");
+          setProductFamilyFilter(
+            family === "lab-materials" ? "all" : nextProduct?.product_family || "all"
           );
 
           if (sessionForFamily) {
@@ -1273,6 +1253,7 @@ export default function ProductImagesAdminPage() {
             setNameFontSize(sessionForFamily.layout?.nameFontSize ?? 54);
             setStrengthFontSize(sessionForFamily.layout?.strengthFontSize ?? 42);
             setResearchFontSize(sessionForFamily.layout?.researchFontSize ?? 22);
+            setShowResearchText(sessionForFamily.layout?.showResearchText !== false);
 
             restoredBulkStateRef.current = new Map(
               (sessionForFamily.bulk || []).map((item) => [item.productId, item])
@@ -1282,13 +1263,13 @@ export default function ProductImagesAdminPage() {
 
             if ((sessionForFamily.bulk || []).length > 0) {
               setRestoreBulkRequested(true);
-              setStatus("Session restored. Rebuilding saved bulk previews...");
+              setStatus("Session restored. Click Preview All Products to rebuild saved previews.");
             } else {
               setStatus("Saved session restored.");
             }
           } else {
             loadTemplateControls(
-              nextTemplate
+              previewTemplate
             );
           }
 
@@ -1365,7 +1346,7 @@ export default function ProductImagesAdminPage() {
       );
     },
     [
-      selectedTemplateId,
+      previewTemplateId,
       templates,
     ]
   );
@@ -1650,6 +1631,7 @@ export default function ProductImagesAdminPage() {
                 nameFontSize,
                 strengthFontSize,
                 researchFontSize,
+                showResearchText,
               }),
           }
         );
@@ -1831,6 +1813,7 @@ export default function ProductImagesAdminPage() {
                 nameFontSize,
                 strengthFontSize,
                 researchFontSize,
+                showResearchText,
               }),
           }
         );
@@ -1914,6 +1897,8 @@ export default function ProductImagesAdminPage() {
                 strengthFontSize,
 
                 researchFontSize,
+
+                showResearchText,
               }),
           }
         );
@@ -2022,81 +2007,9 @@ export default function ProductImagesAdminPage() {
     );
   }
 
-  function getCompatibleTemplateForProduct(
-    product?: Product
-  ) {
-    if (!product) {
-      return undefined;
-    }
-
-    if (
-      product.category ===
-      "lab-material"
-    ) {
-      return (
-        templates.find(
-          (template) =>
-            template.id ===
-            previewTemplateId
-        ) ||
-        templates.find(
-          (template) =>
-            template.is_active
-        ) ||
-        templates[0]
-      );
-    }
-
-    const productFamily =
-      product.product_family;
-
-    if (!productFamily) {
-      return undefined;
-    }
-
-    const currentlySelected =
-      templates.find(
-        (template) =>
-          template.id ===
-          previewTemplateId
-      );
-
-    if (
-      currentlySelected &&
-      (
-        !currentlySelected.product_family ||
-        currentlySelected.product_family ===
-          productFamily
-      )
-    ) {
-      return currentlySelected;
-    }
-
-    const exactTemplates =
-      templates.filter(
-        (template) =>
-          template.product_family ===
-          productFamily
-      );
-
-    const sharedTemplates =
-      templates.filter(
-        (template) =>
-          !template.product_family
-      );
-
-    return (
-      exactTemplates.find(
-        (template) =>
-          template.is_active
-      ) ||
-      exactTemplates[0] ||
-      sharedTemplates.find(
-        (template) =>
-          template.is_active
-      ) ||
-      sharedTemplates[0]
-    );
+  function getCompatibleTemplateForProduct(product?: Product) {
+    if (!product) return undefined;
+    return templates.find((template) => template.id === previewTemplateId);
   }
 
   async function generatePreview() {
@@ -2124,7 +2037,7 @@ export default function ProductImagesAdminPage() {
 
     if (!compatibleTemplate) {
       setStatus(
-        "No compatible template exists for this product's Product Family. Upload a matching template or use a shared template."
+        "Choose a template before previewing this product."
       );
 
       return;
@@ -2190,6 +2103,8 @@ export default function ProductImagesAdminPage() {
                   strengthFontSize,
 
                   researchFontSize,
+
+                  showResearchText,
                 },
 
                 paletteKey:
@@ -2292,6 +2207,7 @@ export default function ProductImagesAdminPage() {
   }, [
     selectedProductId,
     previewTemplateId,
+    bulkPreviewing,
     customPickerColor,
     nameY,
     strengthY,
@@ -2299,6 +2215,7 @@ export default function ProductImagesAdminPage() {
     nameFontSize,
     strengthFontSize,
     researchFontSize,
+    showResearchText,
   ]);
 
   function splitProductLabel(productName: string) {
@@ -2500,8 +2417,10 @@ export default function ProductImagesAdminPage() {
     }
 
     if (
-      layout.researchTextY < minTop ||
-      layout.researchTextY > maxBottom
+      layout.showResearchText !== false && (
+        layout.researchTextY < minTop ||
+        layout.researchTextY > maxBottom
+      )
     ) {
       reasons.push(
         "Research-text Y position is outside the conservative template safe area."
@@ -2521,6 +2440,7 @@ export default function ProductImagesAdminPage() {
     }
 
     if (
+      layout.showResearchText !== false &&
       layout.researchTextY - layout.strengthY <
       Math.max(
         layout.strengthFontSize * 0.72,
@@ -2649,12 +2569,7 @@ export default function ProductImagesAdminPage() {
       setStatus("Choose the product you want to edit first.");
       return;
     }
-    const currentTemplate = templates.find((item) => item.id === selectedTemplateId);
-    const compatibleCurrent = currentTemplate && (
-      product.category === "lab-material" ||
-      (product.product_family && (!currentTemplate.product_family || currentTemplate.product_family === product.product_family))
-    );
-    const template = compatibleCurrent ? currentTemplate : getCompatibleTemplateForProduct(product);
+    const template = templates.find((item) => item.id === selectedTemplateId);
     if (!template) {
       setStatus("No compatible template exists for this product. Choose or upload a matching template first.");
       return;
@@ -2684,6 +2599,7 @@ export default function ProductImagesAdminPage() {
         nameFontSize: sameTemplate ? nameFontSize : template.name_font_size,
         strengthFontSize: sameTemplate ? strengthFontSize : template.strength_font_size,
         researchFontSize: sameTemplate ? researchFontSize : template.research_font_size,
+        showResearchText,
       };
       const layout: ProductLayout = {
         ...baseLayout,
@@ -2719,6 +2635,7 @@ export default function ProductImagesAdminPage() {
       bulkPreviewsRef.current = nextItems;
       setBulkPreviews(nextItems);
       setSelectedTemplateId(template.id);
+      setPreviewTemplateId(template.id);
       setProductFamilyFilter(product.product_family || "all");
       setEditingPreviewId(product.id);
       setStatus(`Editing ${product.name} only. Change the product name on the label, review the preview, then approve it. Nothing was published.`);
@@ -2738,95 +2655,7 @@ export default function ProductImagesAdminPage() {
       productsOverride ??
       filteredProducts;
 
-    let targetTemplateId =
-      templateIdOverride !== undefined
-        ? templateIdOverride
-        : selectedTemplateId;
-
-    const targetResearchFamilies =
-      Array.from(
-        new Set(
-          targetProducts
-            .map(
-              (product) =>
-                product.product_family
-            )
-            .filter(
-              (
-                value
-              ): value is ResearchFamily =>
-                Boolean(value)
-            )
-        )
-      );
-
-    if (
-      family !== "lab-materials" &&
-      targetResearchFamilies.length === 1
-    ) {
-      const targetResearchFamily =
-        targetResearchFamilies[0];
-
-      const requestedTemplate =
-        templates.find(
-          (template) =>
-            template.id ===
-            targetTemplateId
-        );
-
-      const requestedTemplateIsCompatible =
-        Boolean(
-          requestedTemplate &&
-          (
-            !requestedTemplate.product_family ||
-            requestedTemplate.product_family ===
-              targetResearchFamily
-          )
-        );
-
-      if (
-        !requestedTemplateIsCompatible
-      ) {
-        const exactTemplates =
-          templates.filter(
-            (template) =>
-              template.product_family ===
-              targetResearchFamily
-          );
-
-        const sharedTemplates =
-          templates.filter(
-            (template) =>
-              !template.product_family
-          );
-
-        const compatibleTemplate =
-          exactTemplates.find(
-            (template) =>
-              template.is_active
-          ) ||
-          exactTemplates[0] ||
-          sharedTemplates.find(
-            (template) =>
-              template.is_active
-          ) ||
-          sharedTemplates[0];
-
-        targetTemplateId =
-          compatibleTemplate?.id ||
-          "";
-
-        if (compatibleTemplate) {
-          setSelectedTemplateId(
-            compatibleTemplate.id
-          );
-
-          loadTemplateControls(
-            compatibleTemplate
-          );
-        }
-      }
-    }
+    const targetTemplateId = templateIdOverride ?? previewTemplateId;
 
     if (
       !targetTemplateId ||
@@ -2854,6 +2683,19 @@ export default function ProductImagesAdminPage() {
 
     const selectedTemplate =
       template;
+
+    // Freeze the format shown above for this entire button-triggered batch.
+    const batchLayout = {
+      nameY,
+      strengthY,
+      researchTextY: researchY,
+      nameFontSize,
+      strengthFontSize,
+      researchFontSize,
+      showResearchText,
+    };
+    const batchColor = getValidHexColor(customPickerColor);
+    const currentItems = new Map(bulkPreviews.map((item) => [item.productId, item]));
 
     bulkPreviews.forEach(
       (item) => {
@@ -2893,37 +2735,18 @@ export default function ProductImagesAdminPage() {
             product.id
           );
 
-        const baseProductLayout:
-          ProductLayout =
-            restoredBulkItem?.layout || {
-              labelText:
-                splitProductLabel(
-                  product.name
-                ).name,
-              nameY,
-              strengthY,
-              researchTextY:
-                researchY,
-              nameFontSize,
-              strengthFontSize,
-              researchFontSize,
-            };
+        const labelText =
+          currentItems.get(product.id)?.layout.labelText ??
+          restoredBulkItem?.layout.labelText ??
+          splitProductLabel(product.name).name;
 
-        const productLayout:
-          ProductLayout = {
-            ...baseProductLayout,
-            nameFontSize:
-              clampNameFontSizeToRenderer(
-                baseProductLayout.labelText,
-                baseProductLayout.nameFontSize
-              ),
-          };
+        const productLayout: ProductLayout = {
+          ...batchLayout,
+          labelText,
+          nameFontSize: clampNameFontSizeToRenderer(labelText, batchLayout.nameFontSize),
+        };
 
-        const letteringColor =
-          getValidHexColor(
-            restoredBulkItem?.letteringColor
-          ) ||
-          getManualOrProductColor(product);
+        const letteringColor = batchColor || getProductAccentColor(product);
 
         const blob =
           await requestPreviewBlob({
@@ -2960,8 +2783,7 @@ export default function ProductImagesAdminPage() {
           reasons:
             fit.reasons,
           approved:
-            restoredBulkItem?.approved ??
-            (fit.fitStatus === "pass"),
+            fit.fitStatus === "pass",
           layout:
             productLayout,
           letteringColor,
@@ -3117,6 +2939,14 @@ export default function ProductImagesAdminPage() {
           : item
       )
     );
+  }
+
+  function updatePreviewResearchText(productId: string, visible: boolean) {
+    setBulkPreviews((current) => current.map((item) =>
+      item.productId === productId
+        ? { ...item, approved: false, layout: { ...item.layout, showResearchText: visible } }
+        : item
+    ));
   }
 
   function updatePreviewLayout(
@@ -3351,6 +3181,7 @@ export default function ProductImagesAdminPage() {
           item.layout.strengthFontSize,
         researchFontSize:
           item.layout.researchFontSize,
+        showResearchText: item.layout.showResearchText !== false,
         letteringColor:
           item.letteringColor,
       });
@@ -3443,6 +3274,11 @@ export default function ProductImagesAdminPage() {
   }
 
   async function regenerateApproved() {
+    const batchTemplateId = previewTemplateId;
+    if (!batchTemplateId) {
+      setStatus("Choose a template above before publishing.");
+      return;
+    }
     const approvedIds =
       filteredBulkPreviews
         .filter(
@@ -3475,34 +3311,32 @@ export default function ProductImagesAdminPage() {
 
     try {
       setBusy(true);
+      let updatedCount = 0;
+      const failures: string[] = [];
 
       for (let index = 0; index < approvedItems.length; index += 1) {
         const item = approvedItems[index];
+        setStatus(`Publishing approved image ${index + 1} of ${approvedItems.length}: ${item.productName}`);
 
-        setStatus(
-          `Publishing approved image ${index + 1} of ${approvedItems.length}: ${item.productName}`
-        );
+        try {
+          await generateImages([item.productId], item.layout, true, item.letteringColor, batchTemplateId);
+          updatedCount += 1;
+        } catch (error) {
+          failures.push(`${item.productName}: ${error instanceof Error ? error.message : "Image generation failed."}`);
+        }
+      }
 
-        await generateImages(
-          [item.productId],
-          item.layout,
-          true,
-          item.letteringColor
-        );
+      if (updatedCount > 0) {
+        await loadEngineData();
       }
 
       setStatus(
-        `${approvedItems.length} approved live image${approvedItems.length === 1 ? "" : "s"} updated.`
+        `${updatedCount} of ${approvedItems.length} approved live images updated.` +
+        (failures.length ? ` ${failures.length} failed. ${failures.join(" | ")}` : "")
       );
-
-      await loadEngineData();
     } catch (error) {
       console.error(error);
-      setStatus(
-        error instanceof Error
-          ? error.message
-          : "Approved image generation failed."
-      );
+      setStatus(error instanceof Error ? error.message : "Approved image generation failed.");
     } finally {
       setBusy(false);
     }
@@ -3513,10 +3347,12 @@ export default function ProductImagesAdminPage() {
       string[],
     layoutOverride?: ProductLayout,
     skipConfirmation = false,
-    letteringColorOverride?: string
+    letteringColorOverride?: string,
+    templateIdOverride?: string
   ) {
+    const generationTemplateId = templateIdOverride ?? previewTemplateId;
     if (
-      !selectedTemplateId
+      !generationTemplateId
     ) {
       setStatus(
         "Choose a template first."
@@ -3584,7 +3420,7 @@ export default function ProductImagesAdminPage() {
                 family,
 
                 templateId:
-                  selectedTemplateId,
+                  generationTemplateId,
 
                 productIds,
 
@@ -3607,6 +3443,8 @@ export default function ProductImagesAdminPage() {
                     strengthFontSize,
 
                     researchFontSize,
+
+                    showResearchText,
                   },
 
                 labelText:
@@ -3626,8 +3464,15 @@ export default function ProductImagesAdminPage() {
           }
         );
 
-      const json =
-        await response.json();
+      const responseText = await response.text();
+      let json: { error?: string; count?: number; committed?: boolean };
+      try {
+        json = JSON.parse(responseText);
+      } catch {
+        throw new Error(
+          `Image generation returned an unexpected server response (HTTP ${response.status}). Check the server logs for /api/admin/product-image-engine/generate.`
+        );
+      }
 
       if (
         !response.ok
@@ -3636,6 +3481,10 @@ export default function ProductImagesAdminPage() {
           json.error ||
             "Image generation failed."
         );
+      }
+
+      if (json.committed !== true || json.count !== productIds.length && productIds.length > 0) {
+        throw new Error("The server did not confirm that all requested product images were updated.");
       }
 
       if (!skipConfirmation) {
@@ -3661,6 +3510,10 @@ export default function ProductImagesAdminPage() {
           ? error.message
           : "Image generation failed."
       );
+
+      if (skipConfirmation) {
+        throw error;
+      }
     } finally {
       if (!skipConfirmation) {
         setBusy(false);
@@ -3680,7 +3533,7 @@ export default function ProductImagesAdminPage() {
     }
 
     setRestoreBulkRequested(false);
-    void previewAllProducts();
+    setStatus("Saved session loaded. Click Preview All Products to rebuild its previews.");
   }, [
     restoreBulkRequested,
     selectedTemplateId,
@@ -3696,24 +3549,7 @@ export default function ProductImagesAdminPage() {
         previewTemplateId
     );
 
-  const filteredTemplates =
-    useMemo(
-      () =>
-        family === "lab-materials" ||
-        productFamilyFilter === "all"
-          ? templates
-          : templates.filter(
-              (template) =>
-                !template.product_family ||
-                template.product_family ===
-                  productFamilyFilter
-            ),
-      [
-        templates,
-        family,
-        productFamilyFilter,
-      ]
-    );
+  const filteredTemplates = templates;
 
   const filteredProducts =
     useMemo(
@@ -3729,81 +3565,6 @@ export default function ProductImagesAdminPage() {
         productFamilyFilter,
       ]
     );
-
-  useEffect(
-    () => {
-      if (
-        family === "lab-materials" ||
-        productFamilyFilter === "all" ||
-        templates.length === 0
-      ) {
-        return;
-      }
-
-      const selectedTemplate =
-        templates.find(
-          (template) =>
-            template.id ===
-            selectedTemplateId
-        );
-
-      const selectedIsCompatible =
-        Boolean(
-          selectedTemplate &&
-          (
-            !selectedTemplate.product_family ||
-            selectedTemplate.product_family ===
-              productFamilyFilter
-          )
-        );
-
-      if (selectedIsCompatible) {
-        return;
-      }
-
-      const exactTemplates =
-        templates.filter(
-          (template) =>
-            template.product_family ===
-            productFamilyFilter
-        );
-
-      const sharedTemplates =
-        templates.filter(
-          (template) =>
-            !template.product_family
-        );
-
-      const compatibleTemplate =
-        exactTemplates.find(
-          (template) =>
-            template.is_active
-        ) ||
-        exactTemplates[0] ||
-        sharedTemplates.find(
-          (template) =>
-            template.is_active
-        ) ||
-        sharedTemplates[0];
-
-      setSelectedTemplateId(
-        compatibleTemplate?.id ||
-        ""
-      );
-
-      if (compatibleTemplate) {
-        loadTemplateControls(
-          compatibleTemplate
-        );
-      }
-    },
-    [
-      family,
-      productFamilyFilter,
-      templates,
-      selectedTemplateId,
-    ]
-  );
 
   const filteredProductIds =
     useMemo(
@@ -3866,6 +3627,49 @@ export default function ProductImagesAdminPage() {
         item.productId === selectedProductId &&
         item.approved
     );
+
+  function productsForSelection(nextFamily: "all" | ResearchFamily) {
+    return nextFamily === "all" ? products : products.filter((product) => product.product_family === nextFamily);
+  }
+
+  function syncImageSelections(nextProductId: string, nextTemplate: Template | undefined, nextFamily: "all" | ResearchFamily) {
+    if ((nextTemplate?.id || "") !== selectedTemplateId) {
+      for (const item of bulkPreviewsRef.current) {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      }
+      bulkPreviewsRef.current = [];
+      setBulkPreviews([]);
+    }
+    setSelectedProductId(nextProductId);
+    setProductFamilyFilter(nextFamily);
+    setPreviewTemplateId(nextTemplate?.id || "");
+    setSelectedTemplateId(nextTemplate?.id || "");
+    if (nextTemplate) {
+      loadTemplateControls(nextTemplate);
+
+    } else {
+      setStatus("No compatible template is available for this selection.");
+    }
+  }
+
+  function selectProductInBothSections(productId: string) {
+    const product = products.find((item) => item.id === productId);
+    const nextFamily = family === "lab-materials" ? "all" : product?.product_family || "all";
+    const template = templates.find((item) => item.id === selectedTemplateId);
+    syncImageSelections(productId, template, nextFamily);
+  }
+
+  function selectTemplateInBothSections(templateId: string) {
+    const template = templates.find((item) => item.id === templateId);
+    syncImageSelections(selectedProductId, template, productFamilyFilter);
+  }
+
+  function selectFamilyInBothSections(nextFamily: "all" | ResearchFamily) {
+    const matchingProducts = productsForSelection(nextFamily);
+    const nextProduct = matchingProducts.find((product) => product.id === selectedProductId) || matchingProducts[0];
+    const template = templates.find((item) => item.id === selectedTemplateId);
+    syncImageSelections(nextProduct?.id || "", template, nextFamily);
+  }
 
   return (
     <main style={page}>
@@ -4105,57 +3909,7 @@ export default function ProductImagesAdminPage() {
 
               <select
                 value={previewTemplateId}
-                onChange={(event) => {
-                  const nextTemplateId =
-                    event.target.value;
-
-                  setPreviewTemplateId(
-                    nextTemplateId
-                  );
-
-                  const nextTemplate =
-                    templates.find(
-                      (template) =>
-                        template.id ===
-                        nextTemplateId
-                    );
-
-                  if (nextTemplate) {
-                    loadTemplateControls(
-                      nextTemplate
-                    );
-
-                    if (
-                      nextTemplate.product_family
-                    ) {
-                      const currentProduct =
-                        products.find(
-                          (product) =>
-                            product.id ===
-                            selectedProductId
-                        );
-
-                      const currentProductMatches =
-                        currentProduct?.product_family ===
-                        nextTemplate.product_family;
-
-                      if (!currentProductMatches) {
-                        const matchingProduct =
-                          products.find(
-                            (product) =>
-                              product.product_family ===
-                              nextTemplate.product_family
-                          );
-
-                        if (matchingProduct) {
-                          setSelectedProductId(
-                            matchingProduct.id
-                          );
-                        }
-                      }
-                    }
-                  }
-                }}
+                onChange={(event) => selectTemplateInBothSections(event.target.value)}
                 style={input}
               >
                 <option value="">
@@ -4180,86 +3934,7 @@ export default function ProductImagesAdminPage() {
 
               <select
                 value={selectedProductId}
-                onChange={(event) => {
-                  const nextProductId =
-                    event.target.value;
-
-                  setSelectedProductId(
-                    nextProductId
-                  );
-
-                  const nextProduct =
-                    products.find(
-                      (product) =>
-                        product.id ===
-                        nextProductId
-                    );
-
-                  if (!nextProduct) {
-                    return;
-                  }
-
-                  const productFamily =
-                    nextProduct.product_family;
-
-                  const currentTemplate =
-                    templates.find(
-                      (template) =>
-                        template.id ===
-                        previewTemplateId
-                    );
-
-                  const currentCompatible =
-                    nextProduct.category ===
-                      "lab-material" ||
-                    Boolean(
-                      currentTemplate &&
-                      (
-                        !currentTemplate.product_family ||
-                        currentTemplate.product_family ===
-                          productFamily
-                      )
-                    );
-
-                  if (currentCompatible) {
-                    return;
-                  }
-
-                  const exactTemplates =
-                    templates.filter(
-                      (template) =>
-                        template.product_family ===
-                        productFamily
-                    );
-
-                  const sharedTemplates =
-                    templates.filter(
-                      (template) =>
-                        !template.product_family
-                    );
-
-                  const nextTemplate =
-                    exactTemplates.find(
-                      (template) =>
-                        template.is_active
-                    ) ||
-                    exactTemplates[0] ||
-                    sharedTemplates.find(
-                      (template) =>
-                        template.is_active
-                    ) ||
-                    sharedTemplates[0];
-
-                  setPreviewTemplateId(
-                    nextTemplate?.id || ""
-                  );
-
-                  if (nextTemplate) {
-                    loadTemplateControls(
-                      nextTemplate
-                    );
-                  }
-                }}
+                onChange={(event) => selectProductInBothSections(event.target.value)}
                 style={input}
               >
                 <option value="">
@@ -4560,6 +4235,8 @@ export default function ProductImagesAdminPage() {
                   >
                     SAVE SESSION
                   </button>
+
+
                 </div>
               </div>
 
@@ -4594,6 +4271,9 @@ export default function ProductImagesAdminPage() {
 
                 <TextControl
                   title="Research Use Only"
+                  visible={showResearchText}
+                  onVisibilityChange={setShowResearchText}
+                  visibilityDisabled={busy || bulkPreviewing}
                   y={
                     researchY
                   }
@@ -4629,7 +4309,7 @@ export default function ProductImagesAdminPage() {
 
 
           <p style={helperText}>
-            Choose a Product Family to automatically render previews for that family. Approve the images
+            Choose a Product Family and template, then click Preview All Products to render that selection. Approve the images
             that look correct, then publish directly from the same action row. Nothing is published until you
             use one of the regenerate buttons.
           </p>
@@ -4642,89 +4322,7 @@ export default function ProductImagesAdminPage() {
 
               <select
                 value={productFamilyFilter}
-                onChange={(event) => {
-                  const nextFamily =
-                    event.target.value as
-                      | "all"
-                      | ResearchFamily;
-
-                  setProductFamilyFilter(
-                    nextFamily
-                  );
-
-                  const nextProducts =
-                    nextFamily === "all"
-                      ? products
-                      : products.filter(
-                          (product) =>
-                            product.product_family ===
-                            nextFamily
-                        );
-
-                  const nextTemplates =
-                    family === "lab-materials" ||
-                    nextFamily === "all"
-                      ? templates
-                      : templates.filter(
-                          (template) =>
-                            !template.product_family ||
-                            template.product_family ===
-                              nextFamily
-                        );
-
-                  const exactTemplates =
-                    nextFamily === "all"
-                      ? nextTemplates
-                      : nextTemplates.filter(
-                          (template) =>
-                            template.product_family ===
-                            nextFamily
-                        );
-
-                  const sharedTemplates =
-                    nextTemplates.filter(
-                      (template) =>
-                        !template.product_family
-                    );
-
-                  const nextTemplate =
-                    exactTemplates.find(
-                      (template) =>
-                        template.is_active
-                    ) ||
-                    exactTemplates[0] ||
-                    sharedTemplates.find(
-                      (template) =>
-                        template.is_active
-                    ) ||
-                    sharedTemplates[0];
-
-                  if (nextTemplate) {
-                    setSelectedTemplateId(
-                      nextTemplate.id
-                    );
-                    loadTemplateControls(
-                      nextTemplate
-                    );
-                  } else {
-                    setSelectedTemplateId(
-                      ""
-                    );
-                  }
-
-                  if (nextTemplate) {
-                    void previewAllProducts(
-                      nextProducts,
-                      nextTemplate.id
-                    );
-                  } else {
-                    setStatus(
-                      nextFamily === "all"
-                        ? "No templates are available."
-                        : "No compatible template exists for this Product Family. Upload a family template or use a shared template."
-                    );
-                  }
-                }}
+                onChange={(event) => selectFamilyInBothSections(event.target.value as "all" | ResearchFamily)}
                 style={input}
                 disabled={
                   family ===
@@ -4759,51 +4357,14 @@ export default function ProductImagesAdminPage() {
               <div style={templateSelectActionRow}>
                 <select
                   value={selectedTemplateId}
-                  onChange={(event) => {
-                    const nextTemplateId =
-                      event.target.value;
-
-                    setSelectedTemplateId(
-                      nextTemplateId
-                    );
-
-                    const nextTemplate =
-                      templates.find(
-                        (template) =>
-                          template.id ===
-                          nextTemplateId
-                      );
-
-                    if (nextTemplate) {
-                      loadTemplateControls(
-                        nextTemplate
-                      );
-                    }
-
-                    if (nextTemplateId) {
-                      void previewAllProducts(
-                        filteredProducts,
-                        nextTemplateId
-                      );
-                    }
-                  }}
-                  style={templateSelectInput}
+                  onChange={(event) => selectTemplateInBothSections(event.target.value)}
+                style={templateSelectInput}
                 >
                   <option value="">
                     Choose template
                   </option>
 
-                  {(
-                    family === "lab-materials" ||
-                    productFamilyFilter === "all"
-                      ? templates
-                      : templates.filter(
-                          (template) =>
-                            !template.product_family ||
-                            template.product_family ===
-                              productFamilyFilter
-                        )
-                  ).map((template) => (
+                  {templates.map((template) => (
                     <option
                       key={template.id}
                       value={template.id}
@@ -5605,6 +5166,16 @@ export default function ProductImagesAdminPage() {
                             step={2}
                           />
 
+                          <label style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", cursor: "pointer" }}>
+                            <input
+                              type="checkbox"
+                              checked={editingItem.layout.showResearchText !== false}
+                              disabled={busy}
+                              onChange={(event) => updatePreviewResearchText(editingItem.productId, event.target.checked)}
+                            />
+                            Show research use only text
+                          </label>
+
                           <EditorNumberControl
                             label="Research Text Font"
                             value={editingItem.layout.researchFontSize}
@@ -5813,6 +5384,9 @@ function EditorNumberControl({
 function TextControl(
   props: {
     title: string;
+    visible?: boolean;
+    onVisibilityChange?: (visible: boolean) => void;
+    visibilityDisabled?: boolean;
 
     y: number;
 
@@ -5840,11 +5414,19 @@ function TextControl(
 
   return (
     <div style={controlCard}>
-      <strong style={controlTitle}>
-        {
-          title
-        }
-      </strong>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <strong style={controlTitle}>{title}</strong>
+        {props.onVisibilityChange && (
+          <input
+            type="checkbox"
+            checked={props.visible !== false}
+            disabled={props.visibilityDisabled}
+            onChange={(event) => props.onVisibilityChange?.(event.target.checked)}
+            aria-label={`Show ${title} text`}
+            style={{ margin: 0, cursor: "pointer", accentColor: "#7df9ff" }}
+          />
+        )}
+      </div>
 
       <label style={label}>
         Y Position

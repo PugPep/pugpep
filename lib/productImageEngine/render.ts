@@ -1,19 +1,17 @@
 import sharp, {
   type OverlayOptions,
 } from "sharp";
-
 import type {
   CyberPalette,
   EngineProduct,
   ProductImageTemplate,
 } from "./types";
-
 type RenderTemplate = ProductImageTemplate & {
   name_font_size?: number;
   strength_font_size?: number;
   research_font_size?: number;
+  show_research_text?: boolean;
 };
-
 function escapeXml(
   value: string
 ): string {
@@ -24,7 +22,6 @@ function escapeXml(
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
 }
-
 function splitProductName(
   value: string
 ): {
@@ -33,31 +30,25 @@ function splitProductName(
 } {
   const trimmed =
     value.trim();
-
   const match =
     trimmed.match(
       /^(.*?)(?:\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml)))$/i
     );
-
   if (!match) {
     return {
       name:
         trimmed,
-
       strength:
         "",
     };
   }
-
   return {
     name:
       match[1].trim(),
-
     strength:
       match[2].trim(),
   };
 }
-
 function getManualLabelLines(
   value: string
 ): string[] {
@@ -69,12 +60,10 @@ function getManualLabelLines(
         (line) =>
           line.trim()
       );
-
   return lines.length > 0
     ? lines
     : [value];
 }
-
 function getLongestLine(
   lines: string[]
 ): string {
@@ -87,17 +76,14 @@ function getLongestLine(
     ""
   );
 }
-
 function getAdaptiveNameFontSize(
   value: string,
   requestedSize: number
 ): number {
   const length =
     value.length;
-
   let maximum =
     requestedSize;
-
   if (length > 32) {
     maximum =
       Math.min(
@@ -145,10 +131,8 @@ function getAdaptiveNameFontSize(
         62
       );
   }
-
   return maximum;
 }
-
 function getProductNameLetterSpacing(
   value: string
 ): number {
@@ -157,16 +141,13 @@ function getProductNameLetterSpacing(
   ) {
     return 1.5;
   }
-
   if (
     value.length <= 22
   ) {
     return 1;
   }
-
   return 0;
 }
-
 async function fetchImageBuffer(
   url: string
 ): Promise<Buffer> {
@@ -178,7 +159,6 @@ async function fetchImageBuffer(
           "no-store",
       }
     );
-
   if (
     !response.ok
   ) {
@@ -186,15 +166,12 @@ async function fetchImageBuffer(
       `Unable to load image (${response.status}): ${url}`
     );
   }
-
   const arrayBuffer =
     await response.arrayBuffer();
-
   return Buffer.from(
     arrayBuffer
   );
 }
-
 function createGlowLayer(
   width: number,
   height: number,
@@ -216,26 +193,22 @@ function createGlowLayer(
             stop-color="${palette.glow}"
             stop-opacity="0.55"
           />
-
           <stop
             offset="42%"
             stop-color="${palette.glow}"
             stop-opacity="0.28"
           />
-
           <stop
             offset="72%"
             stop-color="${palette.glow}"
             stop-opacity="0.09"
           />
-
           <stop
             offset="100%"
             stop-color="${palette.glow}"
             stop-opacity="0"
           />
         </radialGradient>
-
         <filter
           id="blurGlow"
         >
@@ -244,7 +217,6 @@ function createGlowLayer(
           />
         </filter>
       </defs>
-
       <ellipse
         cx="${width / 2}"
         cy="${height * 0.53}"
@@ -255,12 +227,10 @@ function createGlowLayer(
       />
     </svg>
   `;
-
   return Buffer.from(
     svg
   );
 }
-
 function createTextLayer(
   width: number,
   height: number,
@@ -273,22 +243,18 @@ function createTextLayer(
     getManualLabelLines(
       productName.toUpperCase()
     );
-
   const safeProductNameLines =
     productNameLines.map(
       (line) =>
         escapeXml(line)
     );
-
   const safeStrength =
     escapeXml(
       strength.toUpperCase()
     );
-
   const requestedNameSize =
     template.name_font_size ??
     54;
-
   const nameFontSize =
     getAdaptiveNameFontSize(
       getLongestLine(
@@ -296,22 +262,18 @@ function createTextLayer(
       ),
       requestedNameSize
     );
-
   const strengthFontSize =
     template.strength_font_size ??
     42;
-
   const researchFontSize =
     template.research_font_size ??
     22;
-
   const productNameLetterSpacing =
     getProductNameLetterSpacing(
       getLongestLine(
         productNameLines
       )
     );
-
   const nameLineHeight =
     Math.max(
       Math.round(
@@ -319,13 +281,11 @@ function createTextLayer(
       ),
       24
     );
-
   const nameStartY =
     template.name_y -
     ((safeProductNameLines.length - 1) *
       nameLineHeight) /
       2;
-
   const nameMarkup =
     safeProductNameLines
       .map(
@@ -347,7 +307,6 @@ function createTextLayer(
         `
       )
       .join("");
-
   const strengthMarkup =
     strength
       ? `
@@ -367,7 +326,24 @@ function createTextLayer(
         </text>
       `
       : "";
-
+  const researchMarkup = template.show_research_text !== false
+    ? `
+      <text
+        x="${width / 2}"
+        y="${template.research_text_y}"
+        text-anchor="middle"
+        dominant-baseline="middle"
+        fill="#f5f7fa"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="${researchFontSize}"
+        font-weight="800"
+        letter-spacing="3"
+        filter="url(#textGlow)"
+      >
+        FOR RESEARCH USE ONLY
+      </text>
+      `
+    : "";
   const svg = `
     <svg
       width="${width}"
@@ -387,18 +363,15 @@ function createTextLayer(
             stdDeviation="3"
             result="blur"
           />
-
           <feMerge>
             <feMergeNode
               in="blur"
             />
-
             <feMergeNode
               in="SourceGraphic"
             />
           </feMerge>
         </filter>
-
         <filter
           id="nameGlow"
           x="-30%"
@@ -410,45 +383,25 @@ function createTextLayer(
             stdDeviation="2"
             result="blur"
           />
-
           <feMerge>
             <feMergeNode
               in="blur"
             />
-
             <feMergeNode
               in="SourceGraphic"
             />
           </feMerge>
         </filter>
       </defs>
-
       ${nameMarkup}
-
       ${strengthMarkup}
-
-      <text
-        x="${width / 2}"
-        y="${template.research_text_y}"
-        text-anchor="middle"
-        dominant-baseline="middle"
-        fill="#f5f7fa"
-        font-family="Arial, Helvetica, sans-serif"
-        font-size="${researchFontSize}"
-        font-weight="800"
-        letter-spacing="3"
-        filter="url(#textGlow)"
-      >
-        FOR RESEARCH USE ONLY
-      </text>
+      ${researchMarkup}
     </svg>
   `;
-
   return Buffer.from(
     svg
   );
 }
-
 async function createMaskedColorLayer(
   width: number,
   height: number,
@@ -470,31 +423,24 @@ async function createMaskedColorLayer(
       .ensureAlpha()
       .png()
       .toBuffer();
-
   const rgb =
     hexToRgb(
       palette.primary
     );
-
   const solidColor =
     await sharp({
       create: {
         width,
         height,
-
         channels:
           4,
-
         background: {
           r:
             rgb.r,
-
           g:
             rgb.g,
-
           b:
             rgb.b,
-
           alpha:
             0.48,
         },
@@ -502,7 +448,6 @@ async function createMaskedColorLayer(
     })
       .png()
       .toBuffer();
-
   return sharp(
     solidColor
   )
@@ -510,7 +455,6 @@ async function createMaskedColorLayer(
       {
         input:
           normalizedMask,
-
         blend:
           "dest-in",
       },
@@ -518,7 +462,6 @@ async function createMaskedColorLayer(
     .png()
     .toBuffer();
 }
-
 function hexToRgb(
   hex: string
 ): {
@@ -531,7 +474,6 @@ function hexToRgb(
       "#",
       ""
     );
-
   const safeHex =
     normalized.length === 3
       ? normalized
@@ -544,45 +486,35 @@ function hexToRgb(
           )
           .join("")
       : normalized;
-
   const value =
     Number.parseInt(
       safeHex,
       16
     );
-
   return {
     r:
       (value >> 16) &
       255,
-
     g:
       (value >> 8) &
       255,
-
     b:
       value &
       255,
   };
 }
-
 export async function renderProductImage(
   args: {
     template:
       RenderTemplate;
-
     templateUrl:
       string;
-
     maskUrl?:
       string | null;
-
     product:
       EngineProduct;
-
     palette:
       CyberPalette;
-
     labelText?:
       string | null;
   }
@@ -596,43 +528,35 @@ export async function renderProductImage(
     labelText,
   } =
     args;
-
   const width =
     template.canvas_width ||
     1200;
-
   const height =
     template.canvas_height ||
     1500;
-
   const templateBuffer =
     await fetchImageBuffer(
       templateUrl
     );
-
   const {
     name:
       defaultProductName,
-
     strength,
   } =
     splitProductName(
       product.name
     );
-
   const productName =
     typeof labelText === "string" &&
     labelText.trim().length > 0
       ? labelText
       : defaultProductName;
-
   const glowLayer =
     createGlowLayer(
       width,
       height,
       palette
     );
-
   const textLayer =
     createTextLayer(
       width,
@@ -642,24 +566,19 @@ export async function renderProductImage(
       strength,
       palette
     );
-
   const composites:
     OverlayOptions[] = [
       {
         input:
           glowLayer,
-
         top:
           0,
-
         left:
           0,
-
         blend:
           "screen",
       },
     ];
-
   if (
     maskUrl
   ) {
@@ -667,7 +586,6 @@ export async function renderProductImage(
       await fetchImageBuffer(
         maskUrl
       );
-
     const maskedColorLayer =
       await createMaskedColorLayer(
         width,
@@ -675,33 +593,25 @@ export async function renderProductImage(
         maskBuffer,
         palette
       );
-
     composites.push({
       input:
         maskedColorLayer,
-
       top:
         0,
-
       left:
         0,
-
       blend:
         "screen",
     });
   }
-
   composites.push({
     input:
       textLayer,
-
     top:
       0,
-
     left:
       0,
   });
-
   return sharp(
     templateBuffer
   )
@@ -711,7 +621,6 @@ export async function renderProductImage(
       {
         fit:
           "cover",
-
         position:
           "center",
       }
@@ -722,7 +631,6 @@ export async function renderProductImage(
     .webp({
       quality:
         92,
-
       effort:
         4,
     })

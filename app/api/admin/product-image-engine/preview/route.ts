@@ -1,31 +1,24 @@
 import { NextResponse } from "next/server";
-
 import {
   CYBER_PALETTES,
   paletteForSlug,
 } from "../../../../../lib/productImageEngine/palettes";
-
 import {
   renderProductImage,
 } from "../../../../../lib/productImageEngine/render";
-
 import {
   requireProductImageAdmin,
 } from "../../../../../lib/productImageEngine/server";
-
 import type {
   CyberPalette,
 } from "../../../../../lib/productImageEngine/types";
-
 export const dynamic = "force-dynamic";
-
 function normalizeHexColor(
   value: unknown
 ): string | null {
   const raw =
     String(value || "")
       .trim();
-
   if (
     !/^#[0-9a-fA-F]{6}$/.test(
       raw
@@ -33,10 +26,8 @@ function normalizeHexColor(
   ) {
     return null;
   }
-
   return raw.toLowerCase();
 }
-
 function getRequestedPalette(
   paletteKey: string,
   slug: string,
@@ -49,13 +40,11 @@ function getRequestedPalette(
       normalizeHexColor(
         customColor
       );
-
     if (!normalized) {
       throw new Error(
         "Custom color must be a 6-digit hex color such as #ff45d8."
       );
     }
-
     return {
       key:
         `custom:${normalized}`,
@@ -67,7 +56,6 @@ function getRequestedPalette(
         normalized,
     };
   }
-
   if (
     !paletteKey ||
     paletteKey === "random"
@@ -76,14 +64,12 @@ function getRequestedPalette(
       slug
     );
   }
-
   const selected =
     CYBER_PALETTES.find(
       (palette) =>
         palette.key ===
         paletteKey
     );
-
   return (
     selected ||
     paletteForSlug(
@@ -91,14 +77,12 @@ function getRequestedPalette(
     )
   );
 }
-
 function safeNumber(
   value: unknown,
   fallback: number
 ): number {
   const parsed =
     Number(value);
-
   if (
     !Number.isFinite(
       parsed
@@ -106,12 +90,10 @@ function safeNumber(
   ) {
     return fallback;
   }
-
   return Math.round(
     parsed
   );
 }
-
 async function verifyPublicAsset(
   url: string,
   label: string
@@ -124,7 +106,6 @@ async function verifyPublicAsset(
         cache: "no-store",
       }
     );
-
   if (
     !response.ok
   ) {
@@ -132,12 +113,10 @@ async function verifyPublicAsset(
       `${label} could not be loaded from storage (${response.status} ${response.statusText}). The template database record may point to a file that no longer exists.`
     );
   }
-
   const contentType =
     response.headers.get(
       "content-type"
     ) || "";
-
   if (
     !contentType.startsWith(
       "image/"
@@ -148,7 +127,6 @@ async function verifyPublicAsset(
     );
   }
 }
-
 export async function POST(
   request: Request
 ) {
@@ -159,10 +137,8 @@ export async function POST(
       await requireProductImageAdmin(
         request
       );
-
     let body:
       Record<string, unknown>;
-
     try {
       body =
         await request.json();
@@ -177,34 +153,28 @@ export async function POST(
         }
       );
     }
-
     const productId =
       String(
         body.productId ||
         ""
       );
-
     const templateId =
       String(
         body.templateId ||
         ""
       );
-
     const paletteKey =
       String(
         body.paletteKey ||
         "random"
       );
-
     const customColor =
       body.customColor;
-
     const labelText =
       typeof body.labelText ===
       "string"
         ? body.labelText
         : null;
-
     const layout =
       (
         body.layout &&
@@ -216,7 +186,6 @@ export async function POST(
             unknown
           >
         : {};
-
     if (
       !productId ||
       !templateId
@@ -231,7 +200,6 @@ export async function POST(
         }
       );
     }
-
     const [
       productResult,
       templateResult,
@@ -257,7 +225,6 @@ export async function POST(
             productId
           )
           .single(),
-
         admin
           .from(
             "product_image_templates"
@@ -269,19 +236,16 @@ export async function POST(
           )
           .single(),
       ]);
-
     const {
       data: product,
       error: productError,
     } =
       productResult;
-
     const {
       data: template,
       error: templateError,
     } =
       templateResult;
-
     if (
       productError ||
       !product
@@ -290,7 +254,6 @@ export async function POST(
         "Preview product lookup failed:",
         productError
       );
-
       return NextResponse.json(
         {
           error:
@@ -303,7 +266,6 @@ export async function POST(
         }
       );
     }
-
     if (
       templateError ||
       !template
@@ -312,7 +274,6 @@ export async function POST(
         "Preview template lookup failed:",
         templateError
       );
-
       return NextResponse.json(
         {
           error:
@@ -325,63 +286,12 @@ export async function POST(
         }
       );
     }
-
     const productFamily =
       product.product_family ||
       null;
-
     const templateProductFamily =
       template.product_family ||
       null;
-
-    const isLabMaterial =
-      product.category ===
-      "lab-material";
-
-    if (
-      !isLabMaterial &&
-      !productFamily
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "This product does not have a Product Family assigned.",
-          product_id:
-            product.id,
-          product_name:
-            product.name,
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    if (
-      !isLabMaterial &&
-      templateProductFamily &&
-      productFamily !==
-        templateProductFamily
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Selected template is assigned to a different Product Family. Shared templates with no Product Family are allowed.",
-          product_family:
-            productFamily,
-          template_product_family:
-            templateProductFamily,
-          product_name:
-            product.name,
-          template_name:
-            template.name,
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
     if (
       !template.template_path
     ) {
@@ -399,7 +309,6 @@ export async function POST(
         }
       );
     }
-
     const templateUrl =
       admin.storage
         .from(
@@ -409,7 +318,6 @@ export async function POST(
           template.template_path
         )
         .data.publicUrl;
-
     const maskUrl =
       template.mask_path
         ? admin.storage
@@ -421,7 +329,6 @@ export async function POST(
             )
             .data.publicUrl
         : null;
-
     /*
       Verify the stored files before entering the renderer.
       This catches template rows left behind by the older
@@ -432,7 +339,6 @@ export async function POST(
       templateUrl,
       `Template "${template.name}"`
     );
-
     if (
       maskUrl
     ) {
@@ -441,52 +347,45 @@ export async function POST(
         `Mask for "${template.name}"`
       );
     }
-
     const palette =
       getRequestedPalette(
         paletteKey,
         product.slug,
         customColor
       );
-
     const renderTemplate = {
       ...template,
-
+      show_research_text: layout.showResearchText !== false,
       name_y:
         safeNumber(
           layout.nameY,
           template.name_y ??
             1110
         ),
-
       strength_y:
         safeNumber(
           layout.strengthY,
           template.strength_y ??
             1170
         ),
-
       research_text_y:
         safeNumber(
           layout.researchTextY,
           template.research_text_y ??
             1205
         ),
-
       name_font_size:
         safeNumber(
           layout.nameFontSize,
           template.name_font_size ??
             54
         ),
-
       strength_font_size:
         safeNumber(
           layout.strengthFontSize,
           template.strength_font_size ??
             42
         ),
-
       research_font_size:
         safeNumber(
           layout.researchFontSize,
@@ -494,23 +393,16 @@ export async function POST(
             22
         ),
     };
-
     const image =
       await renderProductImage({
         template:
           renderTemplate,
-
         templateUrl,
-
         maskUrl,
-
         product,
-
         palette,
-
         labelText,
       });
-
     if (
       !image ||
       image.length === 0
@@ -519,46 +411,34 @@ export async function POST(
         "Renderer returned an empty image."
       );
     }
-
     return new Response(
       new Uint8Array(
         image
       ),
       {
         status: 200,
-
         headers: {
           "Content-Type":
             "image/webp",
-
           "Cache-Control":
             "no-store, no-cache, must-revalidate, proxy-revalidate",
-
           Pragma:
             "no-cache",
-
           Expires:
             "0",
-
           "X-Product-Image-Mode":
             "preview-only",
-
           "X-Palette-Key":
             palette.key,
-
           "X-Palette-Primary":
             palette.primary,
-
           "X-Palette-Secondary":
             palette.secondary,
-
           "X-Template-Id":
             template.id,
-
           "X-Template-Family":
             templateProductFamily ||
             "shared",
-
           "X-Product-Family":
             productFamily ||
             "none",
@@ -573,12 +453,10 @@ export async function POST(
     ) {
       return error;
     }
-
     console.error(
       "Product Image Engine preview failed:",
       error
     );
-
     return NextResponse.json(
       {
         error:
