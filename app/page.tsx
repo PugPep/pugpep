@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "../lib/supabaseClient";
+import { useCart } from "./cartContext";
 import {
   getPrimaryStorefrontCampaign,
   loadStorefrontSales,
@@ -34,21 +35,109 @@ type Product = {
   coming_soon_date?: string | null;
 };
 
+type CatalogOption = {
+  id: string;
+  product_slug: string;
+  dosage: string;
+  purchase_type: string;
+  price: number;
+  status: string;
+  cost: number;
+  is_active?: boolean;
+  archived_at?: string | null;
+  sale_active: boolean;
+  sale_percent: number;
+};
+
+type CatalogPricedOption = CatalogOption & { effectivePrice: number | null };
+
+type CatalogStrengthChoice = {
+  key: string;
+  label: string;
+  optionId: string;
+  purchaseType: string;
+  price: number | null;
+  single?: CatalogPricedOption;
+  kit?: CatalogPricedOption;
+};
+
+type CatalogDetails = {
+  choices: CatalogStrengthChoice[];
+  strengths: string[];
+  startingPrice: number | null;
+  coaUrl?: string;
+};
+
+function catalogSlug(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function buildCatalogStrengthChoices(
+  options: CatalogOption[],
+  prices: Map<string, number>,
+  failedPrices: Set<string>
+): CatalogStrengthChoice[] {
+  const dosageGroups = new Map<string, CatalogOption[]>();
+  for (const option of options) {
+    const label = String(option.dosage || "").trim();
+    if (!label) continue;
+    const key = label.toLowerCase().replace(/\s+/g, "");
+    dosageGroups.set(key, [...(dosageGroups.get(key) || []), option]);
+  }
+  return Array.from(dosageGroups.entries()).map(([key, group]) => {
+    const withPrice = (option: CatalogOption | undefined): CatalogPricedOption | undefined => option
+      ? { ...option, effectivePrice: failedPrices.has(option.id) ? null : prices.get(option.id) ?? null }
+      : undefined;
+    const single = withPrice(group.find((item) => item.purchase_type === "single"));
+    const kit = withPrice(group.find((item) => item.purchase_type === "kit"));
+    const option = single || kit || group[0];
+    return {
+      key,
+      label: option.dosage.trim(),
+      single,
+      kit,
+      optionId: option.id,
+      purchaseType: option.purchase_type,
+      price: failedPrices.has(option.id) ? null : prices.get(option.id) ?? null,
+    };
+  }).sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+}
+
+function selectedCatalogStrength(choices: CatalogStrengthChoice[], selectedKey?: string) {
+  return choices.find((choice) => choice.key === selectedKey) || choices[0];
+}
+
+function catalogPurchaseOption(choice: CatalogStrengthChoice | undefined, requestKit = false) {
+  if (!choice) return undefined;
+  return requestKit && choice.kit ? choice.kit : choice.single || choice.kit;
+}
+
+function cardQuantity(value: number) {
+  return Number.isFinite(value) ? Math.max(1, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(value))) : 1;
+}
+
 export default function HomePage() {
   const supabase = useMemo(() => createClient(), []);
+  const { addToCart } = useCart();
+  const [cardKitSelections, setCardKitSelections] = useState<Record<string, boolean>>({});
+  const [cardQuantities, setCardQuantities] = useState<Record<string, number>>({});
+  const [cardMessages, setCardMessages] = useState<Record<string, string>>({});
+  const [cardBusy, setCardBusy] = useState<Record<string, boolean>>({});
+  const cardPendingRef = useRef(new Set<string>());
 
   const [ageVerified, setAgeVerified] = useState(true);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [researchConfirmed, setResearchConfirmed] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [saleMap, setSaleMap] = useState<Record<string, StorefrontSale>>({});
+  const [catalogDetails, setCatalogDetails] = useState<Record<string, CatalogDetails>>({});
+  const [selectedCardDosages, setSelectedCardDosages] = useState<Record<string, string>>({});
+  const [catalogView, setCatalogView] = useState<"rows" | "grid">("rows");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [familyFilter, setFamilyFilter] = useState("all");
   const [sort, setSort] = useState("featured");
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
-  const [selectedNewProductSlug, setSelectedNewProductSlug] = useState("");
-  const [showMoreNewProducts, setShowMoreNewProducts] = useState(false);
   const [campaignLoading, setCampaignLoading] = useState(true);
   const campaignLoadStartedRef = useRef(false);
   const mountedRef = useRef(true);
@@ -211,13 +300,93 @@ export default function HomePage() {
     }
   }
 
+  useEffect(() => {
+    if (products.length === 0 || campaignLoading) return;
+    let cancelled = false;
+
+    async function loadCatalogDetails() {
+      const results = await Promise.allSettled([
+        supabase.from("product_options")
+          .select("id,product_slug,dosage,purchase_type,price,status,cost,sale_active,sale_percent")
+          .eq("is_active", true).is("archived_at", null),
+        supabase.from("coa_documents")
+          .select("product_slug,file_path,storage_bucket,test_date")
+          .eq("status", "active").order("test_date", { ascending: false }),
+      ]);
+      if (cancelled) return;
+      const optionsResult = results[0];
+      const documentsResult = results[1];
+      const options = optionsResult.status === "fulfilled" && !optionsResult.value.error
+        ? (optionsResult.value.data || []) as CatalogOption[] : [];
+      const documents = documentsResult.status === "fulfilled" && !documentsResult.value.error
+        ? documentsResult.value.data || [] : [];
+      for (const result of results) {
+        if (result.status === "rejected") console.warn("Catalog details unavailable:", result.reason);
+        else if (result.value.error) console.warn("Catalog details unavailable:", result.value.error);
+      }
+      const prices = new Map<string, number>();
+      const failedPrices = new Set<string>();
+      let cursor = 0;
+      async function priceWorker() {
+        while (cursor < options.length && !cancelled) {
+          const option = options[cursor++];
+          const regular = Number(option.price);
+          if (!Number.isFinite(regular) || regular < 0) continue;
+          const percent = Math.min(100, Math.max(0, Number(option.sale_percent) || 0));
+          let price = option.sale_active ? regular * (1 - percent / 100) : regular;
+          const product = products.find((item) => catalogSlug(item.slug) === catalogSlug(option.product_slug));
+          if (product && saleMap[product.slug]?.isOnSale) {
+            try {
+              const { data, error } = await supabase.rpc("get_product_option_campaign_price", {
+                p_product_option_id: option.id,
+              });
+              if (error) throw error;
+              const campaign = data as Record<string, unknown> | null;
+              if (campaign?.has_campaign) {
+                const campaignPrice = Number(campaign.sale_unit_price);
+                if (!Number.isFinite(campaignPrice) || campaignPrice < 0) throw new Error("Invalid campaign price");
+                price = Math.min(price, campaignPrice);
+              }
+            } catch (error) {
+              failedPrices.add(option.id);
+              console.warn("Catalog campaign pricing unavailable:", error);
+            }
+          }
+          prices.set(option.id, Math.round(price * 100) / 100);
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(4, options.length) }, () => priceWorker()));
+      if (cancelled) return;
+      const next: Record<string, CatalogDetails> = {};
+      for (const product of products) {
+        const key = catalogSlug(product.slug);
+        const productOptions = options.filter((option) => catalogSlug(option.product_slug) === key);
+        const values = productOptions.map((option) => prices.get(option.id)).filter((price): price is number => price !== undefined);
+        const document = documents.find((item) => catalogSlug(String(item.product_slug)) === key && item.file_path);
+        const choices = buildCatalogStrengthChoices(productOptions, prices, failedPrices);
+        next[product.slug] = {
+          choices,
+          strengths: Array.from(new Set(productOptions.map((option) => option.dosage).filter(Boolean)))
+            .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
+          startingPrice: !productOptions.some((option) => failedPrices.has(option.id)) && values.length > 0 ? Math.min(...values) : null,
+          coaUrl: document ? supabase.storage.from(document.storage_bucket || "coas")
+            .getPublicUrl(document.file_path).data.publicUrl : undefined,
+        };
+      }
+      setCatalogDetails(next);
+    }
+    void loadCatalogDetails().catch((error) => console.warn("Catalog details unavailable:", error));
+    return () => { cancelled = true; };
+  }, [products, campaignLoading, saleMap, supabase]);
+
   async function handleProductAccess(
     event: React.MouseEvent<HTMLAnchorElement>,
-    productSlug: string
+    productSlug: string,
+    destination?: string
   ) {
     event.preventDefault();
 
-    const productPath = `/products/${productSlug}`;
+    const productPath = destination || `/products/${productSlug}`;
 
     const {
       data: { user },
@@ -266,27 +435,6 @@ export default function HomePage() {
       return a.name.localeCompare(b.name);
     });
 
-
-  const defaultMobileNewProduct =
-    featuredNewProducts.find((product) => !product.is_coming_soon) ||
-    featuredNewProducts[0] ||
-    null;
-
-  const mobileFeaturedNewProduct =
-    featuredNewProducts.find(
-      (product) => product.slug === selectedNewProductSlug
-    ) || defaultMobileNewProduct;
-
-  /*
-   * Desktop: keep the New Products area to one clean row.
-   * Six tiles fit the existing 1320px homepage shell and match
-   * the visual density of the product tiles below.
-   */
-  const desktopNewProducts =
-    featuredNewProducts.slice(0, 6);
-
-  const remainingDesktopNewProducts =
-    featuredNewProducts.slice(6);
 
   const featuredProducts = products
     .filter(
@@ -555,39 +703,268 @@ export default function HomePage() {
   ).length;
 
 
+  const compounds = visibleProducts.filter((product) =>
+    !isResearchSprayCategory(product.category) && !isLabMaterialCategory(product.category));
+  const knownFamilyKeys = new Set(productFamilies.slice(1).map((family) => family.value));
+  const compoundGroups = catalogView === "grid"
+    ? [{ key: "compounds", eyebrow: "CORE RESEARCH CATALOG", title: "Research Compounds", products: compounds }]
+    : [
+        ...productFamilies.slice(1).map((family) => ({
+          key: family.value, eyebrow: "RESEARCH COMPOUNDS", title: family.label,
+          products: compounds.filter((product) => getResearchFamily(product) === family.value),
+        })),
+        { key: "compounds", eyebrow: "CORE RESEARCH CATALOG", title: "More Research Compounds",
+          products: compounds.filter((product) => !knownFamilyKeys.has(getResearchFamily(product) || "")) },
+      ];
   const catalogGroups = [
-    {
-      key: "compounds",
-      eyebrow: "CORE RESEARCH CATALOG",
-      title: "Research Compounds",
-      products: visibleProducts.filter((product) => {
-        return (
-          !isResearchSprayCategory(product.category) &&
-          !isLabMaterialCategory(product.category)
-        );
-      }),
-    },
-    {
-      key: "sprays",
-      eyebrow: "DELIVERY FORMATS",
-      title: "Research Sprays",
-      products: visibleProducts.filter((product) =>
-        isResearchSprayCategory(product.category)
-      ),
-    },
-    {
-      key: "materials",
-      eyebrow: "LAB ESSENTIALS",
-      title: "Lab Materials",
-      products: visibleProducts.filter((product) =>
-        isLabMaterialCategory(product.category)
-      ),
-    },
+    ...compoundGroups,
+    { key: "sprays", eyebrow: "SPRAY CATALOG", title: "Research Sprays",
+      products: visibleProducts.filter((product) => isResearchSprayCategory(product.category)) },
+    { key: "materials", eyebrow: "LAB ESSENTIALS", title: "Lab Materials",
+      products: visibleProducts.filter((product) => isLabMaterialCategory(product.category)) },
   ].filter((group) => group.products.length > 0);
+
+  function viewAllProducts(type = "all", family = "all") {
+    setFilter(type);
+    setFamilyFilter(family);
+    setSearch("");
+    setCatalogView("grid");
+    document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function resetCardMessage(slug: string) {
+    setCardMessages((current) => ({ ...current, [slug]: "" }));
+    setCardQuantities((current) => ({ ...current, [slug]: 1 }));
+  }
+
+  async function addCatalogProductToCart(product: Product, selected: CatalogPricedOption | undefined) {
+    if (!selected || selected.effectivePrice === null || product.is_coming_soon || cardPendingRef.current.has(product.slug)) return;
+    const quantity = cardQuantity(cardQuantities[product.slug] ?? 1);
+    cardPendingRef.current.add(product.slug);
+    setCardBusy((current) => ({ ...current, [product.slug]: true }));
+    setCardMessages((current) => ({ ...current, [product.slug]: "" }));
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        try { localStorage.setItem("pugpep_redirect_after_login", `/products/${product.slug}`); } catch {}
+        window.location.href = "/login";
+        return;
+      }
+      const [optionResult, inventoryResult] = await Promise.all([
+        supabase.from("product_options").select("*").eq("id", selected.id).single(),
+        supabase.from("inventory").select("product_slug,dosage,purchase_type,quantity"),
+      ]);
+      if (optionResult.error) throw optionResult.error;
+      if (inventoryResult.error) throw new Error("Unable to check availability. Please try again.");
+      const option = optionResult.data as CatalogOption | null;
+      if (!option || option.is_active === false || option.archived_at || catalogSlug(option.product_slug) !== catalogSlug(product.slug)
+        || !["single", "kit"].includes(option.purchase_type) || option.status === "out of stock") {
+        throw new Error("This option is not currently available for purchase.");
+      }
+      const inventory = (inventoryResult.data || []).find((item) =>
+        catalogSlug(String(item.product_slug)) === catalogSlug(option.product_slug)
+        && String(item.dosage).toLowerCase().replace(/\s+/g, "") === option.dosage.toLowerCase().replace(/\s+/g, "")
+        && item.purchase_type === "single");
+      const available = Math.max(0, Number(inventory?.quantity) || 0);
+      const maxKits = Math.floor(available / 10);
+      if (option.purchase_type === "single" && quantity > available) {
+        throw new Error(available > 0 ? `Only ${available} available for this strength.` : "This strength is currently out of stock.");
+      }
+      if (option.purchase_type === "kit" && maxKits < 1 && option.status !== "pre-sale") {
+        throw new Error("This kit is currently unavailable.");
+      }
+      const { data, error } = await supabase.rpc("get_product_option_campaign_price", { p_product_option_id: option.id });
+      if (error) throw new Error("Unable to confirm the current price. Please try again.");
+      const regular = Number(option.price);
+      if (!Number.isFinite(regular) || regular < 0) throw new Error("This option's price is unavailable.");
+      const percent = Math.min(100, Math.max(0, Number(option.sale_percent) || 0));
+      const manual = option.sale_active ? regular * (1 - percent / 100) : regular;
+      const campaign = data as Record<string, unknown> | null;
+      const campaignPrice = campaign?.has_campaign ? Number(campaign.sale_unit_price) : regular;
+      if (!Number.isFinite(campaignPrice) || campaignPrice < 0) throw new Error("Unable to confirm the current price.");
+      const price = Math.round(Math.min(regular, manual, campaignPrice) * 100) / 100;
+      const kitPresale = option.purchase_type === "kit" && quantity > maxKits;
+      addToCart({
+        productOptionId: option.id,
+        name: product.name, slug: product.slug, image: product.image, dosage: option.dosage,
+        price, regularPrice: regular, salePrice: price,
+        wasOnSale: price < regular || Boolean(campaign?.has_campaign),
+        salePercent: regular > 0 ? Number((((regular - price) / regular) * 100).toFixed(2)) : 0,
+        cost: Number(option.cost) || 0,
+        purchaseType: option.purchase_type as "single" | "kit",
+        status: kitPresale ? "pre-sale" : option.status,
+        maxAvailable: available,
+      }, quantity);
+      setCatalogDetails((current) => {
+        const details = current[product.slug];
+        if (!details) return current;
+        return { ...current, [product.slug]: { ...details, choices: details.choices.map((choice) => ({
+          ...choice,
+          price: choice.optionId === option.id ? price : choice.price,
+          single: choice.single?.id === option.id ? { ...choice.single, effectivePrice: price } : choice.single,
+          kit: choice.kit?.id === option.id ? { ...choice.kit, effectivePrice: price } : choice.kit,
+        })) } };
+      });
+      setCardMessages((current) => ({ ...current, [product.slug]: kitPresale
+        ? "Added to cart. Some kits are pre-sale and may take up to 2 weeks."
+        : "Added to cart." }));
+    } catch (error) {
+      console.error("Catalog add to cart failed:", error);
+      setCardMessages((current) => ({ ...current, [product.slug]: error instanceof Error ? error.message : "Unable to add this item. Please try again." }));
+    } finally {
+      cardPendingRef.current.delete(product.slug);
+      setCardBusy((current) => ({ ...current, [product.slug]: false }));
+    }
+  }
+
+  function renderCatalogProduct(product: Product) {
+    const detail = catalogDetails[product.slug];
+    const selectedStrength = selectedCatalogStrength(detail?.choices || [], selectedCardDosages[product.slug]);
+    const selectedOption = catalogPurchaseOption(selectedStrength, cardKitSelections[product.slug]);
+    const kitSelected = selectedOption?.purchase_type === "kit";
+    const quantity = cardQuantities[product.slug] ?? 1;
+    const pending = Boolean(cardBusy[product.slug]);
+    const sale = saleMap[product.slug];
+    const theme = getProductTheme(product);
+    const familyLabel = productFamilies.find((family) => family.value === getResearchFamily(product))?.label;
+    const productPath = `/products/${product.slug}`;
+    return (
+      <article key={product.id} className="pugpep-product-card" style={{ "--product-accent": theme.color } as React.CSSProperties}>
+        <Link href={productPath} className="pugpep-product-image-link"
+          onClick={(event) => { void handleProductAccess(event, product.slug); }}
+          aria-label={`View ${product.name}`}>
+          <img src={product.image || "/pugpep-logo.png"} alt={product.name} loading="lazy" decoding="async" />
+          <div className="pugpep-product-badges">
+            {product.is_coming_soon ? <span className="pugpep-status-badge">Coming soon</span>
+              : isProductNew(product) ? <span className="pugpep-status-badge">New</span> : null}
+            {!product.is_coming_soon && sale?.isOnSale && <span className="pugpep-offer-badge">{sale.badgeText || "Sale"}</span>}
+          </div>
+        </Link>
+        <div className="pugpep-product-info">
+          <span className="pugpep-product-family">{isLabMaterialCategory(product.category) ? "Lab Materials"
+            : isResearchSprayCategory(product.category) ? "Research Sprays" : familyLabel || "Research Compounds"}</span>
+          <Link href={productPath} className="pugpep-product-name"
+            onClick={(event) => { void handleProductAccess(event, product.slug); }}>{product.name}</Link>
+          <div className="pugpep-product-strengths" role="group" aria-label={`Select strength for ${product.name}`}>
+            {detail?.choices.length ? detail.choices.map((choice) => (
+              <button
+                key={choice.key}
+                type="button"
+                className="pugpep-strength-button"
+                aria-pressed={selectedStrength?.key === choice.key}
+                disabled={product.is_coming_soon || pending}
+                onClick={() => {
+                  setSelectedCardDosages((current) => ({ ...current, [product.slug]: choice.key }));
+                  resetCardMessage(product.slug);
+                }}
+              >
+                {choice.label}
+              </button>
+            )) : <span className="pugpep-option-placeholder">View available options</span>}
+          </div>
+          <div className="pugpep-purchase-row">
+            <div className="pugpep-product-price" aria-live="polite" aria-atomic="true">
+              {product.is_coming_soon ? "Coming soon" : selectedOption?.effectivePrice != null
+                ? `$${selectedOption.effectivePrice.toFixed(2)}` : "View pricing"}
+            </div>
+            {selectedOption && <div className="pugpep-purchase-type">
+              <span>{kitSelected ? "Kit" : "Single"}</span>
+              {selectedStrength?.kit && <label>
+                <input type="checkbox" checked={kitSelected}
+                  disabled={pending || product.is_coming_soon || !selectedStrength.single}
+                  onChange={(event) => {
+                    setCardKitSelections((current) => ({ ...current, [product.slug]: event.target.checked }));
+                    resetCardMessage(product.slug);
+                  }} />
+                Kit (10)
+              </label>}
+            </div>}
+          </div>
+          <div className="pugpep-card-buy-row">
+            <div className="pugpep-card-quantity" role="group" aria-label={`Quantity for ${product.name}`}>
+              <button type="button" aria-label={`Decrease quantity for ${product.name}`} disabled={quantity <= 1 || pending || product.is_coming_soon}
+                onClick={() => setCardQuantities((current) => ({ ...current, [product.slug]: cardQuantity(quantity - 1) }))}>−</button>
+              <input type="number" min={1} step={1} value={quantity} disabled={pending || product.is_coming_soon}
+                aria-label={`${kitSelected ? "Kit" : "Item"} quantity for ${product.name}`}
+                onChange={(event) => setCardQuantities((current) => ({ ...current, [product.slug]: cardQuantity(Number(event.target.value)) }))} />
+              <button type="button" aria-label={`Increase quantity for ${product.name}`} disabled={pending || product.is_coming_soon}
+                onClick={() => setCardQuantities((current) => ({ ...current, [product.slug]: cardQuantity(quantity + 1) }))}>+</button>
+            </div>
+            <button type="button" className="pugpep-add-button"
+              disabled={pending || product.is_coming_soon || selectedOption?.effectivePrice == null}
+              onClick={() => { void addCatalogProductToCart(product, selectedOption); }}>
+              {pending ? "Adding…" : product.is_coming_soon ? "Coming Soon" : "Add to Cart"}
+            </button>
+          </div>
+          {cardMessages[product.slug] && <p className="pugpep-card-message" role="status">{cardMessages[product.slug]}</p>}
+          <div className="pugpep-product-actions">
+            {detail?.coaUrl && <a className="pugpep-coa-button" href={detail.coaUrl}
+              onClick={(event) => { void handleProductAccess(event, product.slug, detail.coaUrl); }}
+              aria-label={`View COA for ${product.name}`}>View COA</a>}
+
+          </div>
+        </div>
+      </article>
+    );
+  }
 
   return (
     <main style={page}>
       <style>{`
+        .pugpep-shelf { min-width: 0; padding: 22px 0; }
+        .pugpep-shelf-header { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
+        .pugpep-shelf-kicker { color:#7df9ff; font-size:10px; font-weight:800; letter-spacing:.15em; }
+        .pugpep-shelf-title { margin:5px 0; color:#fff; font-size:clamp(22px,2.4vw,30px); letter-spacing:-.025em; }
+        .pugpep-shelf-tools { display:flex; align-items:center; gap:8px; }
+        .pugpep-shelf-tools button, .pugpep-view-switch button { border:1px solid #34363e; border-radius:10px; background:#15161d; color:#eee; cursor:pointer; font:inherit; font-size:12px; font-weight:700; padding:10px 13px; min-height:40px; }
+        .pugpep-shelf-tools button:disabled { opacity:.3; cursor:default; }
+        .pugpep-shelf-tools .pugpep-shelf-arrow { width:40px; padding:8px; font-size:20px; }
+        .pugpep-view-switch { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
+        .pugpep-view-switch button[aria-pressed="true"] { border-color:#7df9ff; color:#7df9ff; background:#10212a; }
+        .pugpep-product-row { display:grid; grid-auto-flow:column; grid-auto-columns:calc((100% - 64px) / 4.25); gap:16px; overflow-x:auto; scroll-snap-type:x mandatory; scroll-padding:2px; padding:4px 2px 16px; scrollbar-width:thin; scrollbar-color:#4c505b #13141a; overscroll-behavior-x:contain; }
+        .pugpep-product-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; }
+        .pugpep-product-card { min-width:0; scroll-snap-align:start; border:1px solid #30323a; border-radius:16px; overflow:hidden; background:#14151c; display:flex; flex-direction:column; box-shadow:0 10px 24px rgba(0,0,0,.16); transition:border-color .18s ease; }
+        .pugpep-product-card:hover { border-color:var(--product-accent,#7df9ff); }
+        .pugpep-product-image-link { position:relative; display:block; aspect-ratio:1 / 1; background:#fff; overflow:hidden; }
+        .pugpep-product-image-link img { display:block; width:100%; height:100%; object-fit:contain; }
+        .pugpep-product-badges { position:absolute; top:10px; left:10px; right:10px; display:flex; flex-wrap:wrap; justify-content:space-between; gap:5px; pointer-events:none; }
+        .pugpep-status-badge, .pugpep-offer-badge { border-radius:7px; padding:6px 8px; font-size:10px; font-weight:850; background:#181a22; color:#fff; box-shadow:0 2px 8px #0002; }
+        .pugpep-offer-badge { background:#d3ff69; color:#182000; margin-left:auto; }
+        .pugpep-product-info { padding:16px; display:flex; flex:1; flex-direction:column; }
+        .pugpep-product-family { color:var(--product-accent,#7df9ff); font-size:10px; letter-spacing:.10em; text-transform:uppercase; font-weight:800; }
+        .pugpep-product-name { display:block; color:#fff; font-size:19px; font-weight:800; line-height:1.25; text-decoration:none; margin:8px 0 0; min-height:48px; overflow-wrap:anywhere; }
+        .pugpep-product-strengths { display:flex; flex-wrap:wrap; align-content:flex-start; gap:6px; color:#aeb3c2; font-size:12px; line-height:1.5; margin:10px 0 14px; min-height:36px; }
+        .pugpep-strength-button { padding:5px 9px; min-height:32px; border:1px solid #414550; border-radius:7px; background:#1b1e27; color:#c8cddb; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+        .pugpep-strength-button[aria-pressed="true"] { color:#061f26; background:#7df9ff; border-color:#7df9ff; }
+        .pugpep-strength-button:hover:not(:disabled) { border-color:#7df9ff; }
+        .pugpep-strength-button:focus-visible { outline:3px solid #ff75df; outline-offset:2px; }
+        .pugpep-strength-button:disabled { cursor:default; opacity:.55; }
+        .pugpep-option-placeholder { padding-top:5px; }
+        .pugpep-product-price { margin:0; color:#fff; font-size:21px; font-weight:850; }
+        .pugpep-product-price > span { color:#aeb3c2; font-size:12px; font-weight:500; }
+        .pugpep-purchase-row { margin-top:auto; margin-bottom:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .pugpep-purchase-type { display:flex; align-items:center; gap:9px; font-size:12px; color:#afb7c8; }
+        .pugpep-purchase-type label { display:flex; align-items:center; gap:4px; cursor:pointer; color:#e6e9f2; }
+        .pugpep-purchase-type input { accent-color:#7df9ff; margin:0; }
+        .pugpep-card-buy-row { display:flex; align-items:stretch; gap:7px; }
+        .pugpep-card-quantity { display:flex; flex:0 0 auto; align-items:center; border:1px solid #414550; border-radius:8px; overflow:hidden; }
+        .pugpep-card-quantity button { width:24px; min-height:38px; border:0; background:#20232c; color:#fff; padding:0; cursor:pointer; font-size:16px; }
+        .pugpep-card-quantity input { width:32px; min-width:0; background:#15171e; border:0; color:#fff; text-align:center; padding:0; font-size:12px; appearance:textfield; -moz-appearance:textfield; }
+        .pugpep-card-quantity input::-webkit-inner-spin-button, .pugpep-card-quantity input::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+        .pugpep-add-button { flex:1; min-width:0; min-height:40px; border:1px solid #7df9ff; border-radius:8px; background:#7df9ff; color:#052027; padding:8px 9px; cursor:pointer; font:inherit; font-size:12px; line-height:1.15; font-weight:800; }
+        .pugpep-add-button:disabled, .pugpep-card-quantity button:disabled { opacity:.5; cursor:default; }
+        .pugpep-card-message { color:#bfe8df; font-size:11px; line-height:1.5; margin:9px 0 0; }
+        .pugpep-product-actions { display:flex; gap:7px; flex-wrap:wrap; margin-top:8px; }
+        .pugpep-card-buy-row button:focus-visible, .pugpep-card-buy-row input:focus-visible { outline:3px solid #ff75df; outline-offset:2px; }
+        .pugpep-view-button, .pugpep-coa-button { display:flex; align-items:center; justify-content:center; gap:7px; padding:10px 11px; min-height:40px; box-sizing:border-box; border-radius:9px; font-size:11px; font-weight:800; text-decoration:none; }
+        .pugpep-view-button { flex:1; background:#7df9ff; color:#052027; border:1px solid #7df9ff; white-space:nowrap; }
+        .pugpep-coa-button { background:transparent; color:#e3e6ef; border:1px solid #444753; white-space:nowrap; }
+        .pugpep-product-card a:focus-visible, .pugpep-shelf button:focus-visible, .pugpep-view-switch button:focus-visible, .pugpep-product-row:focus-visible { outline:3px solid #ff75df; outline-offset:3px; }
+        @media(max-width:1100px) { .pugpep-product-row { grid-auto-columns:calc((100% - 44px) / 3.2); } .pugpep-product-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+        @media(max-width:720px) { .pugpep-product-row { grid-auto-columns:calc((100% - 20px) / 2.15); gap:12px; } .pugpep-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; } .pugpep-product-info { padding:12px; } .pugpep-product-name { font-size:17px; } .pugpep-product-actions { flex-direction:column; } }
+        @media(max-width:480px) { .pugpep-product-row { grid-auto-columns:82%; } .pugpep-product-grid { grid-template-columns:minmax(0,1fr); } .pugpep-shelf-header { gap:8px; } .pugpep-shelf-title { font-size:22px; } }
+        @media(prefers-reduced-motion:reduce) { .pugpep-product-card { transition:none; } }
+
         .category-grid {
           grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
         }
@@ -737,7 +1114,7 @@ export default function HomePage() {
                     : "not-allowed",
               }}
             >
-              I Agree & Enter
+              I Agree &amp; Enter
             </button>
           </div>
         </div>
@@ -769,250 +1146,12 @@ export default function HomePage() {
 
       {featuredNewProducts.length > 0 && (
         <section style={newProductsSection}>
-          <div style={newProductsHeader}>
-            <div>
-              <span style={newProductsEyebrow}>NEW &amp; COMING SOON</span>
-              <h2 style={newProductsTitle}>New Products</h2>
-              <p style={newProductsText}>
-                Recently added research products and upcoming additions.
-              </p>
-            </div>
-
-            <span style={newProductsCount}>
-              {featuredNewProducts.length} FEATURED
-            </span>
-          </div>
-
-          {isMobile && mobileFeaturedNewProduct ? (
-            <div style={mobileNewProductsLayout}>
-              {featuredNewProducts.length > 1 && (
-                <label style={mobileNewProductSelectorLabel}>
-                  <span style={mobileNewProductSelectorTitle}>
-                    VIEW OTHER NEW PRODUCTS
-                  </span>
-
-                  <select
-                    value={mobileFeaturedNewProduct.slug}
-                    onChange={(event) =>
-                      setSelectedNewProductSlug(event.target.value)
-                    }
-                    style={mobileNewProductSelect}
-                    aria-label="Choose another new product"
-                  >
-                    {featuredNewProducts.map((product) => (
-                      <option
-                        key={`new-product-option-${product.slug}`}
-                        value={product.slug}
-                      >
-                        {product.name}
-                        {product.is_coming_soon ? " — Coming Soon" : ""}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-
-              <Link
-                href={`/products/${mobileFeaturedNewProduct.slug}`}
-                onClick={(event) => {
-                  void handleProductAccess(
-                    event,
-                    mobileFeaturedNewProduct.slug
-                  );
-                }}
-                style={{ textDecoration: "none" }}
-              >
-                <article
-                  style={{
-                    ...mobileNewProductCard,
-                    borderColor:
-                      mobileFeaturedNewProduct.color ||
-                      "rgba(0,255,153,.42)",
-                  }}
-                >
-                  <div style={mobileNewProductImageWrap}>
-                    {mobileFeaturedNewProduct.is_coming_soon ? (
-                      <span style={comingSoonBadge}>COMING SOON</span>
-                    ) : (
-                      <span style={newBadge}>NEW</span>
-                    )}
-
-                    <img
-                      src={
-                        mobileFeaturedNewProduct.image ||
-                        "/pugpep-logo.png"
-                      }
-                      alt={mobileFeaturedNewProduct.name}
-                      style={mobileNewProductImage}
-                    />
-
-                  </div>
-                </article>
-              </Link>
-            </div>
-          ) : (
-            <div style={desktopNewProductsLayout}>
-              <div className="new-products-desktop-grid" style={newProductsGrid}>
-                {desktopNewProducts.map((product) => (
-                  <Link
-                    key={`new-${product.slug}`}
-                    href={`/products/${product.slug}`}
-                    onClick={(event) => {
-                      void handleProductAccess(event, product.slug);
-                    }}
-                    style={{ textDecoration: "none" }}
-                  >
-                    <article
-                      style={{
-                        ...productCard,
-                        borderColor:
-                          product.color || "rgba(0,255,153,.42)",
-                      }}
-                    >
-                      <div style={productImageWrap}>
-                        {product.is_coming_soon ? (
-                          <span style={comingSoonBadge}>COMING SOON</span>
-                        ) : (
-                          <span style={newBadge}>NEW</span>
-                        )}
-
-                        <img
-                          src={product.image || "/pugpep-logo.png"}
-                          alt={product.name}
-                          style={productImage}
-                        />
-
-                      </div>
-                    </article>
-                  </Link>
-                ))}
-              </div>
-
-              {remainingDesktopNewProducts.length > 0 && (
-                <div style={desktopMoreNewProducts}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShowMoreNewProducts(
-                        (current) => !current
-                      )
-                    }
-                    style={moreNewProductsButton}
-                    aria-expanded={showMoreNewProducts}
-                    aria-controls="more-new-products-panel"
-                  >
-                    <span>
-                      {showMoreNewProducts
-                        ? "HIDE MORE NEW PRODUCTS"
-                        : `VIEW ${remainingDesktopNewProducts.length} MORE NEW PRODUCTS`}
-                    </span>
-
-                    <span
-                      aria-hidden="true"
-                      style={{
-                        ...moreNewProductsChevron,
-                        transform: showMoreNewProducts
-                          ? "rotate(180deg)"
-                          : "rotate(0deg)",
-                      }}
-                    >
-                      ▾
-                    </span>
-                  </button>
-
-                  {showMoreNewProducts && (
-                    <div
-                      id="more-new-products-panel"
-                      className="new-products-expanded-grid"
-                      style={expandedNewProductsGrid}
-                    >
-                      {remainingDesktopNewProducts.map(
-                        (product) => (
-                          <Link
-                            key={`expanded-new-${product.slug}`}
-                            href={`/products/${product.slug}`}
-                            onClick={(event) => {
-                              void handleProductAccess(
-                                event,
-                                product.slug
-                              );
-                            }}
-                            style={{
-                              textDecoration: "none",
-                            }}
-                          >
-                            <article
-                              style={{
-                                ...productCard,
-                                borderColor:
-                                  product.color ||
-                                  "rgba(0,255,153,.42)",
-                              }}
-                            >
-                              <div
-                                style={productImageWrap}
-                              >
-                                {product.is_coming_soon ? (
-                                  <span
-                                    style={comingSoonBadge}
-                                  >
-                                    COMING SOON
-                                  </span>
-                                ) : (
-                                  <span style={newBadge}>
-                                    NEW
-                                  </span>
-                                )}
-
-                                <img
-                                  src={
-                                    product.image ||
-                                    "/pugpep-logo.png"
-                                  }
-                                  alt={product.name}
-                                  style={productImage}
-                                />
-
-                              </div>
-                            </article>
-                          </Link>
-                        )
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+          <ProductShelf id="new-products-row" title="New & Coming Soon" eyebrow="LATEST ADDITIONS"
+            products={featuredNewProducts} renderProduct={renderCatalogProduct}
+            onViewAll={() => viewAllProducts()} />
         </section>
       )}
 
-      {primaryCampaign && (
-        <section style={campaignBanner}>
-          <div style={campaignBannerContent}>
-            <div>
-              <span style={campaignEyebrow}>ACTIVE PROMOTION</span>
-              <h2 style={campaignTitle}>{primaryCampaign.campaignName}</h2>
-              <p style={campaignMessage}>{primaryCampaign.bannerText}</p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                document
-                  .getElementById("current-offers")
-                  ?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "start",
-                  });
-              }}
-              style={shopSaleButton}
-            >
-              SHOP SALE
-            </button>
-          </div>
-        </section>
-      )}
 
       <section style={brandIntroSection}>
         <div style={brandIntroCopy}>
@@ -1149,75 +1288,18 @@ export default function HomePage() {
       </section>
 
       {saleProducts.length > 0 && (
-        <section
-          id="current-offers"
-          style={saleShowcaseSection}
-        >
-          <div style={showcaseHeader}>
-            <div>
-              <span style={saleShowcaseEyebrow}></span>
-              <h2 style={showcaseTitle}>Current Offers</h2>
-              <p style={showcaseText}>
-                Discounted products available now.
-              </p>
-            </div>
+        <section id="current-offers" style={saleShowcaseSection}>
+          <ProductShelf id="sale-products-row" title="Current Offers" eyebrow="ACTIVE PROMOTIONS"
+            products={saleProducts} renderProduct={renderCatalogProduct}
+            onViewAll={() => viewAllProducts("sale")} />
+        </section>
+      )}
 
-            <button
-              type="button"
-              onClick={() => {
-                setFilter("sale");
-                document
-                  .getElementById("catalog")
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
-              }}
-              style={saleBrowseButton}
-            >
-              VIEW ALL SALE ITEMS →
-            </button>
-          </div>
-
-          <div style={showcaseGrid}>
-            {saleProducts.map((product) => {
-              const effectiveSale = saleMap[product.slug];
-
-              return (
-                <Link
-                  key={`sale-${product.slug}`}
-                  href={`/products/${product.slug}`}
-                  onClick={(event) => {
-                    void handleProductAccess(event, product.slug);
-                  }}
-                  style={{ textDecoration: "none" }}
-                >
-                  <article
-                    style={{
-                      ...productCard,
-                      borderColor: "rgba(0,255,153,.48)",
-                      boxShadow: "0 0 24px rgba(0,255,153,.10)",
-                    }}
-                  >
-                    <div style={productImageWrap}>
-                      <span style={showcaseSaleBadge}>
-                        {effectiveSale?.badgeText || "SALE"}
-                      </span>
-
-                      <img
-                        src={product.image || "/pugpep-logo.png"}
-                        alt={product.name}
-                        style={productImage}
-                      />
-                    </div>
-
-                    {effectiveSale?.campaignName && (
-                      <div style={campaignOverlay}>
-                        {effectiveSale.campaignName}
-                      </div>
-                    )}
-                  </article>
-                </Link>
-              );
-            })}
-          </div>
+      {featuredProducts.length > 0 && (
+        <section style={newProductsSection}>
+          <ProductShelf id="featured-products-row" title="Featured Products" eyebrow="CATALOG HIGHLIGHTS"
+            products={featuredProducts} renderProduct={renderCatalogProduct}
+            onViewAll={() => viewAllProducts()} />
         </section>
       )}
 
@@ -1236,6 +1318,11 @@ export default function HomePage() {
             <span>{saleCount} On Sale</span>
             <span>{visibleProducts.length} Showing</span>
           </div>
+        </div>
+
+        <div className="pugpep-view-switch" aria-label="Catalog layout">
+          <button type="button" aria-pressed={catalogView === "rows"} onClick={() => setCatalogView("rows")}>Scrolling Rows</button>
+          <button type="button" aria-pressed={catalogView === "grid"} onClick={() => setCatalogView("grid")}>View All Products</button>
         </div>
 
         <div style={catalogFamilyRow}>
@@ -1359,96 +1446,11 @@ export default function HomePage() {
         ) : (
           <div style={groupedCatalog}>
             {catalogGroups.map((group) => (
-              <section
-                key={group.key}
-                style={{
-                  ...catalogGroup,
-                  ...(group.key === "compounds"
-                    ? catalogGroupCompounds
-                    : group.key === "sprays"
-                    ? catalogGroupSprays
-                    : catalogGroupMaterials),
-                }}
-              >
-                <div style={catalogGroupHeader}>
-                  <div>
-                    {group.eyebrow ? (
-                      <span style={catalogGroupEyebrow}>{group.eyebrow}</span>
-                    ) : null}
-                    <h3 style={catalogGroupTitle}>{group.title}</h3>
-                  </div>
-
-                  <span style={catalogGroupCount}>
-                    {group.products.length}
-                  </span>
-                </div>
-
-                <div
-                  className="catalog-products-grid"
-                  style={productsGrid}
-                >
-                  {group.products.map((product) => {
-                    const effectiveSale = saleMap[product.slug];
-                    const productTheme = getProductTheme(product);
-
-                    return (
-                      <Link
-                        key={product.slug}
-                        href={`/products/${product.slug}`}
-                        onClick={(event) => {
-                          void handleProductAccess(event, product.slug);
-                        }}
-                        className="catalog-product-link"
-                        style={{ textDecoration: "none" }}
-                      >
-                        <article
-                          className="catalog-product-card"
-                          style={{
-                            ...productCard,
-                            borderColor: productTheme.border,
-                            background: productTheme.cardBackground,
-                            boxShadow: `0 12px 30px rgba(0,0,0,.30), 0 0 20px ${productTheme.glow}`,
-                          }}
-                        >
-                          <div style={productImageWrap}>
-                            {product.is_coming_soon ? (
-                              <div style={catalogComingSoonBadge}>COMING SOON</div>
-                            ) : isProductNew(product) ? (
-                              <div style={catalogNewBadge}>NEW</div>
-                            ) : null}
-
-                            {!product.is_coming_soon &&
-                              effectiveSale?.isOnSale && (
-                                <div style={saleBadge}>
-                                  {effectiveSale.badgeText}
-                                </div>
-                              )}
-
-                            <img
-                              src={
-                                typeof product.image === "string" &&
-                                product.image.length > 0
-                                  ? product.image
-                                  : "/pugpep-logo.png"
-                              }
-                              alt={product.name}
-                              style={productImage}
-                            />
-                          </div>
-
-                          {!product.is_coming_soon &&
-                            effectiveSale?.source === "campaign" &&
-                            effectiveSale.campaignName && (
-                              <div style={campaignOverlay}>
-                                {effectiveSale.campaignName}
-                              </div>
-                            )}
-                        </article>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </section>
+              <ProductShelf key={group.key} id={`catalog-row-${group.key}`} title={group.title} eyebrow={group.eyebrow}
+                products={group.products} renderProduct={renderCatalogProduct} grid={catalogView === "grid"}
+                onViewAll={() => viewAllProducts(group.key === "sprays" ? "sprays"
+                  : group.key === "materials" ? "lab materials" : "peptides",
+                  knownFamilyKeys.has(group.key) ? group.key : "all")} />
             ))}
           </div>
         )}
@@ -1565,6 +1567,69 @@ export default function HomePage() {
         </p>
       </footer>
     </main>
+  );
+}
+
+function ProductShelf(props: {
+  id: string;
+  title: string;
+  eyebrow?: string;
+  products: Product[];
+  renderProduct: (product: Product) => React.ReactNode;
+  onViewAll: () => void;
+  grid?: boolean;
+}) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row || props.grid) return;
+    const update = () => {
+      setCanGoBack(row.scrollLeft > 2);
+      setCanGoForward(row.scrollLeft + row.clientWidth < row.scrollWidth - 2);
+    };
+    update();
+    row.addEventListener("scroll", update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(row);
+    return () => { row.removeEventListener("scroll", update); observer.disconnect(); };
+  }, [props.products.length, props.grid]);
+  function move(direction: number) {
+    const row = rowRef.current;
+    if (!row) return;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    row.scrollBy({ left: direction * row.clientWidth * .85, behavior: reduceMotion ? "auto" : "smooth" });
+  }
+  return (
+    <section className="pugpep-shelf" aria-labelledby={`${props.id}-title`}>
+      <div className="pugpep-shelf-header">
+        <div>
+          {props.eyebrow && <span className="pugpep-shelf-kicker">{props.eyebrow}</span>}
+          <h3 id={`${props.id}-title`} className="pugpep-shelf-title">{props.title}</h3>
+        </div>
+        <div className="pugpep-shelf-tools">
+          {!props.grid && <>
+            <button type="button" onClick={props.onViewAll}>View All</button>
+            <button type="button" className="pugpep-shelf-arrow" disabled={!canGoBack} onClick={() => move(-1)}
+              aria-label={`Scroll ${props.title} left`} aria-controls={props.id}>‹</button>
+            <button type="button" className="pugpep-shelf-arrow" disabled={!canGoForward} onClick={() => move(1)}
+              aria-label={`Scroll ${props.title} right`} aria-controls={props.id}>›</button>
+          </>}
+          <span style={{ color: "#9198a9", fontSize: 12 }}>{props.products.length} products</span>
+        </div>
+      </div>
+      <div ref={rowRef} id={props.id} className={props.grid ? "pugpep-product-grid" : "pugpep-product-row"}
+        tabIndex={props.grid ? undefined : 0} aria-label={props.title}
+        onKeyDown={(event) => {
+          if (props.grid || event.target !== event.currentTarget) return;
+          if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+            event.preventDefault(); move(event.key === "ArrowLeft" ? -1 : 1);
+          }
+        }}>
+        {props.products.map(props.renderProduct)}
+      </div>
+    </section>
   );
 }
 
@@ -1693,7 +1758,6 @@ const saleShowcaseSection = {
   margin: "24px auto 12px",
   padding: "14px",
   boxSizing: "border-box" as const,
-  borderTop: "1px solid rgba(0,255,153,.30)",
 };
 
 const showcaseHeader = {
@@ -1856,7 +1920,6 @@ const newProductsSection = {
   margin: "18px auto 14px",
   padding: "14px",
   boxSizing: "border-box" as const,
-  border: "1px solid rgba(0,255,153,.24)",
   borderRadius: 16,
   background:
     "linear-gradient(135deg, rgba(0,255,153,.045), rgba(0,217,255,.035), rgba(255,69,216,.035))",
@@ -2147,7 +2210,6 @@ const discoverBanner = {
   maxWidth: 1320,
   margin: "18px auto 14px",
   padding: "13px 15px",
-  border: "1px solid rgba(255,45,210,.22)",
   borderRadius: 16,
   background:
     "linear-gradient(135deg, rgba(255,45,210,.05), rgba(0,217,255,.04), rgba(124,255,0,.035))",
@@ -2192,7 +2254,6 @@ const familyFilterSection = {
   maxWidth: "1320px",
   margin: "0 auto 24px",
   padding: "26px 28px",
-  border: "1px solid rgba(255,255,255,.10)",
   borderRadius: "20px",
   background:
     "linear-gradient(135deg, rgba(0,217,255,.055), rgba(255,69,216,.035) 48%, rgba(0,255,153,.035))",
@@ -2271,7 +2332,6 @@ const catalogShell = {
   padding: "22px 18px 18px",
   boxSizing: "border-box" as const,
   scrollMarginTop: 110,
-  border: "1px solid rgba(255,255,255,.10)",
   borderRadius: 18,
   background:
     "linear-gradient(135deg, rgba(0,217,255,.04), rgba(255,69,216,.022) 48%, rgba(0,255,153,.025))",
@@ -2311,7 +2371,6 @@ const catalogIntroText = {
 const catalogFamilyRow = {
   marginTop: 20,
   padding: "13px 14px",
-  border: "1px solid rgba(0,217,255,.16)",
   borderRadius: 13,
   background: "rgba(0,0,0,.18)",
 };
@@ -2351,7 +2410,6 @@ const searchSection = {
   padding: 12,
   display: "grid",
   gap: 8,
-  border: "1px solid rgba(255,255,255,.09)",
   borderRadius: 13,
   background: "rgba(255,255,255,.018)",
 };
@@ -2410,7 +2468,6 @@ const groupedCatalog = {
 
 const catalogGroup = {
   padding: "24px",
-  border: "1px solid rgba(255,255,255,.08)",
   borderRadius: 20,
   overflow: "hidden",
 };
@@ -2442,7 +2499,6 @@ const catalogGroupHeader = {
   alignItems: "end",
   justifyContent: "space-between",
   gap: 12,
-  borderBottom: "1px solid rgba(255,255,255,.10)",
 };
 
 const catalogGroupEyebrow = {
@@ -2617,7 +2673,6 @@ const productName = {
 const emptyState = {
   marginTop: 7,
   padding: 11,
-  border: "1px dashed rgba(0,217,255,.20)",
   borderRadius: 13,
   textAlign: "center" as const,
 };
@@ -2657,7 +2712,6 @@ const bottomBar = {
   maxWidth: 1320,
   margin: "18px auto 46px",
   padding: 10,
-  border: "1px solid rgba(255,255,255,.10)",
   borderRadius: 13,
   background: "rgba(10,10,10,.95)",
   display: "grid",
@@ -2673,7 +2727,6 @@ const brandIntroSection = {
   gridTemplateColumns: "minmax(0, 1.25fr) minmax(260px, .75fr)",
   gap: 16,
   alignItems: "stretch",
-  border: "1px solid rgba(0,217,255,.18)",
   borderRadius: 16,
   background:
     "linear-gradient(115deg, rgba(0,217,255,.055), rgba(255,69,216,.035) 48%, rgba(0,255,153,.045))",
@@ -3025,8 +3078,6 @@ const footer = {
   marginTop: 38,
   padding:
     "clamp(24px, 3.5vw, 38px) clamp(14px, 3vw, 26px)",
-  borderTop:
-    "1px solid rgba(255,255,255,.12)",
   background:
     "radial-gradient(circle at 10% 0%, rgba(0,217,255,.07), transparent 28%), radial-gradient(circle at 90% 0%, rgba(255,45,210,.08), transparent 30%), #050505",
 };
