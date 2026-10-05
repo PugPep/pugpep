@@ -83,7 +83,7 @@ export default function ContactPage() {
 
           <div style={contactButtons}>
             <a
-              href="https://discord.gg/yas8DetFz"
+              href="https://discord.gg/KcXF329NZ7"
               target="_blank"
               rel="noopener noreferrer"
               style={discordButton}
