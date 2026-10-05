@@ -1,29 +1,16 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { createClient } from "../lib/supabaseClient";
 import { useCart } from "./cartContext";
 
 export default function CartIcon() {
   const { cart, total } = useCart();
-
-  const router = useRouter();
-  const supabase = createClient();
-
-  async function handleCartClick() {
-    const { data } = await supabase.auth.getUser();
-
-    if (data.user) {
-      router.push("/checkout");
-      return;
-    }
-
-    router.push("/cart");
-  }
+  const count = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <button
-      onClick={handleCartClick}
+      type="button"
+      onClick={() => window.dispatchEvent(new Event("pugpep:open-cart"))}
+      aria-label={`Open cart: ${count} items, $${total.toFixed(2)}`}
       style={{
         marginLeft: "auto",
         color: "#fff",
@@ -31,19 +18,16 @@ export default function CartIcon() {
         padding: "8px 12px",
         borderRadius: 10,
         fontWeight: "bold",
-
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-
         whiteSpace: "nowrap",
         flexShrink: 0,
-
         border: "none",
         cursor: "pointer",
       }}
     >
-      🛒 {cart.length} | ${total.toFixed(2)}
+      🛒 {count} | ${total.toFixed(2)}
     </button>
   );
 }

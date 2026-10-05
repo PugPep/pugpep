@@ -112,8 +112,7 @@ type CoaDocument = {
   created_at?: string | null;
 };
 
-const RECENTLY_VIEWED_KEY =
-  "pugpep_recently_viewed";
+const RECENTLY_VIEWED_KEY = "pugpep_recently_viewed";
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -122,12 +121,7 @@ export default function ProductDetailPage() {
   const supabase = useMemo(() => createClient(), []);
   const { addToCart } = useCart();
 
-  /*
-   * React development mode may invoke effects more than once.
-   * Keep one product-view event per mounted product page.
-   */
-  const trackedProductViewRef =
-    useRef<string | null>(null);
+  const trackedProductViewRef = useRef<string | null>(null);
 
   const [product, setProduct] = useState<Product | null>(null);
   const [options, setOptions] = useState<ProductOption[]>([]);
@@ -135,14 +129,9 @@ export default function ProductDetailPage() {
   const [selectedOption, setSelectedOption] =
     useState<ProductOption | null>(null);
 
-  const [coaDocuments, setCoaDocuments] =
-    useState<CoaDocument[]>([]);
-
-  const [coaLoading, setCoaLoading] =
-    useState(false);
-
-  const [coaPanelOpen, setCoaPanelOpen] =
-    useState(false);
+  const [coaDocuments, setCoaDocuments] = useState<CoaDocument[]>([]);
+  const [coaLoading, setCoaLoading] = useState(false);
+  const [coaPanelOpen, setCoaPanelOpen] = useState(true);
 
   const [authChecking, setAuthChecking] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -155,7 +144,8 @@ export default function ProductDetailPage() {
   const [previouslyBought, setPreviouslyBought] =
     useState<RecommendationProduct[]>([]);
 
-  const [purchaseHistoryMessage, setPurchaseHistoryMessage] = useState("Loading purchase history...");
+  const [purchaseHistoryMessage, setPurchaseHistoryMessage] =
+    useState("Loading purchase history...");
 
   const [saleRecommendations, setSaleRecommendations] =
     useState<RecommendationProduct[]>([]);
@@ -163,43 +153,24 @@ export default function ProductDetailPage() {
   const [saleMap, setSaleMap] =
     useState<Record<string, StorefrontSale>>({});
 
-  const [productSearch, setProductSearch] =
-    useState("");
-
-  const [productSearchFocused, setProductSearchFocused] =
-    useState(false);
-
-  const [searchProducts, setSearchProducts] =
-    useState<RecommendationProduct[]>([]);
-
-  /*
-   * Campaign pricing must be tracked by product OPTION, not only
-   * by product slug. A product can have 20mg on sale while 10mg is not.
-   */
   const [optionCampaignPriceMap, setOptionCampaignPriceMap] =
     useState<Record<string, OptionCampaignPrice>>({});
 
-  function normalizeDosageKey(
-    value: string | null | undefined
-  ) {
+  function normalizeDosageKey(value: string | null | undefined) {
     return String(value || "")
       .trim()
       .toLowerCase()
       .replace(/\s+/g, "");
   }
 
-  function normalizeProductSlug(
-    value: string | null | undefined
-  ) {
+  function normalizeProductSlug(value: string | null | undefined) {
     return String(value || "")
       .trim()
       .toLowerCase()
       .replace(/[\s_-]+/g, "");
   }
 
-  function isSolventWaterProduct(
-    value: string | null | undefined
-  ) {
+  function isSolventWaterProduct(value: string | null | undefined) {
     const normalized = String(value || "")
       .trim()
       .toLowerCase()
@@ -213,162 +184,85 @@ export default function ProductDetailPage() {
     );
   }
 
-  const selectedCoas =
-    useMemo(
-      () => {
-        if (!selectedOption) {
-          return [] as CoaDocument[];
-        }
+  const selectedCoas = useMemo(() => {
+    if (!selectedOption) {
+      return [] as CoaDocument[];
+    }
 
-        const selectedDosage =
-          normalizeDosageKey(
-            selectedOption.dosage
-          );
+    const selectedDosage = normalizeDosageKey(selectedOption.dosage);
 
-        return coaDocuments
-          .filter(
-            (document) =>
-              normalizeDosageKey(
-                document.dosage
-              ) === selectedDosage
-          )
-          .sort((a, b) => {
-            const aDate =
-              a.test_date
-                ? new Date(
-                    a.test_date.includes("T")
-                      ? a.test_date
-                      : `${a.test_date}T12:00:00`
-                  ).getTime()
-                : a.created_at
-                  ? new Date(a.created_at).getTime()
-                  : 0;
+    return coaDocuments
+      .filter(
+        (document) =>
+          normalizeDosageKey(document.dosage) === selectedDosage
+      )
+      .sort((a, b) => {
+        const aDate = a.test_date
+          ? new Date(
+              a.test_date.includes("T")
+                ? a.test_date
+                : `${a.test_date}T12:00:00`
+            ).getTime()
+          : a.created_at
+            ? new Date(a.created_at).getTime()
+            : 0;
 
-            const bDate =
-              b.test_date
-                ? new Date(
-                    b.test_date.includes("T")
-                      ? b.test_date
-                      : `${b.test_date}T12:00:00`
-                  ).getTime()
-                : b.created_at
-                  ? new Date(b.created_at).getTime()
-                  : 0;
+        const bDate = b.test_date
+          ? new Date(
+              b.test_date.includes("T")
+                ? b.test_date
+                : `${b.test_date}T12:00:00`
+            ).getTime()
+          : b.created_at
+            ? new Date(b.created_at).getTime()
+            : 0;
 
-            return bDate - aDate;
-          });
-      },
-      [
-        coaDocuments,
-        selectedOption,
-      ]
-    );
+        return bDate - aDate;
+      });
+  }, [coaDocuments, selectedOption]);
 
-  const filteredSearchProducts =
-    useMemo(
-      () => {
-        const query =
-          productSearch.trim().toLowerCase();
-
-        if (!query) {
-          return [];
-        }
-
-        const normalizedQuery =
-          normalizeProductSlug(query);
-
-        return searchProducts
-          .filter(
-            (item) =>
-              item.is_active !== false &&
-              (
-                item.name
-                  .toLowerCase()
-                  .includes(query) ||
-                normalizeProductSlug(
-                  item.slug
-                ).includes(
-                  normalizedQuery
-                )
-              )
-          )
-          .slice(0, 6);
-      },
-      [
-        productSearch,
-        searchProducts,
-      ]
-    );
-
-  /*
-   * Solvent Water (P) and Solvent Water (H)
-   * should not display storefront recommendation
-   * merchandising on their individual product pages.
-   */
   const hideRecommendationSections =
     isSolventWaterProduct(product?.slug) ||
     isSolventWaterProduct(product?.name);
 
-  function getCoaPublicUrl(
-    document: CoaDocument
-  ) {
-    const bucket =
-      document.storage_bucket ||
-      "coas";
+  function getCoaPublicUrl(document: CoaDocument) {
+    const bucket = document.storage_bucket || "coas";
 
     return supabase.storage
       .from(bucket)
-      .getPublicUrl(
-        document.file_path
-      )
+      .getPublicUrl(document.file_path)
       .data.publicUrl;
   }
 
-  function formatCoaDate(
-    value: string | null | undefined
-  ) {
+  function formatCoaDate(value: string | null | undefined) {
     if (!value) {
       return "Date not listed";
     }
 
-    const parsed =
-      new Date(
-        value.includes("T")
-          ? value
-          : `${value}T12:00:00`
-      );
+    const parsed = new Date(
+      value.includes("T") ? value : `${value}T12:00:00`
+    );
 
-    if (
-      Number.isNaN(
-        parsed.getTime()
-      )
-    ) {
+    if (Number.isNaN(parsed.getTime())) {
       return value;
     }
 
-    return parsed.toLocaleDateString(
-      undefined,
-      {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }
-    );
+    return parsed.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
   }
 
   function readRecentlyViewed() {
     try {
-      const raw =
-        localStorage.getItem(
-          RECENTLY_VIEWED_KEY
-        );
+      const raw = localStorage.getItem(RECENTLY_VIEWED_KEY);
 
       if (!raw) {
         return [] as RecentlyViewedItem[];
       }
 
-      const parsed =
-        JSON.parse(raw);
+      const parsed = JSON.parse(raw);
 
       if (!Array.isArray(parsed)) {
         return [] as RecentlyViewedItem[];
@@ -378,8 +272,8 @@ export default function ProductDetailPage() {
         (item): item is RecentlyViewedItem =>
           Boolean(
             item &&
-            typeof item.slug === "string" &&
-            typeof item.name === "string"
+              typeof item.slug === "string" &&
+              typeof item.name === "string"
           )
       );
     } catch {
@@ -387,11 +281,8 @@ export default function ProductDetailPage() {
     }
   }
 
-  function saveRecentlyViewed(
-    viewedProduct: Product
-  ) {
-    const existing =
-      readRecentlyViewed();
+  function saveRecentlyViewed(viewedProduct: Product) {
+    const existing = readRecentlyViewed();
 
     const next: RecentlyViewedItem[] = [
       {
@@ -403,12 +294,8 @@ export default function ProductDetailPage() {
       },
       ...existing.filter(
         (item) =>
-          normalizeProductSlug(
-            item.slug
-          ) !==
-          normalizeProductSlug(
-            viewedProduct.slug
-          )
+          normalizeProductSlug(item.slug) !==
+          normalizeProductSlug(viewedProduct.slug)
       ),
     ].slice(0, 8);
 
@@ -418,104 +305,62 @@ export default function ProductDetailPage() {
     );
 
     setRecentlyViewed(
-      next.filter(
-        (item) =>
-          normalizeProductSlug(
-            item.slug
-          ) !==
-          normalizeProductSlug(
-            viewedProduct.slug
-          )
-      ).slice(0, 3)
+      next
+        .filter(
+          (item) =>
+            normalizeProductSlug(item.slug) !==
+            normalizeProductSlug(viewedProduct.slug)
+        )
+        .slice(0, 3)
     );
   }
 
-  async function loadRecommendationProducts(
-    currentProduct: Product
-  ) {
+  async function loadRecommendationProducts(currentProduct: Product) {
     try {
-      const [
-        productsResult,
-        storefrontSales,
-      ] = await Promise.all([
+      const [productsResult, storefrontSales] = await Promise.all([
         supabase
           .from("products")
-          .select(
-            "id,name,slug,image,color,category,is_active"
-          )
+          .select("id,name,slug,image,color,category,is_active")
           .eq("is_active", true),
-
-        loadStorefrontSales(
-          supabase
-        ),
+        loadStorefrontSales(supabase),
       ]);
 
       if (productsResult.error) {
         throw productsResult.error;
       }
 
-      const activeProducts =
-        ((productsResult.data ||
-          []) as RecommendationProduct[])
-          .filter(
-            (item) =>
-              normalizeProductSlug(
-                item.slug
-              ) !==
-              normalizeProductSlug(
-                currentProduct.slug
-              )
-          );
-
-      setSearchProducts(
-        (productsResult.data ||
-          []) as RecommendationProduct[]
+      const activeProducts = (
+        (productsResult.data || []) as RecommendationProduct[]
+      ).filter(
+        (item) =>
+          normalizeProductSlug(item.slug) !==
+          normalizeProductSlug(currentProduct.slug)
       );
 
-      setSaleMap(
-        storefrontSales
-      );
+      setSaleMap(storefrontSales);
 
-      const saleItems =
-        activeProducts
-          .filter(
-            (item) =>
-              Boolean(
-                storefrontSales[
-                  item.slug
-                ]?.isOnSale
-              )
-          )
-          .sort(
-            (a, b) => {
-              const sameCategoryA =
-                a.category ===
-                currentProduct.category
-                  ? 1
-                  : 0;
+      const saleItems = activeProducts
+        .filter((item) => Boolean(storefrontSales[item.slug]?.isOnSale))
+        .sort((a, b) => {
+          const sameCategoryA =
+            a.category === currentProduct.category ? 1 : 0;
+          const sameCategoryB =
+            b.category === currentProduct.category ? 1 : 0;
 
-              const sameCategoryB =
-                b.category ===
-                currentProduct.category
-                  ? 1
-                  : 0;
+          return sameCategoryB - sameCategoryA;
+        })
+        .slice(0, 3);
 
-              return (
-                sameCategoryB -
-                sameCategoryA
-              );
-            }
-          )
-          .slice(0, 3);
-
-      setSaleRecommendations(
-        saleItems
-      );
-
+      setSaleRecommendations(saleItems);
       setPreviouslyBought([]);
       setPurchaseHistoryMessage("No previous purchases to display yet.");
+
       try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
         if (userError) throw userError;
         if (!user) return;
 
@@ -524,59 +369,89 @@ export default function ProductDetailPage() {
           .select("id,status,created_at")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false });
+
         if (ordersError) throw ordersError;
 
         const excludedStatuses = new Set([
-          "pending", "unpaid", "awaiting payment", "awaiting_payment",
-          "payment pending", "payment_pending", "failed", "cancelled", "canceled", "refunded",
+          "pending",
+          "unpaid",
+          "awaiting payment",
+          "awaiting_payment",
+          "payment pending",
+          "payment_pending",
+          "failed",
+          "cancelled",
+          "canceled",
+          "refunded",
         ]);
-        const purchasedOrders = (orderRows || []).filter((order) =>
-          !excludedStatuses.has(String(order.status || "pending").trim().toLowerCase())
+
+        const purchasedOrders = (orderRows || []).filter(
+          (order) =>
+            !excludedStatuses.has(
+              String(order.status || "pending").trim().toLowerCase()
+            )
         );
+
         if (!purchasedOrders.length) return;
 
         const { data: itemRows, error: itemsError } = await supabase
           .from("order_items")
           .select("order_id,product_slug")
-          .in("order_id", purchasedOrders.map((order) => order.id));
+          .in(
+            "order_id",
+            purchasedOrders.map((order) => order.id)
+          );
+
         if (itemsError) throw itemsError;
 
         const itemsByOrder = new Map<string, string[]>();
+
         for (const item of itemRows || []) {
           const key = String(item.order_id);
           const slugs = itemsByOrder.get(key) || [];
           slugs.push(String(item.product_slug || ""));
           itemsByOrder.set(key, slugs);
         }
+
         const seen = new Set<string>();
         const boughtProducts: RecommendationProduct[] = [];
+
         for (const order of purchasedOrders) {
           for (const itemSlug of itemsByOrder.get(String(order.id)) || []) {
             const key = normalizeProductSlug(itemSlug);
+
             if (!key || seen.has(key)) continue;
             seen.add(key);
-            const item = activeProducts.find((candidate) => normalizeProductSlug(candidate.slug) === key);
+
+            const item = activeProducts.find(
+              (candidate) =>
+                normalizeProductSlug(candidate.slug) === key
+            );
+
             if (item) boughtProducts.push(item);
             if (boughtProducts.length === 3) break;
           }
+
           if (boughtProducts.length === 3) break;
         }
+
         setPreviouslyBought(boughtProducts);
       } catch (historyError) {
-        console.warn("Previously bought history unavailable:", historyError);
+        console.warn(
+          "Previously bought history unavailable:",
+          historyError
+        );
         setPreviouslyBought([]);
-        setPurchaseHistoryMessage("Purchase history is currently unavailable.");
+        setPurchaseHistoryMessage(
+          "Purchase history is currently unavailable."
+        );
       }
-    } catch (
-      error
-    ) {
-      console.error(
-        "Product recommendations failed:",
-        error
-      );
-
+    } catch (error) {
+      console.error("Product recommendations failed:", error);
       setPreviouslyBought([]);
-      setPurchaseHistoryMessage("Purchase history is currently unavailable.");
+      setPurchaseHistoryMessage(
+        "Purchase history is currently unavailable."
+      );
       setSaleRecommendations([]);
       setSaleMap({});
     }
@@ -586,9 +461,7 @@ export default function ProductDetailPage() {
     let mounted = true;
 
     async function checkAuthentication() {
-      await enforceAuthPersistencePolicy(
-        supabase
-      );
+      await enforceAuthPersistencePolicy(supabase);
 
       const {
         data: { user },
@@ -630,21 +503,17 @@ export default function ProductDetailPage() {
     async function loadProduct() {
       setLoading(true);
 
-      const { data: productRows, error: productError } =
-        await supabase
-          .from("products")
-          .select("*")
-          .eq("is_active", true);
+      const { data: productRows, error: productError } = await supabase
+        .from("products")
+        .select("*")
+        .eq("is_active", true);
 
-      const routeSlugKey =
-        normalizeProductSlug(slug);
+      const routeSlugKey = normalizeProductSlug(slug);
 
       const productData =
         ((productRows || []) as Product[]).find(
           (candidate) =>
-            normalizeProductSlug(
-              candidate.slug
-            ) === routeSlugKey
+            normalizeProductSlug(candidate.slug) === routeSlugKey
         ) || null;
 
       if (productError || !productData) {
@@ -654,72 +523,46 @@ export default function ProductDetailPage() {
         return;
       }
 
-      const loadedProduct =
-        productData as Product;
+      const loadedProduct = productData as Product;
+      const canonicalSlugKey = normalizeProductSlug(loadedProduct.slug);
 
-      const canonicalSlugKey =
-        normalizeProductSlug(
-          loadedProduct.slug
-        );
+      setProduct(loadedProduct);
 
-      setProduct(
-        loadedProduct
-      );
-
-      if (
-        trackedProductViewRef.current !==
-        loadedProduct.slug
-      ) {
-        trackedProductViewRef.current =
-          loadedProduct.slug;
+      if (trackedProductViewRef.current !== loadedProduct.slug) {
+        trackedProductViewRef.current = loadedProduct.slug;
 
         void trackEvent({
-          event_type:
-            "product_view",
-          page_path:
-            `/products/${loadedProduct.slug}`,
-          product_slug:
-            loadedProduct.slug,
+          event_type: "product_view",
+          page_path: `/products/${loadedProduct.slug}`,
+          product_slug: loadedProduct.slug,
           metadata: {
-            product_name:
-              loadedProduct.name,
-            category:
-              loadedProduct.category ||
-              null,
+            product_name: loadedProduct.name,
+            category: loadedProduct.category || null,
           },
         });
       }
 
-      saveRecentlyViewed(
-        loadedProduct
-      );
+      saveRecentlyViewed(loadedProduct);
+      void loadRecommendationProducts(loadedProduct);
 
-      void loadRecommendationProducts(
-        loadedProduct
-      );
-
-      const { data: optionRows, error: optionError } =
-        await supabase
-          .from("product_options")
-          .select("*")
-          .eq("is_active", true)
-          .is("archived_at", null);
+      const { data: optionRows, error: optionError } = await supabase
+        .from("product_options")
+        .select("*")
+        .eq("is_active", true)
+        .is("archived_at", null);
 
       if (optionError) {
         console.error("Option loading error:", optionError);
       }
 
-      const optionData =
-        ((optionRows || []) as ProductOption[]).filter(
-          (option) =>
-            normalizeProductSlug(
-              option.product_slug
-            ) === canonicalSlugKey
-        );
+      const optionData = (
+        (optionRows || []) as ProductOption[]
+      ).filter(
+        (option) =>
+          normalizeProductSlug(option.product_slug) === canonicalSlugKey
+      );
 
-      const sortedOptions = (
-        optionData
-      ).sort((a, b) => {
+      const sortedOptions = optionData.sort((a, b) => {
         if (a.purchase_type !== b.purchase_type) {
           return a.purchase_type === "single" ? -1 : 1;
         }
@@ -736,140 +579,20 @@ export default function ProductDetailPage() {
 
       setOptions(sortedOptions);
 
-      /*
-       * Load the ACTUAL campaign price for every individual option.
-       *
-       * Campaign assignments are option-specific. A 20mg single can be
-       * included in a campaign while the 10mg single or kit is not.
-       *
-       * The old version stored only true/false here. That was enough to
-       * pause Bundle Savings, but it meant the product page still rendered
-       * the manual product_options.sale_active price and ignored the
-       * campaign sale price.
-       *
-       * Store the RPC pricing snapshot instead so the customer-facing
-       * product page, cart snapshot, and Bundle Savings state all use the
-       * same campaign assignment.
-       */
-      const optionCampaignEntries =
-        await Promise.all(
-          sortedOptions.map(async (option) => {
-            try {
-              const { data, error } =
-                await supabase.rpc(
-                  "get_product_option_campaign_price",
-                  {
-                    p_product_option_id: option.id,
-                  }
-                );
-
-              if (error) {
-                console.warn(
-                  `Unable to load campaign pricing for option ${option.id}:`,
-                  error
-                );
-
-                return [
-                  option.id,
-                  {
-                    hasCampaign: false,
-                    campaignId: null,
-                    campaignName: null,
-                    campaignType: null,
-                    regularUnitPrice: Number(option.price || 0),
-                    saleUnitPrice: Number(option.price || 0),
-                    saleDiscountAmount: 0,
-                  } satisfies OptionCampaignPrice,
-                ] as const;
+      const optionCampaignEntries = await Promise.all(
+        sortedOptions.map(async (option) => {
+          try {
+            const { data, error } = await supabase.rpc(
+              "get_product_option_campaign_price",
+              {
+                p_product_option_id: option.id,
               }
+            );
 
-              const campaignData =
-                data && typeof data === "object"
-                  ? (data as Record<string, unknown>)
-                  : null;
-
-              const hasCampaign =
-                Boolean(
-                  campaignData?.has_campaign
-                );
-
-              const regularUnitPrice =
-                Number(
-                  campaignData?.regular_unit_price ??
-                    option.price ??
-                    0
-                );
-
-              const saleUnitPrice =
-                Number(
-                  campaignData?.sale_unit_price ??
-                    regularUnitPrice
-                );
-
-              const saleDiscountAmount =
-                Number(
-                  campaignData?.sale_discount_amount ??
-                    Math.max(
-                      0,
-                      regularUnitPrice -
-                        saleUnitPrice
-                    )
-                );
-
-              return [
-                option.id,
-                {
-                  hasCampaign,
-                  campaignId:
-                    campaignData?.sale_campaign_id
-                      ? String(
-                          campaignData.sale_campaign_id
-                        )
-                      : null,
-                  campaignName:
-                    campaignData?.sale_campaign_name
-                      ? String(
-                          campaignData.sale_campaign_name
-                        )
-                      : null,
-                  campaignType:
-                    campaignData?.sale_campaign_type
-                      ? String(
-                          campaignData.sale_campaign_type
-                        )
-                      : null,
-                  regularUnitPrice:
-                    Number.isFinite(
-                      regularUnitPrice
-                    )
-                      ? regularUnitPrice
-                      : Number(option.price || 0),
-                  saleUnitPrice:
-                    hasCampaign &&
-                    Number.isFinite(
-                      saleUnitPrice
-                    )
-                      ? Math.max(
-                          0,
-                          saleUnitPrice
-                        )
-                      : Number(option.price || 0),
-                  saleDiscountAmount:
-                    hasCampaign &&
-                    Number.isFinite(
-                      saleDiscountAmount
-                    )
-                      ? Math.max(
-                          0,
-                          saleDiscountAmount
-                        )
-                      : 0,
-                } satisfies OptionCampaignPrice,
-              ] as const;
-            } catch (campaignError) {
+            if (error) {
               console.warn(
                 `Unable to load campaign pricing for option ${option.id}:`,
-                campaignError
+                error
               );
 
               return [
@@ -885,74 +608,116 @@ export default function ProductDetailPage() {
                 } satisfies OptionCampaignPrice,
               ] as const;
             }
-          })
-        );
 
-      setOptionCampaignPriceMap(
-        Object.fromEntries(
-          optionCampaignEntries
-        )
+            const campaignData =
+              data && typeof data === "object"
+                ? (data as Record<string, unknown>)
+                : null;
+
+            const hasCampaign = Boolean(campaignData?.has_campaign);
+
+            const regularUnitPrice = Number(
+              campaignData?.regular_unit_price ?? option.price ?? 0
+            );
+
+            const saleUnitPrice = Number(
+              campaignData?.sale_unit_price ?? regularUnitPrice
+            );
+
+            const saleDiscountAmount = Number(
+              campaignData?.sale_discount_amount ??
+                Math.max(0, regularUnitPrice - saleUnitPrice)
+            );
+
+            return [
+              option.id,
+              {
+                hasCampaign,
+                campaignId: campaignData?.sale_campaign_id
+                  ? String(campaignData.sale_campaign_id)
+                  : null,
+                campaignName: campaignData?.sale_campaign_name
+                  ? String(campaignData.sale_campaign_name)
+                  : null,
+                campaignType: campaignData?.sale_campaign_type
+                  ? String(campaignData.sale_campaign_type)
+                  : null,
+                regularUnitPrice: Number.isFinite(regularUnitPrice)
+                  ? regularUnitPrice
+                  : Number(option.price || 0),
+                saleUnitPrice:
+                  hasCampaign && Number.isFinite(saleUnitPrice)
+                    ? Math.max(0, saleUnitPrice)
+                    : Number(option.price || 0),
+                saleDiscountAmount:
+                  hasCampaign && Number.isFinite(saleDiscountAmount)
+                    ? Math.max(0, saleDiscountAmount)
+                    : 0,
+              } satisfies OptionCampaignPrice,
+            ] as const;
+          } catch (campaignError) {
+            console.warn(
+              `Unable to load campaign pricing for option ${option.id}:`,
+              campaignError
+            );
+
+            return [
+              option.id,
+              {
+                hasCampaign: false,
+                campaignId: null,
+                campaignName: null,
+                campaignType: null,
+                regularUnitPrice: Number(option.price || 0),
+                saleUnitPrice: Number(option.price || 0),
+                saleDiscountAmount: 0,
+              } satisfies OptionCampaignPrice,
+            ] as const;
+          }
+        })
       );
 
-      const { data: inventoryRows, error: inventoryError } =
-        await supabase
-          .from("inventory")
-          .select("*");
+      setOptionCampaignPriceMap(
+        Object.fromEntries(optionCampaignEntries)
+      );
+
+      const { data: inventoryRows, error: inventoryError } = await supabase
+        .from("inventory")
+        .select("*");
 
       if (inventoryError) {
-        console.error(
-          "Inventory loading error:",
-          inventoryError
-        );
+        console.error("Inventory loading error:", inventoryError);
       }
 
-      const inventoryData =
-        ((inventoryRows || []) as InventoryItem[]).filter(
-          (item) =>
-            normalizeProductSlug(
-              item.product_slug
-            ) === canonicalSlugKey
-        );
+      const inventoryData = (
+        (inventoryRows || []) as InventoryItem[]
+      ).filter(
+        (item) =>
+          normalizeProductSlug(item.product_slug) === canonicalSlugKey
+      );
 
       setInventory(inventoryData);
-
       setCoaLoading(true);
 
-      const {
-        data: coaRows,
-        error: coaError,
-      } =
-        await supabase
-          .from("coa_documents")
-          .select(
-            "id,product_slug,product_name,dosage,report_id,lab_name,test_date,purity_percent,identity_result,net_content,test_method,file_path,file_name,mime_type,file_type,status,is_current,storage_bucket,created_at"
-          )
-          .eq(
-            "status",
-            "active"
-          )
-          .order(
-            "test_date",
-            {
-              ascending: false,
-            }
-          );
+      const { data: coaRows, error: coaError } = await supabase
+        .from("coa_documents")
+        .select(
+          "id,product_slug,product_name,dosage,report_id,lab_name,test_date,purity_percent,identity_result,net_content,test_method,file_path,file_name,mime_type,file_type,status,is_current,storage_bucket,created_at"
+        )
+        .eq("status", "active")
+        .order("test_date", { ascending: false });
 
       if (coaError) {
-        console.warn(
-          "COA loading error:",
-          coaError
-        );
-
+        console.warn("COA loading error:", coaError);
         setCoaDocuments([]);
       } else {
-        const coaData =
-          ((coaRows || []) as CoaDocument[]).filter(
-            (document) =>
-              normalizeProductSlug(
-                document.product_slug
-              ) === canonicalSlugKey
-          );
+        const coaData = (
+          (coaRows || []) as CoaDocument[]
+        ).filter(
+          (document) =>
+            normalizeProductSlug(document.product_slug) ===
+            canonicalSlugKey
+        );
 
         setCoaDocuments(coaData);
       }
@@ -971,11 +736,11 @@ export default function ProductDetailPage() {
     }
 
     const firstAvailable =
-      options.find((option) => isOptionAvailable(option)) ||
-      options[0];
+      options.find((option) => isOptionAvailable(option)) || options[0];
 
     setSelectedOption(firstAvailable);
     setQuantity(1);
+    setCoaPanelOpen(true);
   }, [options, inventory]);
 
   function getAvailableQuantity(option: ProductOption) {
@@ -993,8 +758,7 @@ export default function ProductDetailPage() {
       return false;
     }
 
-    const availableQuantity =
-      getAvailableQuantity(option);
+    const availableQuantity = getAvailableQuantity(option);
 
     if (option.purchase_type === "single") {
       return (
@@ -1004,13 +768,8 @@ export default function ProductDetailPage() {
     }
 
     if (option.purchase_type === "kit") {
-      if (option.status === "pre-sale") {
-        return true;
-      }
-
-      if (option.status === "out of stock") {
-        return false;
-      }
+      if (option.status === "pre-sale") return true;
+      if (option.status === "out of stock") return false;
 
       return availableQuantity >= 10;
     }
@@ -1020,19 +779,13 @@ export default function ProductDetailPage() {
 
   function getPurchaseLabel(purchaseType: string) {
     if (product?.category === "lab-material") {
-      return purchaseType === "kit"
-        ? "10 Pack"
-        : "Single Item";
+      return purchaseType === "kit" ? "10 Pack" : "Single Item";
     }
 
-    return purchaseType === "kit"
-      ? "Full Kit of 10"
-      : "Single Vial";
+    return purchaseType === "kit" ? "Full Kit of 10" : "Single Vial";
   }
 
-  function getMatchingSingleOption(
-    option: ProductOption
-  ) {
+  function getMatchingSingleOption(option: ProductOption) {
     if (option.purchase_type !== "kit") {
       return null;
     }
@@ -1041,7 +794,8 @@ export default function ProductDetailPage() {
       options.find(
         (candidate) =>
           candidate.purchase_type === "single" &&
-          candidate.dosage === option.dosage &&
+          normalizeDosageKey(candidate.dosage) ===
+            normalizeDosageKey(option.dosage) &&
           candidate.is_active !== false &&
           !candidate.archived_at
       ) || null
@@ -1053,37 +807,22 @@ export default function ProductDetailPage() {
       return null;
     }
 
-    const single =
-      getMatchingSingleOption(option);
+    const single = getMatchingSingleOption(option);
 
     if (!single) {
       return null;
     }
 
-    const singlePrice =
-      Number(single.price || 0);
-
-    const kitPrice =
-      Number(option.price || 0);
-
-    const tenSingleValue =
-      singlePrice * 10;
+    const singlePrice = Number(single.price || 0);
+    const kitPrice = Number(option.price || 0);
+    const tenSingleValue = singlePrice * 10;
 
     if (tenSingleValue <= 0) {
       return null;
     }
 
-    const savingsAmount =
-      Math.max(
-        0,
-        tenSingleValue -
-          kitPrice
-      );
-
-    const savingsPercent =
-      (savingsAmount /
-        tenSingleValue) *
-      100;
+    const savingsAmount = Math.max(0, tenSingleValue - kitPrice);
+    const savingsPercent = (savingsAmount / tenSingleValue) * 100;
 
     return {
       singlePrice,
@@ -1095,130 +834,186 @@ export default function ProductDetailPage() {
   }
 
   function getManualSalePrice(option: ProductOption) {
-    const regularPrice =
-      Number(option.price || 0);
+    const regularPrice = Number(option.price || 0);
+    const salePercent = Number(option.sale_percent || 0);
 
-    const salePercent =
-      Number(
-        option.sale_percent || 0
-      );
-
-    if (
-      !option.sale_active ||
-      salePercent <= 0
-    ) {
+    if (!option.sale_active || salePercent <= 0) {
       return regularPrice;
     }
 
     return Math.max(
       0,
-      regularPrice -
-        regularPrice *
-          (salePercent / 100)
+      regularPrice - regularPrice * (salePercent / 100)
     );
   }
 
-  function getCampaignPrice(
-    option: ProductOption
-  ) {
-    const campaign =
-      optionCampaignPriceMap[
-        option.id
-      ];
+  function getCampaignPrice(option: ProductOption) {
+    const campaign = optionCampaignPriceMap[option.id];
 
-    if (
-      !campaign?.hasCampaign
-    ) {
+    if (!campaign?.hasCampaign) {
       return null;
     }
 
-    return Math.max(
-      0,
-      Number(
-        campaign.saleUnitPrice
-      )
-    );
+    return Math.max(0, Number(campaign.saleUnitPrice));
   }
 
-  /*
-   * If both a manual option sale and a campaign are active, show the
-   * lower customer price. This prevents a campaign from making the
-   * storefront appear more expensive than an already-active manual sale.
-   *
-   * Checkout still reruns the authoritative pricing engine by
-   * productOptionId before the order is created.
-   */
   function getSalePrice(option: ProductOption) {
-    const regularPrice =
-      Number(option.price || 0);
+    const regularPrice = Number(option.price || 0);
+    const prices = [regularPrice];
 
-    const prices = [
-      regularPrice,
-    ];
-
-    if (
-      option.sale_active &&
-      Number(
-        option.sale_percent || 0
-      ) > 0
-    ) {
-      prices.push(
-        getManualSalePrice(option)
-      );
+    if (option.sale_active && Number(option.sale_percent || 0) > 0) {
+      prices.push(getManualSalePrice(option));
     }
 
-    const campaignPrice =
-      getCampaignPrice(option);
+    const campaignPrice = getCampaignPrice(option);
 
-    if (
-      campaignPrice !== null
-    ) {
-      prices.push(
-        campaignPrice
-      );
+    if (campaignPrice !== null) {
+      prices.push(campaignPrice);
     }
 
-    return Math.min(
-      ...prices
-    );
+    return Math.min(...prices);
   }
 
-  function getEffectiveSalePercent(
-    option: ProductOption
-  ) {
-    const regularPrice =
-      Number(option.price || 0);
+  function getEffectiveSalePercent(option: ProductOption) {
+    const regularPrice = Number(option.price || 0);
+    const salePrice = getSalePrice(option);
 
-    const salePrice =
-      getSalePrice(option);
-
-    if (
-      regularPrice <= 0 ||
-      salePrice >= regularPrice
-    ) {
+    if (regularPrice <= 0 || salePrice >= regularPrice) {
       return 0;
     }
 
     return Number(
-      (
-        ((regularPrice - salePrice) /
-          regularPrice) *
-        100
-      ).toFixed(2)
+      (((regularPrice - salePrice) / regularPrice) * 100).toFixed(2)
     );
   }
 
-  function getEffectiveCampaign(
-    option: ProductOption
-  ) {
-    const campaign =
-      optionCampaignPriceMap[
-        option.id
-      ];
+  function getEffectiveCampaign(option: ProductOption) {
+    const campaign = optionCampaignPriceMap[option.id];
 
-    return campaign?.hasCampaign
-      ? campaign
-      : null;
+    return campaign?.hasCampaign ? campaign : null;
+  }
+
+  function changeProductQuantity(nextQuantity: number) {
+    if (
+      selectedOption?.purchase_type === "kit" &&
+      nextQuantity < 1
+    ) {
+      const single = getMatchingSingleOption(selectedOption);
+
+      if (single) {
+        setSelectedOption(single);
+        setQuantity(9);
+        setCoaPanelOpen(true);
+        return;
+      }
+    }
+
+    const next = Math.max(1, Math.floor(nextQuantity));
+
+    if (
+      selectedOption?.purchase_type === "single" &&
+      next === 10
+    ) {
+      const kit = options.find(
+        (option) =>
+          option.purchase_type === "kit" &&
+          normalizeDosageKey(option.dosage) ===
+            normalizeDosageKey(selectedOption.dosage) &&
+          option.is_active !== false &&
+          !option.archived_at
+      );
+
+      if (kit && isOptionAvailable(kit)) {
+        setSelectedOption(kit);
+        setQuantity(1);
+        setCoaPanelOpen(true);
+        return;
+      }
+    }
+
+    setQuantity(next);
+  }
+
+  function getProductBundleChoices(option: ProductOption) {
+    if (
+      option.purchase_type !== "single" ||
+      option.bundle_discount_enabled === false ||
+      hasActiveSaleForOption(option)
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        quantity: Number(option.bundle_qty_1),
+        discount: Number(option.bundle_discount_1),
+      },
+      {
+        quantity: Number(option.bundle_qty_2),
+        discount: Number(option.bundle_discount_2),
+      },
+      {
+        quantity: Number(option.bundle_qty_3),
+        discount: Number(option.bundle_discount_3),
+      },
+    ]
+      .filter(
+        (tier) =>
+          Number.isInteger(tier.quantity) &&
+          tier.quantity > 0 &&
+          tier.quantity < 10 &&
+          Number.isFinite(tier.discount) &&
+          tier.discount > 0 &&
+          tier.discount <= 100
+      )
+      .sort((a, b) => a.quantity - b.quantity);
+  }
+
+  function productQuantityTotal(unitPrice: number, count: number) {
+    return (
+      Math.round((Math.round(unitPrice * 100) / 100) * count * 100) /
+      100
+    );
+  }
+
+  function getProductBundleQuote(
+    option: ProductOption,
+    requestedQuantity: number
+  ) {
+    const tier = getBundleTier(option, requestedQuantity);
+
+    if (
+      !tier ||
+      !getProductBundleChoices(option).some(
+        (choice) =>
+          choice.quantity === tier.quantity &&
+          choice.discount === tier.discount
+      )
+    ) {
+      return null;
+    }
+
+    const regularUnit = Number(option.price || 0);
+
+    const discountedUnit =
+      Math.round(
+        getSalePrice(option) * (1 - tier.discount / 100) * 100
+      ) / 100;
+
+    const regularTotal =
+      Math.round(regularUnit * requestedQuantity * 100) / 100;
+
+    const total =
+      Math.round(discountedUnit * requestedQuantity * 100) / 100;
+
+    return {
+      total,
+      regularTotal,
+      savings: Math.max(
+        0,
+        Math.round((regularTotal - total) * 100) / 100
+      ),
+    };
   }
 
   function getBundleTier(
@@ -1235,11 +1030,9 @@ export default function ProductDetailPage() {
     const saleActive =
       Boolean(
         option.sale_active &&
-        Number(option.sale_percent || 0) > 0
+          Number(option.sale_percent || 0) > 0
       ) ||
-      Boolean(
-        optionCampaignPriceMap[option.id]?.hasCampaign
-      );
+      Boolean(optionCampaignPriceMap[option.id]?.hasCampaign);
 
     if (
       saleActive ||
@@ -1262,32 +1055,36 @@ export default function ProductDetailPage() {
         discount: Number(option.bundle_discount_3 || 0),
       },
     ]
-      .filter(
-        (tier) =>
-          tier.quantity > 0 &&
-          tier.discount > 0
-      )
+      .filter((tier) => tier.quantity > 0 && tier.discount > 0)
       .sort((a, b) => b.quantity - a.quantity);
 
     return (
-      tiers.find(
-        (tier) =>
-          requestedQuantity >= tier.quantity
-      ) || null
+      tiers.find((tier) => requestedQuantity >= tier.quantity) ||
+      null
     );
   }
 
   function hasActiveSaleForOption(option: ProductOption) {
     return (
-      getEffectiveSalePercent(
-        option
-      ) > 0 ||
-      Boolean(
-        optionCampaignPriceMap[
-          option.id
-        ]?.hasCampaign
-      )
+      getEffectiveSalePercent(option) > 0 ||
+      Boolean(optionCampaignPriceMap[option.id]?.hasCampaign)
     );
+  }
+
+  function cartVariantFor(option: ProductOption | undefined) {
+    if (!option) return undefined;
+
+    return {
+      productOptionId: option.id,
+      purchaseType: option.purchase_type as "single" | "kit",
+      price: getSalePrice(option),
+      regularPrice: Number(option.price || 0),
+      hasCampaign: Boolean(getEffectiveCampaign(option)),
+      status: option.status,
+      cost: Number(option.cost || 0),
+      maxAvailable: getAvailableQuantity(option),
+      bundleTiers: getProductBundleChoices(option),
+    };
   }
 
   function handleAddToCart() {
@@ -1296,9 +1093,7 @@ export default function ProductDetailPage() {
     }
 
     if (!isOptionAvailable(selectedOption)) {
-      alert(
-        "This option is not currently available for purchase."
-      );
+      alert("This option is not currently available for purchase.");
       return;
     }
 
@@ -1313,12 +1108,8 @@ export default function ProductDetailPage() {
       return;
     }
 
-    const availableQuantity =
-      getAvailableQuantity(selectedOption);
-
-    const maxKits = Math.floor(
-      availableQuantity / 10
-    );
+    const availableQuantity = getAvailableQuantity(selectedOption);
+    const maxKits = Math.floor(availableQuantity / 10);
 
     if (
       selectedOption.purchase_type === "single" &&
@@ -1337,37 +1128,45 @@ export default function ProductDetailPage() {
     addToCart(
       {
         productOptionId: selectedOption.id,
+        basePrice: getSalePrice(selectedOption),
+        hasCampaign: Boolean(getEffectiveCampaign(selectedOption)),
+        bundleTiers: getProductBundleChoices(selectedOption),
 
+        singleOption: cartVariantFor(
+          options.find(
+            (option) =>
+              option.purchase_type === "single" &&
+              normalizeDosageKey(option.dosage) ===
+                normalizeDosageKey(selectedOption.dosage) &&
+              option.is_active !== false &&
+              !option.archived_at
+          )
+        ),
+
+        kitOption: cartVariantFor(
+          options.find(
+            (option) =>
+              option.purchase_type === "kit" &&
+              normalizeDosageKey(option.dosage) ===
+                normalizeDosageKey(selectedOption.dosage) &&
+              option.is_active !== false &&
+              !option.archived_at
+          )
+        ),
+
+        variantsLoadedAt: Date.now(),
         name: product.name,
         slug: product.slug,
         image: product.image,
         dosage: selectedOption.dosage,
-
         price: getSalePrice(selectedOption),
         regularPrice: Number(selectedOption.price || 0),
         salePrice: getSalePrice(selectedOption),
-
-        wasOnSale:
-          hasActiveSaleForOption(
-            selectedOption
-          ),
-
-        salePercent:
-          getEffectiveSalePercent(
-            selectedOption
-          ),
-
+        wasOnSale: hasActiveSaleForOption(selectedOption),
+        salePercent: getEffectiveSalePercent(selectedOption),
         cost: Number(selectedOption.cost || 0),
-
-        purchaseType:
-          selectedOption.purchase_type as
-            | "single"
-            | "kit",
-
-        status: isKitPresale
-          ? "pre-sale"
-          : selectedOption.status,
-
+        purchaseType: selectedOption.purchase_type as "single" | "kit",
+        status: isKitPresale ? "pre-sale" : selectedOption.status,
         maxAvailable: availableQuantity,
       },
       quantity
@@ -1392,50 +1191,37 @@ export default function ProductDetailPage() {
     title: string;
     eyebrow: string;
     emptyMessage?: string;
-    items:
-      | RecommendationProduct[]
-      | RecentlyViewedItem[];
+    items: RecommendationProduct[] | RecentlyViewedItem[];
   }) {
-    if (
-      items.length === 0 && !emptyMessage
-    ) {
+    if (items.length === 0 && !emptyMessage) {
       return null;
     }
 
     return (
       <section style={recommendationSection}>
         <div style={recommendationHeader}>
-          <span style={recommendationEyebrow}>
-            {eyebrow}
-          </span>
-
-          <h2 style={recommendationTitle}>
-            {title}
-          </h2>
+          <span style={recommendationEyebrow}>{eyebrow}</span>
+          <h2 style={recommendationTitle}>{title}</h2>
         </div>
 
         <div style={recommendationGrid}>
-          {items.length === 0 && emptyMessage && <p style={recommendationEmpty}>{emptyMessage}</p>}
-          {items.map(
-            (item) => {
-              const effectiveSale =
-                saleMap[
-                  item.slug
-                ];
+          {items.length === 0 && emptyMessage && (
+            <p style={recommendationEmpty}>{emptyMessage}</p>
+          )}
 
-              return (
+          {items.map((item) => {
+            const effectiveSale = saleMap[item.slug];
+
+            return (
+              <div key={item.slug}>
                 <Link
-                  key={item.slug}
                   href={`/products/${item.slug}`}
                   style={recommendationLink}
                 >
                   <article style={recommendationCard}>
                     <div style={recommendationImageWrap}>
                       <img
-                        src={
-                          item.image ||
-                          "/pugpep-logo.png"
-                        }
+                        src={item.image || "/pugpep-logo.png"}
                         alt={item.name}
                         style={recommendationImage}
                       />
@@ -1452,8 +1238,7 @@ export default function ProductDetailPage() {
                         {item.name}
                       </strong>
 
-                      {effectiveSale?.source ===
-                        "campaign" &&
+                      {effectiveSale?.source === "campaign" &&
                         effectiveSale.campaignName && (
                           <span style={recommendationCampaign}>
                             {effectiveSale.campaignName}
@@ -1466,9 +1251,31 @@ export default function ProductDetailPage() {
                     </div>
                   </article>
                 </Link>
-              );
-            }
-          )}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new Event("pugpep:open-cart")
+                    )
+                  }
+                  style={{
+                    width: "100%",
+                    marginTop: 6,
+                    padding: "8px 12px",
+                    background: "#191b23",
+                    color: "#c6cddd",
+                    border: "1px solid #454956",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    fontWeight: 700,
+                  }}
+                >
+                  View Cart
+                </button>
+              </div>
+            );
+          })}
         </div>
       </section>
     );
@@ -1476,6 +1283,7 @@ export default function ProductDetailPage() {
 
   function formatLaunchDate(value: string) {
     const date = new Date(`${value}T12:00:00`);
+
     if (Number.isNaN(date.getTime())) return value;
 
     return date.toLocaleDateString(undefined, {
@@ -1493,10 +1301,9 @@ export default function ProductDetailPage() {
     today.setHours(0, 0, 0, 0);
 
     const endDate = new Date(`${product.new_until}T23:59:59`);
+
     return endDate.getTime() >= today.getTime();
   }
-
-
 
   if (authChecking || !isAuthenticated || loading) {
     return (
@@ -1516,9 +1323,7 @@ export default function ProductDetailPage() {
     return (
       <main style={pageStyle}>
         <div style={pageContainer}>
-          <h1 style={notFoundTitle}>
-            Product Not Found
-          </h1>
+          <h1 style={notFoundTitle}>Product Not Found</h1>
 
           <button
             type="button"
@@ -1531,14 +1336,89 @@ export default function ProductDetailPage() {
       </main>
     );
   }
-    return (
+
+  return (
     <main style={pageStyle}>
       <style jsx global>{`
-        .product-option-card:hover { transform: translateY(-2px); border-color: #00d9ff !important; }
-        .product-option-card:focus-visible { outline: 2px solid #00d9ff; outline-offset: 4px; }
-        .product-option-card:active { transform: translateY(0); }
-        @media (prefers-reduced-motion: reduce) { .product-option-card { transition: none !important; } .product-option-card:hover { transform: none; } }
-        @media (max-width: 400px) { .product-option-card { padding: 8px !important; } }
+        .product-quantity-bundles {
+          display: flex;
+          flex: 1;
+          min-width: 0;
+          gap: 5px;
+        }
+
+        .product-quantity-bundle {
+          display: flex;
+          flex: 1 1 0;
+          min-width: 0;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 3px;
+          min-height: 50px;
+          padding: 7px 3px;
+          border: 1px solid #454956;
+          border-radius: 8px;
+          background: #191d27;
+          color: #e8edf4;
+          cursor: pointer;
+          font: inherit;
+          font-size: 14px;
+          font-weight: 700;
+          line-height: 1.25;
+          white-space: nowrap;
+        }
+
+        .product-quantity-bundle strong {
+          font-size: 17px;
+          font-weight: 800;
+        }
+
+        .product-quantity-bundle[aria-pressed="true"] {
+          border-color: #7df9ff;
+          background: #7df9ff;
+          color: #062027;
+        }
+
+        .product-quantity-bundle:disabled {
+          opacity: 0.45;
+          cursor: default;
+        }
+
+        .product-quantity-bundle:focus-visible {
+          outline: 3px solid #ff75df;
+          outline-offset: 2px;
+        }
+
+        .product-option-card:hover {
+          transform: translateY(-2px);
+          border-color: #00d9ff !important;
+        }
+
+        .product-option-card:focus-visible {
+          outline: 2px solid #00d9ff;
+          outline-offset: 4px;
+        }
+
+        .product-option-card:active {
+          transform: translateY(0);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .product-option-card {
+            transition: none !important;
+          }
+
+          .product-option-card:hover {
+            transform: none;
+          }
+        }
+
+        @media (max-width: 400px) {
+          .product-option-card {
+            padding: 8px !important;
+          }
+        }
 
         @media (max-width: 980px) {
           .product-detail-main-grid {
@@ -1570,7 +1450,6 @@ export default function ProductDetailPage() {
           className="product-detail-main-grid"
           style={productLayout}
         >
-          {/* Left column: product image, options, and purchase controls */}
           <div
             className="product-detail-left"
             style={imageColumn}
@@ -1584,187 +1463,472 @@ export default function ProductDetailPage() {
             </div>
 
             <div style={imageOptionSection}>
-            {selectedOption && !product.is_coming_soon && (
-              <section aria-label="Quantity">
-                  <div style={quantitySection}>
-                    <span style={quantityLabel}>
-                      Quantity
-                    </span>
-
-                    <div style={quantityRow}>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setQuantity((previous) =>
-                            Math.max(
-                              1,
-                              previous - 1
-                            )
-                          )
-                        }
-                        style={qtyButton}
-                        aria-label="Decrease quantity"
-                      >
-                        −
-                      </button>
-
-                      <span style={quantityNumber}>
-                        {quantity}
-                      </span>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setQuantity(
-                            (previous) =>
-                              previous + 1
-                          )
-                        }
-                        style={qtyButton}
-                        aria-label="Increase quantity"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-
-
-              </section>
-            )}
-
-              <h2 style={selectOptionTitle}>
-                Select Option
-              </h2>
+              <h2 style={selectOptionTitle}>Select Option</h2>
 
               {options.length === 0 ? (
                 <div style={noOptionsBox}>
-                  No purchasing options are currently
-                  available.
+                  No purchasing options are currently available.
                 </div>
               ) : (
-                <div style={optionsGrid}>
-                  {Array.from(new Set(options.map((option) => normalizeDosageKey(option.dosage)))).map((dosageKey) => (
-                    <div key={dosageKey} style={optionPairGrid}>
-                      {options.filter((option) => normalizeDosageKey(option.dosage) === dosageKey)
-                        .sort((a, b) => a.purchase_type === b.purchase_type ? 0 : a.purchase_type === "single" ? -1 : 1)
-                        .map((option) => {
-                    const canBuy =
-                      !product.is_coming_soon &&
-                      isOptionAvailable(option);
-
-                    const effectiveSalePercent =
-                      getEffectiveSalePercent(
-                        option
+                <>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 8,
+                      marginBottom: 14,
+                    }}
+                    role="group"
+                    aria-label="Select strength"
+                  >
+                    {Array.from(
+                      new Set(
+                        options.map((option) =>
+                          normalizeDosageKey(option.dosage)
+                        )
+                      )
+                    ).map((dosageKey) => {
+                      const matches = options.filter(
+                        (option) =>
+                          normalizeDosageKey(option.dosage) ===
+                          dosageKey
                       );
 
-                    const isOnSale =
-                      effectiveSalePercent >
-                      0;
+                      const next =
+                        matches.find(
+                          (option) =>
+                            option.purchase_type ===
+                            selectedOption?.purchase_type
+                        ) ||
+                        matches.find(
+                          (option) =>
+                            option.purchase_type === "single"
+                        ) ||
+                        matches[0];
 
-                    const activeCampaign =
-                      getEffectiveCampaign(
-                        option
+                      const active =
+                        selectedOption &&
+                        normalizeDosageKey(selectedOption.dosage) ===
+                          dosageKey;
+
+                      return (
+                        <button
+                          key={dosageKey}
+                          type="button"
+                          aria-pressed={Boolean(active)}
+                          onClick={() => {
+                            setSelectedOption(next);
+                            setQuantity(1);
+                            setCoaPanelOpen(true);
+                          }}
+                          style={{
+                            padding: "8px 14px",
+                            borderRadius: 8,
+                            fontSize: 15,
+                            fontWeight: 800,
+                            cursor: "pointer",
+                            border: active
+                              ? "1px solid #7df9ff"
+                              : "1px solid #454956",
+                            background: active
+                              ? "#7df9ff"
+                              : "#191b23",
+                            color: active ? "#062027" : "#fff",
+                          }}
+                        >
+                          {next.dosage}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {selectedOption &&
+                    (() => {
+                      const matches = options.filter(
+                        (option) =>
+                          normalizeDosageKey(option.dosage) ===
+                          normalizeDosageKey(selectedOption.dosage)
                       );
 
-                    const isSelected =
-                      selectedOption?.id === option.id;
+                      const single = matches.find(
+                        (option) => option.purchase_type === "single"
+                      );
 
-                    const kitSavings =
-                      option.purchase_type === "kit"
-                        ? getKitSavings(option)
+                      const kit = matches.find(
+                        (option) => option.purchase_type === "kit"
+                      );
+
+                      const isKit =
+                        selectedOption.purchase_type === "kit";
+
+                      const current = getSalePrice(selectedOption);
+                      const regular = Number(selectedOption.price || 0);
+                      const saleSaving = Math.max(0, regular - current);
+
+                      const kitSavings = isKit
+                        ? getKitSavings(selectedOption)
                         : null;
 
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedOption(option);
-                          setQuantity(1);
-                          setCoaPanelOpen(true);
-                        }}
-                        className="product-option-card"
-                        aria-pressed={isSelected}
-                        style={{
-                          ...optionButton,
-                          gridColumn: option.purchase_type === "single" ? 1 : 2,
-                          background: isSelected
-                            ? "linear-gradient(145deg, rgba(0,217,255,.12), rgba(255,45,216,.10))"
-                            : "linear-gradient(145deg, #191b23, #101117)",
-                          borderColor: isSelected ? "#00d9ff" : "rgba(255,255,255,.14)",
-                          opacity: canBuy ? 1 : .65,
-                          boxShadow: isSelected ? "0 0 0 1px rgba(0,217,255,.22), 0 10px 25px rgba(0,0,0,.24)" : "0 6px 18px rgba(0,0,0,.18)",
-                        }}
-                      >
-                        <div style={optionCardHeader}>
-                          <div style={optionHeading}><strong style={optionPurchaseTitle}>{option.purchase_type === "single" ? "Single" : "Kit"}</strong><span style={optionDosage}>{option.dosage}</span></div>
-                          <span aria-hidden="true" style={{ ...optionSelectionDot, borderColor: isSelected ? "#00d9ff" : "#626775", background: isSelected ? "#00d9ff" : "transparent", color: "#071014" }}>{isSelected ? "✓" : ""}</span>
+                      const totalKitSaving = kitSavings
+                        ? productQuantityTotal(
+                            Math.max(
+                              0,
+                              kitSavings.tenSingleValue - current
+                            ),
+                            quantity
+                          )
+                        : 0;
+
+                      const original =
+                        saleSaving > 0
+                          ? regular
+                          : kitSavings?.tenSingleValue || regular;
+
+                      const campaign =
+                        getEffectiveCampaign(selectedOption);
+
+                      const bundleQuote =
+                        getProductBundleQuote(
+                          selectedOption,
+                          quantity
+                        );
+
+                      const displayPrice =
+                        bundleQuote?.total ??
+                        productQuantityTotal(current, quantity);
+
+                      const displayOriginal =
+                        bundleQuote?.regularTotal ??
+                        productQuantityTotal(original, quantity);
+
+                      const displaySavings = Math.max(
+                        0,
+                        Math.round(
+                          (displayOriginal - displayPrice) * 100
+                        ) / 100
+                      );
+
+                      const displayPercent =
+                        displayOriginal > 0
+                          ? Math.round(
+                              (displaySavings / displayOriginal) *
+                                10000
+                            ) / 100
+                          : 0;
+
+                      return (
+                        <div style={{ marginBottom: 18 }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 12,
+                              marginBottom: 12,
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "#c0c6d4",
+                                fontSize: 14,
+                              }}
+                            >
+                              {isKit ? "Kit selected" : "Single"}
+                            </span>
+
+                            {kit && (
+                              <label
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 7,
+                                  fontSize: 14,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isKit}
+                                  disabled={!single}
+                                  style={{
+                                    accentColor: "#7df9ff",
+                                    width: 17,
+                                    height: 17,
+                                  }}
+                                  onChange={(event) => {
+                                    const next = event.target.checked
+                                      ? kit
+                                      : single;
+
+                                    if (next) {
+                                      setSelectedOption(next);
+                                      setQuantity(1);
+                                      setCoaPanelOpen(true);
+                                    }
+                                  }}
+                                />
+                                Kit (10 vials)
+                              </label>
+                            )}
+                          </div>
+
+                          <div
+                            aria-live="polite"
+                            aria-atomic="true"
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "baseline",
+                                gap: 10,
+                                flexWrap: bundleQuote
+                                  ? "nowrap"
+                                  : "wrap",
+                              }}
+                            >
+                              <strong
+                                style={{
+                                  fontSize: 28,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                ${displayPrice.toFixed(2)}
+                              </strong>
+
+                              {displayOriginal > displayPrice && (
+                                <del
+                                  title={
+                                    bundleQuote
+                                      ? "Original bundle total"
+                                      : saleSaving > 0
+                                        ? "Original total"
+                                        : `${quantity * 10} single vials at regular price`
+                                  }
+                                  style={{
+                                    color: "#a8afbf",
+                                    fontSize: 18,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  ${displayOriginal.toFixed(2)}
+                                </del>
+                              )}
+
+                              {displaySavings > 0 && (
+                                <span
+                                  style={{
+                                    color: "#7df9ff",
+                                    fontSize: 14,
+                                    fontWeight: 800,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {`${displayPercent}% ${
+                                    isKit && saleSaving === 0
+                                      ? "saved vs singles"
+                                      : "OFF"
+                                  } · Save $${displaySavings.toFixed(2)}`}
+                                </span>
+                              )}
+                            </div>
+
+                            <span
+                              style={{
+                                display: "block",
+                                color: "#a8afbf",
+                                fontSize: 13,
+                                marginTop: 6,
+                              }}
+                            >
+                              {bundleQuote
+                                ? `${quantity}-vial bundle total`
+                                : isKit
+                                  ? `Total for ${quantity} ${
+                                      quantity === 1 ? "kit" : "kits"
+                                    } (${quantity * 10} vials)`
+                                  : `Total for ${quantity} single ${
+                                      quantity === 1 ? "vial" : "vials"
+                                    }`}
+                            </span>
+
+                            {displaySavings > 0 &&
+                              campaign?.campaignName && (
+                                <p
+                                  style={{
+                                    color: "#7df9ff",
+                                    margin: "8px 0",
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  {campaign.campaignName}
+                                </p>
+                              )}
+
+                            {totalKitSaving > 0 && (
+                              <p
+                                style={{
+                                  color: "#c0c6d4",
+                                  fontSize: 13,
+                                  margin: "8px 0",
+                                }}
+                              >
+                                {saleSaving > 0
+                                  ? "Total kit savings"
+                                  : "Kit savings"}
+                                : ${totalKitSaving.toFixed(2)}{" "}
+                                (
+                                {(
+                                  (totalKitSaving /
+                                    (kitSavings!.tenSingleValue *
+                                      quantity)) *
+                                  100
+                                ).toFixed(1)}
+                                %) compared with {quantity * 10} single
+                                vials at regular price ($
+                                {productQuantityTotal(
+                                  kitSavings!.tenSingleValue,
+                                  quantity
+                                ).toFixed(2)}
+                                ).
+                              </p>
+                            )}
+
+                            {!isOptionAvailable(selectedOption) && (
+                              <p style={optionStatus}>
+                                Currently unavailable
+                              </p>
+                            )}
+
+                            {isOptionAvailable(selectedOption) &&
+                              selectedOption.status === "pre-sale" && (
+                                <p style={optionStatus}>Pre-sale</p>
+                              )}
+                          </div>
                         </div>
-                        <div style={optionPriceRow}>
-                          <strong style={optionPrice}>${getSalePrice(option).toFixed(2)}</strong>
-                          {isOnSale && <span style={regularPrice}>${Number(option.price).toFixed(2)}</span>}
-                          <span style={optionPackLabel}>{option.purchase_type === "single" ? "1 vial" : "10 vials"}</span>
-                        </div>
-                        {isOnSale && <span style={optionDiscountBadge}>{effectiveSalePercent}% OFF{activeCampaign?.campaignName ? ` · ${activeCampaign.campaignName}` : ""}</span>}
-                        {kitSavings && !isOnSale && <span style={optionDiscountBadge}>Save ${kitSavings.savingsAmount.toFixed(2)} · {kitSavings.savingsPercent.toFixed(1)}% OFF</span>}
-                        {!canBuy && <span style={optionStatus}>Out of stock</span>}
-                        {canBuy && option.status === "pre-sale" && <span style={optionStatus}>Pre-sale</span>}
-                      </button>
-                    );
-                      })}
-                    </div>
-                  ))}
-                </div>
+                      );
+                    })()}
+                </>
               )}
 
               {selectedOption && !product.is_coming_soon && (
                 <>
+                  <section aria-label="Quantity and bundle savings">
+                    {getProductBundleChoices(selectedOption).length >
+                      0 && (
+                      <h3
+                        style={{
+                          margin: "0 0 8px",
+                          color: "#7df9ff",
+                          fontSize: 15,
+                          fontWeight: 800,
+                        }}
+                      >
+                        Bundle &amp; Save
+                      </h3>
+                    )}
+
+                    <div style={quantitySection}>
+                      <div style={quantityRow}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            changeProductQuantity(quantity - 1)
+                          }
+                          style={qtyButton}
+                          aria-label="Decrease quantity"
+                        >
+                          −
+                        </button>
+
+                        <span style={quantityNumber}>
+                          {selectedOption.purchase_type === "kit"
+                            ? quantity * 10
+                            : quantity}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            changeProductQuantity(quantity + 1)
+                          }
+                          style={qtyButton}
+                          aria-label="Increase quantity"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      {getProductBundleChoices(selectedOption).length >
+                        0 && (
+                        <div
+                          className="product-quantity-bundles"
+                          role="group"
+                          aria-label="Bundle and save"
+                        >
+                          {getProductBundleChoices(selectedOption).map(
+                            (tier) => {
+                              const active =
+                                getBundleTier(
+                                  selectedOption,
+                                  quantity
+                                )?.quantity === tier.quantity;
+
+                              return (
+                                <button
+                                  key={`${tier.quantity}-${tier.discount}`}
+                                  type="button"
+                                  className="product-quantity-bundle"
+                                  aria-pressed={active}
+                                  disabled={
+                                    !isOptionAvailable(
+                                      selectedOption
+                                    ) ||
+                                    tier.quantity >
+                                      getAvailableQuantity(
+                                        selectedOption
+                                      )
+                                  }
+                                  onClick={() =>
+                                    changeProductQuantity(
+                                      tier.quantity
+                                    )
+                                  }
+                                  aria-label={`Select ${tier.quantity} vials for ${tier.discount}% bundle savings`}
+                                >
+                                  <strong>{tier.quantity}+</strong>
+                                  <span>{tier.discount}% off</span>
+                                </button>
+                              );
+                            }
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
                   <button
                     type="button"
                     onClick={handleAddToCart}
                     disabled={
-                      !isOptionAvailable(
-                        selectedOption
-                      ) ||
-                      (
-                        selectedOption.purchase_type ===
-                          "single" &&
+                      !isOptionAvailable(selectedOption) ||
+                      (selectedOption.purchase_type === "single" &&
                         quantity >
-                          getAvailableQuantity(
-                            selectedOption
-                          )
-                      )
+                          getAvailableQuantity(selectedOption))
                     }
                     style={{
                       ...addButton,
-
                       opacity:
-                        !isOptionAvailable(
-                          selectedOption
-                        ) ||
-                        (
-                          selectedOption.purchase_type ===
-                            "single" &&
+                        !isOptionAvailable(selectedOption) ||
+                        (selectedOption.purchase_type === "single" &&
                           quantity >
-                            getAvailableQuantity(
-                              selectedOption
-                            )
-                        )
+                            getAvailableQuantity(selectedOption))
                           ? 0.5
                           : 1,
-
                       cursor:
-                        !isOptionAvailable(
-                          selectedOption
-                        ) ||
-                        (
-                          selectedOption.purchase_type ===
-                            "single" &&
+                        !isOptionAvailable(selectedOption) ||
+                        (selectedOption.purchase_type === "single" &&
                           quantity >
-                            getAvailableQuantity(
-                              selectedOption
-                            )
-                        )
+                            getAvailableQuantity(selectedOption))
                           ? "not-allowed"
                           : "pointer",
                     }}
@@ -1772,195 +1936,45 @@ export default function ProductDetailPage() {
                     Add to Cart
                   </button>
 
-                  {!hasActiveSaleForOption(selectedOption) && (
-                    <>
-                      {selectedOption.purchase_type === "single" ? (
-                        <div style={bundleSavingsCard}>
-                          <div style={bundleSavingsHeader}>
-                            <strong>
-                              Bundle Savings
-                            </strong>
-
-                            {quantity >= 10 ? (
-                              <span style={bundlePausedBadge}>
-                                CHOOSE THE 10-VIAL KIT
-                              </span>
-                            ) : getBundleTier(
-                                selectedOption,
-                                quantity
-                              ) ? (
-                              <span style={bundleActiveBadge}>
-                                {getBundleTier(
-                                  selectedOption,
-                                  quantity
-                                )?.discount}% APPLIED
-                              </span>
-                            ) : null}
-                          </div>
-
-                          {quantity >= 10 ? (
-                            <p style={bundleHelpText}>
-                              For 10 vials, choose the Full Kit of 10
-                              instead. Kit pricing has its own built-in
-                              savings compared with purchasing 10 single
-                              vials.
-                            </p>
-                          ) : selectedOption.bundle_discount_enabled ===
-                            false ? (
-                            <p style={bundleHelpText}>
-                              Bundle savings are not enabled for this
-                              option.
-                            </p>
-                          ) : (
-                            <>
-                              <div style={bundleTierGrid}>
-                                {[
-                                  {
-                                    quantity: Number(
-                                      selectedOption.bundle_qty_1 || 3
-                                    ),
-                                    discount: Number(
-                                      selectedOption.bundle_discount_1 || 2
-                                    ),
-                                  },
-                                  {
-                                    quantity: Number(
-                                      selectedOption.bundle_qty_2 || 5
-                                    ),
-                                    discount: Number(
-                                      selectedOption.bundle_discount_2 || 4
-                                    ),
-                                  },
-                                  {
-                                    quantity: Number(
-                                      selectedOption.bundle_qty_3 || 8
-                                    ),
-                                    discount: Number(
-                                      selectedOption.bundle_discount_3 || 7
-                                    ),
-                                  },
-                                ]
-                                  .filter(
-                                    (tier) =>
-                                      tier.quantity > 0 &&
-                                      tier.quantity < 10 &&
-                                      tier.discount > 0
-                                  )
-                                  .map((tier) => {
-                                    const active =
-                                      quantity >= tier.quantity;
-
-                                    return (
-                                      <div
-                                        key={`${tier.quantity}-${tier.discount}`}
-                                        style={{
-                                          ...bundleTier,
-                                          ...(active
-                                            ? bundleTierActive
-                                            : {}),
-                                        }}
-                                      >
-                                        <strong>
-                                          {tier.quantity}+ vials
-                                        </strong>
-                                        <span>
-                                          {tier.discount}% off
-                                        </span>
-                                      </div>
-                                    );
-                                  })}
-                              </div>
-
-                              <p style={bundleHelpText}>
-                                Buying 10 vials? Select the Full Kit of 10
-                                for dedicated kit savings.
-                              </p>
-                            </>
-                          )}
-                        </div>
-                      ) : (
-                        (() => {
-                          const savings =
-                            getKitSavings(selectedOption);
-
-                          if (!savings) {
-                            return null;
-                          }
-
-                          return (
-                            <div style={kitSavingsCard}>
-                              <div style={kitSavingsHeader}>
-                                <div>
-                                  <span style={kitSavingsEyebrow}>
-                                    BUILT-IN 10-VIAL KIT SAVINGS
-                                  </span>
-
-                                  <strong style={kitSavingsTitle}>
-                                    {savings.savingsPercent.toFixed(2)}% OFF
-                                  </strong>
-                                </div>
-
-                                <span style={kitSavingsAmount}>
-                                  SAVE $
-                                  {savings.savingsAmount.toFixed(2)}
-                                </span>
-                              </div>
-
-                              <div style={kitSavingsComparison}>
-                                <span>
-                                  10 single vials{" "}
-                                  <strong>
-                                    $
-                                    {savings.tenSingleValue.toFixed(2)}
-                                  </strong>
-                                </span>
-
-                                <span>
-                                  Kit price{" "}
-                                  <strong>
-                                    $
-                                    {savings.kitPrice.toFixed(2)}
-                                  </strong>
-                                </span>
-                              </div>
-
-                              <p style={bundleHelpText}>
-                                Kit savings are built into the regular kit
-                                price and are separate from temporary sales
-                                or checkout discounts.
-                              </p>
-                            </div>
-                          );
-                        })()
-                      )}
-                    </>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      window.dispatchEvent(
+                        new Event("pugpep:open-cart")
+                      )
+                    }
+                    style={{
+                      marginTop: 8,
+                      marginBottom: 12,
+                      padding: "9px 14px",
+                      background: "#191b23",
+                      color: "#fff",
+                      border: "1px solid #454956",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      fontWeight: 700,
+                    }}
+                  >
+                    View Cart
+                  </button>
                 </>
               )}
             </div>
           </div>
 
-          {/* Right column: product overview and dosage-specific COAs */}
           <div
             className="product-detail-middle"
             style={purchaseColumn}
           >
             {product.is_coming_soon && (
-              <div style={comingSoonBadge}>
-                COMING SOON
-              </div>
+              <div style={comingSoonBadge}>COMING SOON</div>
             )}
 
-            {!product.is_coming_soon &&
-              isCurrentProductNew() && (
-                <div style={productNewBadge}>
-                  NEW PRODUCT
-                </div>
-              )}
+            {!product.is_coming_soon && isCurrentProductNew() && (
+              <div style={productNewBadge}>NEW PRODUCT</div>
+            )}
 
-            <h1 style={productTitle}>
-              {product.name}
-            </h1>
+            <h1 style={productTitle}>{product.name}</h1>
 
             {product.short_description && (
               <section style={simpleOverviewCard}>
@@ -1979,15 +1993,12 @@ export default function ProductDetailPage() {
             )}
 
             <div style={disclaimerBox}>
-              For research purposes only. Not for human or
-              veterinary use.
+              For research purposes only. Not for human or veterinary use.
             </div>
 
             {product.is_coming_soon && (
               <div style={comingSoonBox}>
-                <strong>
-                  COMING SOON
-                </strong>
+                <strong>COMING SOON</strong>
 
                 <span>
                   This research product is visible for preview but is not
@@ -1997,20 +2008,15 @@ export default function ProductDetailPage() {
                 {product.coming_soon_date && (
                   <span style={comingSoonDate}>
                     Expected:{" "}
-                    {formatLaunchDate(
-                      product.coming_soon_date
-                    )}
+                    {formatLaunchDate(product.coming_soon_date)}
                   </span>
                 )}
               </div>
             )}
 
-            {selectedOption?.status ===
-              "pre-sale" && (
+            {selectedOption?.status === "pre-sale" && (
               <div style={presaleBox}>
-                <strong>
-                  ⚠️ PRE-SALE ITEM
-                </strong>
+                <strong>⚠️ PRE-SALE ITEM</strong>
 
                 <span>
                   Estimated delivery time may take up to 2 weeks.
@@ -2037,66 +2043,122 @@ export default function ProductDetailPage() {
               </button>
             )}
 
-            {coaPanelOpen &&
-              selectedOption && (
-                <aside
-                  style={coaMiddlePanel}
-                  aria-label={`COAs for ${product.name} ${selectedOption.dosage}`}
-                >
-                  <div style={coaPanelHeader}>
-                    <div>
-                      <span style={coaPanelEyebrow}>
-                        CERTIFICATES OF ANALYSIS
-                      </span>
+            {coaPanelOpen && selectedOption && (
+              <aside
+                style={coaMiddlePanel}
+                aria-label={`COAs for ${product.name} ${selectedOption.dosage}`}
+              >
+                <div style={coaPanelHeader}>
+                  <div>
+                    <span style={coaPanelEyebrow}>
+                      CERTIFICATES OF ANALYSIS
+                    </span>
 
-                      <h2 style={coaPanelTitle}>
-                        {product.name}
-                      </h2>
+                    <h2 style={coaPanelTitle}>{product.name}</h2>
 
-                      <div style={coaDosageBadge}>
-                        {selectedOption.dosage}
-                      </div>
+                    <div style={coaDosageBadge}>
+                      {selectedOption.dosage}
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setCoaPanelOpen(
-                          false
-                        )
-                      }
-                      style={coaCloseButton}
-                      aria-label="Close"
-                    >
-                      ×
-                    </button>
                   </div>
 
-                  <p style={coaPanelHelp}>
-                    The newest COA for the selected dosage is shown below.
-                    Older reports are available from the dropdown when
-                    present.
-                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setCoaPanelOpen(false)}
+                    style={coaCloseButton}
+                    aria-label="Close"
+                  >
+                    ×
+                  </button>
+                </div>
 
-                  <div style={coaList}>
-                    {coaLoading ? (
-                      <div style={coaEmptyState}>
-                        Loading COAs...
+                <p style={coaPanelHelp}>
+                  The newest COA for the selected dosage is shown below.
+                  Older reports are available from the dropdown when
+                  present.
+                </p>
+
+                <div style={coaList}>
+                  {coaLoading ? (
+                    <div style={coaEmptyState}>Loading COAs...</div>
+                  ) : selectedCoas.length === 0 ? (
+                    <div style={coaEmptyState}>
+                      No active COAs are currently listed for{" "}
+                      <strong>{selectedOption.dosage}</strong>.
+                    </div>
+                  ) : (
+                    <>
+                      <div style={coaPrimaryRow}>
+                        <div style={coaPrimaryLabel}>
+                          <span style={coaReportLabel}>
+                            MOST RECENT COA
+                          </span>
+
+                          <strong style={coaReportDate}>
+                            {formatCoaDate(selectedCoas[0].test_date)}
+                          </strong>
+                        </div>
+
+                        {selectedCoas.length > 1 && (
+                          <details style={coaHistoryDropdown}>
+                            <summary style={coaHistorySummary}>
+                              Older COAs ({selectedCoas.length - 1}) ▾
+                            </summary>
+
+                            <div style={coaHistoryMenu}>
+                              {selectedCoas
+                                .slice(1)
+                                .map((document) => (
+                                  <div
+                                    key={document.id}
+                                    style={coaHistoryItem}
+                                  >
+                                    <div style={coaHistoryItemCopy}>
+                                      <strong style={coaHistoryDate}>
+                                        {formatCoaDate(
+                                          document.test_date
+                                        )}
+                                      </strong>
+
+                                      <span style={coaHistoryMeta}>
+                                        {document.lab_name ||
+                                          "Lab not listed"}
+                                        {document.report_id
+                                          ? ` · ${document.report_id}`
+                                          : ""}
+                                      </span>
+                                    </div>
+
+                                    {document.file_path ? (
+                                      <a
+                                        href={getCoaPublicUrl(document)}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        style={coaHistoryViewButton}
+                                      >
+                                        View ↗
+                                      </a>
+                                    ) : (
+                                      <span
+                                        style={coaHistoryUnavailable}
+                                      >
+                                        Unavailable
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                            </div>
+                          </details>
+                        )}
                       </div>
-                    ) : selectedCoas.length === 0 ? (
-                      <div style={coaEmptyState}>
-                        No active COAs are currently listed for{" "}
-                        <strong>
-                          {selectedOption.dosage}
-                        </strong>
-                        .
-                      </div>
-                    ) : (
-                      <>
-                        <div style={coaPrimaryRow}>
-                          <div style={coaPrimaryLabel}>
+
+                      <article
+                        key={selectedCoas[0].id}
+                        style={coaListItem}
+                      >
+                        <div style={coaListItemTop}>
+                          <div>
                             <span style={coaReportLabel}>
-                              MOST RECENT COA
+                              CURRENT DISPLAY
                             </span>
 
                             <strong style={coaReportDate}>
@@ -2106,253 +2168,71 @@ export default function ProductDetailPage() {
                             </strong>
                           </div>
 
-                          {selectedCoas.length > 1 && (
-                            <details style={coaHistoryDropdown}>
-                              <summary style={coaHistorySummary}>
-                                Older COAs (
-                                {selectedCoas.length - 1}) ▾
-                              </summary>
-
-                              <div style={coaHistoryMenu}>
-                                {selectedCoas
-                                  .slice(1)
-                                  .map(
-                                    (
-                                      document,
-                                      index
-                                    ) => (
-                                      <div
-                                        key={document.id}
-                                        style={coaHistoryItem}
-                                      >
-                                        <div style={coaHistoryItemCopy}>
-                                          <strong style={coaHistoryDate}>
-                                            {formatCoaDate(
-                                              document.test_date
-                                            )}
-                                          </strong>
-
-                                          <span style={coaHistoryMeta}>
-                                            {document.lab_name ||
-                                              "Lab not listed"}
-                                            {document.report_id
-                                              ? ` · ${document.report_id}`
-                                              : ""}
-                                          </span>
-                                        </div>
-
-                                        {document.file_path ? (
-                                          <a
-                                            href={getCoaPublicUrl(
-                                              document
-                                            )}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            style={coaHistoryViewButton}
-                                          >
-                                            View ↗
-                                          </a>
-                                        ) : (
-                                          <span style={coaHistoryUnavailable}>
-                                            Unavailable
-                                          </span>
-                                        )}
-                                      </div>
-                                    )
-                                  )}
-                              </div>
-                            </details>
-                          )}
+                          <span style={coaCurrentBadge}>LATEST</span>
                         </div>
 
-                        <article
-                          key={selectedCoas[0].id}
-                          style={coaListItem}
-                        >
-                          <div style={coaListItemTop}>
-                            <div>
-                              <span style={coaReportLabel}>
-                                CURRENT DISPLAY
-                              </span>
-
-                              <strong style={coaReportDate}>
-                                {formatCoaDate(
-                                  selectedCoas[0].test_date
-                                )}
-                              </strong>
-                            </div>
-
-                            <span style={coaCurrentBadge}>
-                              LATEST
-                            </span>
+                        <div style={coaMetaGrid}>
+                          <div style={coaMetaItem}>
+                            <span style={coaMetaLabel}>LAB</span>
+                            <strong>
+                              {selectedCoas[0].lab_name || "Not listed"}
+                            </strong>
                           </div>
 
-                          <div style={coaMetaGrid}>
-                            <div style={coaMetaItem}>
-                              <span style={coaMetaLabel}>
-                                LAB
-                              </span>
-                              <strong>
-                                {selectedCoas[0].lab_name ||
-                                  "Not listed"}
-                              </strong>
-                            </div>
-
-                            <div style={coaMetaItem}>
-                              <span style={coaMetaLabel}>
-                                PURITY
-                              </span>
-                              <strong>
-                                {selectedCoas[0].purity_percent !==
-                                  null &&
-                                selectedCoas[0].purity_percent !==
-                                  undefined
-                                  ? `${Number(
-                                      selectedCoas[0].purity_percent
-                                    ).toFixed(2)}%`
-                                  : "Not listed"}
-                              </strong>
-                            </div>
-
-                            <div style={coaMetaItem}>
-                              <span style={coaMetaLabel}>
-                                REPORT ID
-                              </span>
-                              <strong>
-                                {selectedCoas[0].report_id ||
-                                  "Not listed"}
-                              </strong>
-                            </div>
-
-                            <div style={coaMetaItem}>
-                              <span style={coaMetaLabel}>
-                                NET CONTENT
-                              </span>
-                              <strong>
-                                {selectedCoas[0].net_content ||
-                                  "Not listed"}
-                              </strong>
-                            </div>
+                          <div style={coaMetaItem}>
+                            <span style={coaMetaLabel}>PURITY</span>
+                            <strong>
+                              {selectedCoas[0].purity_percent !== null &&
+                              selectedCoas[0].purity_percent !== undefined
+                                ? `${Number(
+                                    selectedCoas[0].purity_percent
+                                  ).toFixed(2)}%`
+                                : "Not listed"}
+                            </strong>
                           </div>
 
-                          {selectedCoas[0].test_method && (
-                            <div style={coaMethod}>
-                              <span style={coaMetaLabel}>
-                                TEST METHOD
-                              </span>
+                          <div style={coaMetaItem}>
+                            <span style={coaMetaLabel}>REPORT ID</span>
+                            <strong>
+                              {selectedCoas[0].report_id || "Not listed"}
+                            </strong>
+                          </div>
 
-                              <span>
-                                {selectedCoas[0].test_method}
-                              </span>
-                            </div>
-                          )}
-
-                          {selectedCoas[0].file_path ? (
-                            <a
-                              href={getCoaPublicUrl(
-                                selectedCoas[0]
-                              )}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={coaViewButton}
-                            >
-                              VIEW MOST RECENT COA ↗
-                            </a>
-                          ) : (
-                            <span style={coaUnavailable}>
-                              COA file unavailable
-                            </span>
-                          )}
-                        </article>
-                      </>
-                    )}
-                  </div>
-                </aside>
-              )}
-
-
-
-            <section style={productSearchCard}>
-              <div style={productSearchHeader}>
-                <span style={productSearchEyebrow}>
-                  QUICK PRODUCT SEARCH
-                </span>
-
-                <strong style={productSearchTitle}>
-                  Find another product
-                </strong>
-              </div>
-
-              <div style={productSearchWrap}>
-                <input
-                  type="search"
-                  value={productSearch}
-                  onChange={(event) =>
-                    setProductSearch(
-                      event.target.value
-                    )
-                  }
-                  onFocus={() =>
-                    setProductSearchFocused(
-                      true
-                    )
-                  }
-                  onBlur={() =>
-                    window.setTimeout(
-                      () =>
-                        setProductSearchFocused(
-                          false
-                        ),
-                      120
-                    )
-                  }
-                  placeholder="Search products..."
-                  style={productSearchInput}
-                  aria-label="Search products"
-                />
-
-                {productSearchFocused &&
-                  productSearch.trim() && (
-                    <div style={productSearchResults}>
-                      {filteredSearchProducts.length ===
-                      0 ? (
-                        <div style={productSearchEmpty}>
-                          No matching products found.
+                          <div style={coaMetaItem}>
+                            <span style={coaMetaLabel}>NET CONTENT</span>
+                            <strong>
+                              {selectedCoas[0].net_content || "Not listed"}
+                            </strong>
+                          </div>
                         </div>
-                      ) : (
-                        filteredSearchProducts.map(
-                          (item) => (
-                            <Link
-                              key={item.id}
-                              href={`/products/${item.slug}`}
-                              style={productSearchResultLink}
-                            >
-                              <img
-                                src={
-                                  item.image ||
-                                  "/pugpep-logo.png"
-                                }
-                                alt=""
-                                style={productSearchThumb}
-                              />
 
-                              <div style={productSearchResultCopy}>
-                                <strong>
-                                  {item.name}
-                                </strong>
+                        {selectedCoas[0].test_method && (
+                          <div style={coaMethod}>
+                            <span style={coaMetaLabel}>TEST METHOD</span>
+                            <span>{selectedCoas[0].test_method}</span>
+                          </div>
+                        )}
 
-                                <span>
-                                  View product →
-                                </span>
-                              </div>
-                            </Link>
-                          )
-                        )
-                      )}
-                    </div>
+                        {selectedCoas[0].file_path ? (
+                          <a
+                            href={getCoaPublicUrl(selectedCoas[0])}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={coaViewButton}
+                          >
+                            VIEW MOST RECENT COA ↗
+                          </a>
+                        ) : (
+                          <span style={coaUnavailable}>
+                            COA file unavailable
+                          </span>
+                        )}
+                      </article>
+                    </>
                   )}
-              </div>
-            </section>
+                </div>
+              </aside>
+            )}
           </div>
         </section>
 
@@ -2381,241 +2261,936 @@ export default function ProductDetailPage() {
             })}
           </section>
         )}
-
       </div>
     </main>
   );
 }
-const pageStyle = { minHeight: "100vh", background: "radial-gradient(circle at top, #10151a 0%, #030303 38%, #000 100%)", color: "#fff", padding: "32px 22px 70px", };
 
-const pageContainer = { width: "100%", maxWidth: 1300, margin: "0 auto", };
-
-const backLink = { color: "#00d9ff", textDecoration: "none", display: "inline-block", marginBottom: 26, fontWeight: 700, };
-
-const loadingText = { color: "#00d9ff", fontSize: 18, };
-
-const notFoundTitle = { color: "#ff45d8", };
-
-const productLayout = { width: "100%", display: "grid", gridTemplateColumns: "minmax(340px, .95fr) minmax(420px, 1.05fr)", gridTemplateAreas: '"left middle"', gap: "clamp(22px, 3vw, 38px)", alignItems: "start", marginBottom: 36, };
-
-const imageColumn = { gridArea: "left", minWidth: 0, display: "grid", gap: 20, };
-
-const imageOptionSection = { display: "grid", gap: 0, padding: "2px 0 0", };
-
-const imageBox = { background: "linear-gradient(145deg, #0d0d0d, #030303)", border: "1px solid rgba(255,255,255,.12)", borderRadius: 24, padding: "clamp(14px, 3vw, 24px)", boxShadow: "0 22px 60px rgba(0,0,0,.45)", };
-
-const productImage = { width: "100%", height: "auto", display: "block", borderRadius: 18, objectFit: "contain" as const, };
-
-const purchaseColumn = { gridArea: "middle", minWidth: 0, display: "grid", alignContent: "start", };
-
-const comingSoonBadge = { width: "fit-content", marginBottom: 12, padding: "7px 12px", border: "1px solid rgba(255,204,0,.55)", borderRadius: 999, background: "rgba(255,204,0,.10)", color: "#ffdf73", fontSize: 12, fontWeight: 1000, letterSpacing: ".1em", boxShadow: "0 0 18px rgba(255,204,0,.18)", };
-
-const productNewBadge = { width: "fit-content", marginBottom: 12, padding: "7px 12px", borderRadius: 999, background: "linear-gradient(90deg, #00ff99, #00d9ff)", color: "#000", fontSize: 12, fontWeight: 1000, letterSpacing: ".1em", boxShadow: "0 0 18px rgba(0,255,153,.38)", };
-
-const productTitle = { color: "#e1e5e9", fontSize: "clamp(38px, 5vw, 58px)", lineHeight: 1.05, margin: "0 0 20px", overflowWrap: "anywhere" as const, textShadow: "0 0 20px rgba(207,211,216,.22)", };
-
-const simpleOverviewCard = { marginTop: 26, padding: "clamp(20px, 3vw, 28px)", border: "1px solid rgba(255,255,255,.12)", borderRadius: 20, background: "linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.02))", boxShadow: "0 15px 36px rgba(0,0,0,.22)", };
-
-const simpleOverviewEyebrow = { display: "block", marginBottom: 7, color: "#00d9ff", fontSize: 12, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, };
-
-const simpleOverviewTitle = { margin: "0 0 12px", color: "#f0f2f4", fontSize: 23, };
-
-const shortDescriptionText = { margin: 0, color: "#d2d6da", fontSize: 17, lineHeight: 1.75, whiteSpace: "pre-line" as const, };
-
-const disclaimerBox = { padding: 15, border: "1px solid rgba(255,69,216,.75)", borderRadius: 12, color: "#ffd1f7", background: "rgba(255,45,216,.08)", fontWeight: 700, lineHeight: 1.55, };
-
-const comingSoonBox = { display: "grid", gap: 6, marginTop: 16, padding: 16, border: "1px solid rgba(255,204,0,.48)", borderRadius: 12, background: "linear-gradient(135deg, rgba(255,204,0,.08), rgba(255,69,216,.045))", color: "#f4f1dc", lineHeight: 1.55, };
-
-const comingSoonDate = { color: "#ffdf73", fontWeight: 900, };
-
-const presaleBox = { display: "grid", gap: 6, marginTop: 16, padding: 16, border: "1px solid #ffbf00", borderRadius: 12, background: "rgba(255,191,0,.08)", color: "#ffcc66", lineHeight: 1.5, };
-
-const selectOptionTitle = { color: "#00d9ff", marginTop: 30, marginBottom: 16, fontSize: 24, };
-
-const noOptionsBox = { padding: 18, border: "1px solid #333", borderRadius: 12, background: "#101010", color: "#aaa", };
-
-const optionsGrid = { gridTemplateColumns: "1fr", display: "grid", gap: 10, };
-
-const optionButton = { width: "100%", minWidth: 0, boxSizing: "border-box" as const, padding: "8px 10px", border: "1px solid", borderRadius: 10, color: "#fff", cursor: "pointer", textAlign: "left" as const, fontFamily: "inherit", display: "flex", flexDirection: "column" as const, alignItems: "stretch", gap: 4, transition: "transform .18s ease, border-color .18s ease, box-shadow .18s ease" };
-
-
-const saleBadge = { display: "inline-block", marginBottom: 9, padding: "4px 10px", borderRadius: 999, background: "#00ff99", color: "#000", fontWeight: 800, fontSize: 12, };
-
-const regularPrice = { textDecoration: "line-through", color: "#888", marginRight: 8, };
-
-const salePrice = { color: "#00ff99", fontWeight: 800, };
-
-
-const quantitySection = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, marginTop: 0, marginBottom: 20, padding: "14px 0", borderTop: "1px solid rgba(255,255,255,.12)", borderBottom: "1px solid rgba(255,255,255,.12)", };
-
-const quantityLabel = { color: "#ddd", fontWeight: 700, };
-
-const quantityRow = { display: "flex", gap: 12, alignItems: "center", };
-
-const quantityNumber = { minWidth: 40, textAlign: "center" as const, fontWeight: 800, fontSize: 18, };
-
-const qtyButton = { width: 40, height: 40, borderRadius: 9, border: "1px solid #00d9ff", background: "#111", color: "#00d9ff", cursor: "pointer", fontWeight: 800, fontSize: 18, };
-
-
-
-const kitSavingsCard = { marginTop: 16, padding: 15, borderRadius: 12, border: "1px solid rgba(0,255,153,.34)", background: "linear-gradient(145deg, rgba(0,255,153,.07), rgba(0,0,0,.35))", };
-
-const kitSavingsHeader = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" as const, };
-
-const kitSavingsEyebrow = { display: "block", color: "#888", fontSize: 9, fontWeight: 900, letterSpacing: ".12em", };
-
-const kitSavingsTitle = { display: "block", marginTop: 4, color: "#00ff99", fontSize: 23, };
-
-const kitSavingsAmount = { padding: "6px 10px", borderRadius: 999, background: "#00ff99", color: "#000", fontSize: 11, fontWeight: 900, };
-
-const kitSavingsComparison = { marginTop: 12, display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" as const, color: "#c7c7ce", fontSize: 13, };
-
-const bundleSavingsCard = { marginTop: 16, padding: 18, borderRadius: 12, border: "1px solid rgba(0,217,255,.22)", background: "rgba(0,217,255,.045)", };
-
-const bundleSavingsHeader = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" as const, color: "#fff", };
-
-const bundleTierGrid = { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 10, marginTop: 16, };
-
-const bundleTier = { display: "grid", gap: 7, padding: "18px 10px", minHeight: 52, alignContent: "center", boxSizing: "border-box" as const, borderRadius: 12, border: "1px solid rgba(255,255,255,.12)", background: "#0b0b0b", color: "#aaa", fontSize: 15, textAlign: "center" as const, };
-
-const bundleTierActive = { border: "1px solid rgba(0,255,153,.55)", background: "rgba(0,255,153,.08)", color: "#bfffe3", };
-
-const bundleActiveBadge = { padding: "4px 8px", borderRadius: 999, background: "#00ff99", color: "#000", fontSize: 10, fontWeight: 900, };
-
-const bundlePausedBadge = { padding: "4px 8px", borderRadius: 999, background: "rgba(255,204,0,.12)", border: "1px solid rgba(255,204,0,.35)", color: "#ffcc00", fontSize: 10, fontWeight: 900, };
-
-const bundleHelpText = { margin: "10px 0 0", color: "#aaa", fontSize: 12, lineHeight: 1.5, };
-
-
-const addButton = { marginTop: 20, width: "100%", padding: "17px 22px", border: "none", borderRadius: 12, background: "linear-gradient(90deg, #00b7ff, #ff2fd0)", color: "#fff", fontWeight: 800, fontSize: 18, boxShadow: "0 12px 30px rgba(255,47,208,.16)", };
-
-const productSearchCard = { marginTop: 18, padding: 16, borderRadius: 16, border: "1px solid rgba(255,45,216,.22)", background: "linear-gradient(180deg, rgba(255,45,216,.05), rgba(0,217,255,.035))", boxShadow: "0 14px 32px rgba(0,0,0,.24)", };
-
-const productSearchHeader = { display: "grid", gap: 3, marginBottom: 10, };
-
-const productSearchEyebrow = { fontSize: 10, fontWeight: 900, letterSpacing: ".12em", color: "#ff75df", };
-
-const productSearchTitle = { fontSize: 15, color: "#fff", };
-
-const productSearchWrap = { position: "relative" as const, };
-
-const productSearchInput = { width: "100%", boxSizing: "border-box" as const, height: 42, borderRadius: 11, border: "1px solid rgba(125,249,255,.28)", background: "#090909", color: "#fff", padding: "0 13px", outline: "none", fontSize: 13, };
-
-const productSearchResults = { position: "absolute" as const, top: "calc(100% + 8px)", left: 0, right: 0, zIndex: 40, maxHeight: 330, overflowY: "auto" as const, padding: 8, borderRadius: 12, border: "1px solid rgba(0,217,255,.3)", background: "#070707", boxShadow: "0 18px 42px rgba(0,0,0,.58)", };
-
-const productSearchResultLink = { display: "flex", alignItems: "center", gap: 10, textDecoration: "none", color: "#fff", padding: 9, borderRadius: 10, borderBottom: "1px solid rgba(255,255,255,.06)", };
-
-const productSearchThumb = { width: 42, height: 42, borderRadius: 9, objectFit: "cover" as const, background: "#111", flexShrink: 0, };
-
-const productSearchResultCopy = { minWidth: 0, display: "grid", gap: 3, fontSize: 12, };
-
-const productSearchEmpty = { padding: "12px 10px", color: "#8f949a", fontSize: 12, };
-
-const recommendationStrip = { width: "100%", display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 18, marginBottom: 46, alignItems: "start", };
-
-const recommendationSection = { width: "100%", marginBottom: 0, padding: 14, boxSizing: "border-box" as const, border: "1px solid rgba(255,255,255,.10)", borderRadius: 22, background: "linear-gradient(145deg, rgba(255,255,255,.035), rgba(0,0,0,.72))", };
-
-const recommendationHeader = { marginBottom: 18, };
-
-const recommendationEyebrow = { display: "block", marginBottom: 7, color: "#ff65dc", fontSize: 12, fontWeight: 900, letterSpacing: "0.14em", };
-
-const recommendationTitle = { margin: 0, color: "#00d9ff", fontSize: "clamp(24px, 3vw, 32px)", };
-
-const recommendationGrid = { display: "grid", gridTemplateColumns: "1fr", gap: 10, };
-
-const recommendationLink = { textDecoration: "none", color: "inherit", };
-
-const recommendationCard = { minHeight: 78, overflow: "hidden", display: "grid", gridTemplateColumns: "78px minmax(0, 1fr)", border: "1px solid rgba(0,217,255,.20)", borderRadius: 16, background: "#080808", transition: "transform .2s ease, border-color .2s ease", };
-
-const recommendationImageWrap = { position: "relative" as const, width: 78, height: 78, overflow: "hidden", background: "#030303", };
-
-const recommendationImage = { width: "100%", height: "100%", objectFit: "cover" as const, display: "block", };
-
-const recommendationSaleBadge = { position: "absolute" as const, top: 10, right: 10, maxWidth: "78%", padding: "5px 9px", borderRadius: 999, background: "#00ff99", color: "#000", fontSize: 11, fontWeight: 900, };
-
-const recommendationCopy = { display: "grid", gap: 7, padding: 14, };
-
-const recommendationName = { color: "#fff", fontSize: 16, lineHeight: 1.35, };
-
-const recommendationCampaign = { color: "#ff75df", fontSize: 11, fontWeight: 800, };
-
-const recommendationCta = { marginTop: 3, color: "#00d9ff", fontSize: 11, fontWeight: 900, letterSpacing: ".08em", };
-
-const coaMiddlePanel = { width: "100%", boxSizing: "border-box" as const, marginTop: 18, marginBottom: 4, padding: "18px 16px 20px", background: "linear-gradient(180deg, #080b0d 0%, #030303 58%, #000 100%)", border: "1px solid rgba(0,217,255,.32)", borderRadius: 18, boxShadow: "0 16px 36px rgba(0,0,0,.32)", };
-
-const coaPanelHeader = { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 18, paddingBottom: 18, borderBottom: "1px solid rgba(255,255,255,.10)", };
-
-const coaPanelEyebrow = { display: "block", marginBottom: 7, color: "#ff65dc", fontSize: 10, fontWeight: 1000, letterSpacing: ".16em", };
-
-const coaPanelTitle = { margin: 0, color: "#f1f4f6", fontSize: 24, lineHeight: 1.15, };
-
-const coaDosageBadge = { width: "fit-content", marginTop: 10, padding: "6px 10px", borderRadius: 999, background: "rgba(0,217,255,.11)", border: "1px solid rgba(0,217,255,.42)", color: "#7df9ff", fontSize: 12, fontWeight: 1000, };
-
-const coaCloseButton = { width: 34, height: 34, flex: "0 0 auto", display: "grid", placeItems: "center", borderRadius: 9, border: "1px solid rgba(255,255,255,.16)", background: "#0d0d0d", color: "#fff", cursor: "pointer", fontSize: 22, lineHeight: 1, };
-
-const coaPanelHelp = { margin: "14px 0", color: "#9da3aa", fontSize: 11, lineHeight: 1.55, };
-
-const coaPrimaryRow = { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" as const, marginBottom: 12, };
-
-const coaPrimaryLabel = { display: "grid", gap: 4, };
-
-const coaHistoryDropdown = { position: "relative" as const, zIndex: 20, };
-
-const coaHistorySummary = { listStyle: "none", cursor: "pointer", userSelect: "none" as const, padding: "8px 11px", borderRadius: 10, border: "1px solid rgba(0,217,255,.35)", background: "rgba(0,217,255,.07)", color: "#7df9ff", fontSize: 11, fontWeight: 900, letterSpacing: ".06em", whiteSpace: "nowrap" as const, };
-
-const coaHistoryMenu = { position: "absolute" as const, top: "calc(100% + 8px)", right: 0, width: "min(360px, 82vw)", maxHeight: 300, overflowY: "auto" as const, padding: 8, borderRadius: 12, border: "1px solid rgba(255,45,216,.35)", background: "#080808", boxShadow: "0 18px 40px rgba(0,0,0,.55)", };
-
-const coaHistoryItem = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 9px", borderBottom: "1px solid rgba(255,255,255,.08)", };
-
-const coaHistoryItemCopy = { minWidth: 0, display: "grid", gap: 3, };
-
-const coaHistoryDate = { color: "#fff", fontSize: 12, };
-
-const coaHistoryMeta = { color: "#9aa0a6", fontSize: 10, lineHeight: 1.35, overflowWrap: "anywhere" as const, };
-
-const coaHistoryViewButton = { flexShrink: 0, textDecoration: "none", color: "#00ff99", fontSize: 11, fontWeight: 900, padding: "6px 8px", borderRadius: 8, border: "1px solid rgba(0,255,153,.3)", background: "rgba(0,255,153,.06)", };
-
-const coaHistoryUnavailable = { flexShrink: 0, color: "#777", fontSize: 10, };
-
-const coaList = { display: "grid", gap: 10, };
-
-const coaEmptyState = { padding: "18px 14px", borderRadius: 12, border: "1px solid rgba(255,255,255,.11)", background: "#0a0a0a", color: "#a9adb3", lineHeight: 1.55, };
-
-const coaListItem = { padding: 14, borderRadius: 14, border: "1px solid rgba(0,217,255,.20)", background: "linear-gradient(145deg, rgba(0,217,255,.055), rgba(255,69,216,.03))", boxShadow: "0 10px 24px rgba(0,0,0,.20)", };
-
-const coaListItemTop = { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 12, };
-
-const coaReportLabel = { display: "block", marginBottom: 4, color: "#858b93", fontSize: 9, fontWeight: 1000, letterSpacing: ".14em", };
-
-const coaReportDate = { color: "#fff", fontSize: 16, };
-
-const coaCurrentBadge = { padding: "4px 7px", borderRadius: 999, background: "rgba(0,255,153,.10)", border: "1px solid rgba(0,255,153,.38)", color: "#00ff99", fontSize: 8, fontWeight: 1000, letterSpacing: ".08em", };
-
-const coaMetaGrid = { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8, };
-
-const coaMetaItem = { minWidth: 0, display: "grid", gap: 4, padding: "8px 9px", borderRadius: 9, background: "rgba(255,255,255,.035)", color: "#d9dde1", fontSize: 11, overflowWrap: "anywhere" as const, };
-
-const coaMetaLabel = { color: "#747b84", fontSize: 8, fontWeight: 1000, letterSpacing: ".12em", };
-
-const coaMethod = { display: "grid", gap: 4, marginTop: 9, color: "#b9bec4", fontSize: 10, lineHeight: 1.5, };
-
-const coaViewButton = { marginTop: 12, width: "100%", boxSizing: "border-box" as const, display: "block", padding: "10px 12px", borderRadius: 9, border: "1px solid rgba(255,69,216,.45)", background: "linear-gradient(90deg, rgba(0,217,255,.10), rgba(255,69,216,.11))", color: "#fff", textDecoration: "none", textAlign: "center" as const, fontSize: 10, fontWeight: 1000, letterSpacing: ".08em", };
-
-const coaUnavailable = { display: "block", marginTop: 10, color: "#777d84", fontSize: 10, };
-
-const backButton = { background: "none", border: "none", color: "#00d9ff", cursor: "pointer", fontSize: 16, padding: 0, };
-const optionPairGrid = { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10, alignItems: "stretch" };
-
-const optionCardHeader = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 };
-const optionDosage = { color: "#b7c0d0", fontSize: 14, fontWeight: 800, lineHeight: 1.2 };
-const optionSelectionDot = { width: 16, height: 16, flexShrink: 0, border: "1px solid", borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 900 };
-const optionPurchaseTitle = { fontSize: 18, lineHeight: 1.2, color: "#f6f7fb" };
-const optionPackLabel = { color: "#929aab", fontSize: 14, marginLeft: "auto", lineHeight: 1.2 };
-const optionPriceRow = { display: "flex", flexWrap: "wrap" as const, alignItems: "baseline", gap: 6, marginTop: 0 };
-const optionPrice = { color: "#fff", fontSize: 24, fontWeight: 800, letterSpacing: "-.04em", lineHeight: 1.1 };
-const optionDiscountBadge = { display: "block", alignSelf: "flex-start", marginTop: 0, padding: "3px 6px", borderRadius: 6, background: "rgba(0,255,153,.09)", color: "#87f4bb", fontSize: 12, fontWeight: 700, lineHeight: 1.25 };
-const optionStatus = { color: "#ffcc66", fontSize: 14, fontWeight: 700, lineHeight: 1.2 };
-
-const recommendationEmpty = { margin: 0, padding: "12px 0", color: "#929aab", fontSize: 13, lineHeight: 1.6 };
-
-const optionHeading = { display: "flex", flexWrap: "wrap" as const, alignItems: "baseline", gap: 7, minWidth: 0 };
+const pageStyle = {
+  minHeight: "100vh",
+  background:
+    "radial-gradient(circle at top, #10151a 0%, #030303 38%, #000 100%)",
+  color: "#fff",
+  padding: "32px 22px 70px",
+};
+
+const pageContainer = {
+  width: "100%",
+  maxWidth: 1300,
+  margin: "0 auto",
+};
+
+const backLink = {
+  color: "#00d9ff",
+  textDecoration: "none",
+  display: "inline-block",
+  marginBottom: 26,
+  fontWeight: 700,
+};
+
+const loadingText = {
+  color: "#00d9ff",
+  fontSize: 18,
+};
+
+const notFoundTitle = {
+  color: "#ff45d8",
+};
+
+const productLayout = {
+  width: "100%",
+  display: "grid",
+  gridTemplateColumns:
+    "minmax(340px, .95fr) minmax(420px, 1.05fr)",
+  gridTemplateAreas: '"left middle"',
+  gap: "clamp(22px, 3vw, 38px)",
+  alignItems: "start",
+  marginBottom: 36,
+};
+
+const imageColumn = {
+  gridArea: "left",
+  minWidth: 0,
+  display: "grid",
+  gap: 20,
+};
+
+const imageOptionSection = {
+  display: "grid",
+  gap: 0,
+  padding: "2px 0 0",
+};
+
+const imageBox = {
+  background: "linear-gradient(145deg, #0d0d0d, #030303)",
+  border: "1px solid rgba(255,255,255,.12)",
+  borderRadius: 24,
+  padding: "clamp(14px, 3vw, 24px)",
+  boxShadow: "0 22px 60px rgba(0,0,0,.45)",
+};
+
+const productImage = {
+  width: "100%",
+  height: "auto",
+  display: "block",
+  borderRadius: 18,
+  objectFit: "contain" as const,
+};
+
+const purchaseColumn = {
+  gridArea: "middle",
+  minWidth: 0,
+  display: "grid",
+  alignContent: "start",
+};
+
+const comingSoonBadge = {
+  width: "fit-content",
+  marginBottom: 12,
+  padding: "7px 12px",
+  border: "1px solid rgba(255,204,0,.55)",
+  borderRadius: 999,
+  background: "rgba(255,204,0,.10)",
+  color: "#ffdf73",
+  fontSize: 12,
+  fontWeight: 1000,
+  letterSpacing: ".1em",
+  boxShadow: "0 0 18px rgba(255,204,0,.18)",
+};
+
+const productNewBadge = {
+  width: "fit-content",
+  marginBottom: 12,
+  padding: "7px 12px",
+  borderRadius: 999,
+  background: "linear-gradient(90deg, #00ff99, #00d9ff)",
+  color: "#000",
+  fontSize: 12,
+  fontWeight: 1000,
+  letterSpacing: ".1em",
+  boxShadow: "0 0 18px rgba(0,255,153,.38)",
+};
+
+const productTitle = {
+  color: "#e1e5e9",
+  fontSize: "clamp(38px, 5vw, 58px)",
+  lineHeight: 1.05,
+  margin: "0 0 20px",
+  overflowWrap: "anywhere" as const,
+  textShadow: "0 0 20px rgba(207,211,216,.22)",
+};
+
+const simpleOverviewCard = {
+  marginTop: 26,
+  padding: "clamp(20px, 3vw, 28px)",
+  border: "1px solid rgba(255,255,255,.12)",
+  borderRadius: 20,
+  background:
+    "linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.02))",
+  boxShadow: "0 15px 36px rgba(0,0,0,.22)",
+};
+
+const simpleOverviewEyebrow = {
+  display: "block",
+  marginBottom: 7,
+  color: "#00d9ff",
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: "0.14em",
+  textTransform: "uppercase" as const,
+};
+
+const simpleOverviewTitle = {
+  margin: "0 0 12px",
+  color: "#f0f2f4",
+  fontSize: 23,
+};
+
+const shortDescriptionText = {
+  margin: 0,
+  color: "#d2d6da",
+  fontSize: 17,
+  lineHeight: 1.75,
+  whiteSpace: "pre-line" as const,
+};
+
+const disclaimerBox = {
+  padding: 15,
+  border: "1px solid rgba(255,69,216,.75)",
+  borderRadius: 12,
+  color: "#ffd1f7",
+  background: "rgba(255,45,216,.08)",
+  fontWeight: 700,
+  lineHeight: 1.55,
+};
+
+const comingSoonBox = {
+  display: "grid",
+  gap: 6,
+  marginTop: 16,
+  padding: 16,
+  border: "1px solid rgba(255,204,0,.48)",
+  borderRadius: 12,
+  background:
+    "linear-gradient(135deg, rgba(255,204,0,.08), rgba(255,69,216,.045))",
+  color: "#f4f1dc",
+  lineHeight: 1.55,
+};
+
+const comingSoonDate = {
+  color: "#ffdf73",
+  fontWeight: 900,
+};
+
+const presaleBox = {
+  display: "grid",
+  gap: 6,
+  marginTop: 16,
+  padding: 16,
+  border: "1px solid #ffbf00",
+  borderRadius: 12,
+  background: "rgba(255,191,0,.08)",
+  color: "#ffcc66",
+  lineHeight: 1.5,
+};
+
+const selectOptionTitle = {
+  color: "#00d9ff",
+  marginTop: 16,
+  marginBottom: 16,
+  fontSize: 24,
+};
+
+const noOptionsBox = {
+  padding: 18,
+  border: "1px solid #333",
+  borderRadius: 12,
+  background: "#101010",
+  color: "#aaa",
+};
+
+const optionsGrid = {
+  gridTemplateColumns: "1fr",
+  display: "grid",
+  gap: 10,
+};
+
+const optionButton = {
+  width: "100%",
+  minWidth: 0,
+  boxSizing: "border-box" as const,
+  padding: "8px 10px",
+  border: "1px solid",
+  borderRadius: 10,
+  color: "#fff",
+  cursor: "pointer",
+  textAlign: "left" as const,
+  fontFamily: "inherit",
+  display: "flex",
+  flexDirection: "column" as const,
+  alignItems: "stretch",
+  gap: 4,
+  transition:
+    "transform .18s ease, border-color .18s ease, box-shadow .18s ease",
+};
+
+const saleBadge = {
+  display: "inline-block",
+  marginBottom: 9,
+  padding: "4px 10px",
+  borderRadius: 999,
+  background: "#00ff99",
+  color: "#000",
+  fontWeight: 800,
+  fontSize: 12,
+};
+
+const regularPrice = {
+  textDecoration: "line-through",
+  color: "#888",
+  marginRight: 8,
+};
+
+const salePrice = {
+  color: "#00ff99",
+  fontWeight: 800,
+};
+
+const quantitySection = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  marginTop: 0,
+  marginBottom: 20,
+  padding: "14px 0",
+  borderTop: "1px solid rgba(255,255,255,.12)",
+  borderBottom: "1px solid rgba(255,255,255,.12)",
+};
+
+const quantityLabel = {
+  color: "#ddd",
+  fontWeight: 700,
+};
+
+const quantityRow = {
+  display: "flex",
+  flexShrink: 0,
+  gap: 5,
+  alignItems: "center",
+};
+
+const quantityNumber = {
+  minWidth: 28,
+  textAlign: "center" as const,
+  fontWeight: 800,
+  fontSize: 18,
+};
+
+const qtyButton = {
+  width: 32,
+  height: 40,
+  borderRadius: 9,
+  border: "1px solid #00d9ff",
+  background: "#111",
+  color: "#00d9ff",
+  cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 18,
+};
+
+const kitSavingsCard = {
+  marginTop: 16,
+  padding: 15,
+  borderRadius: 12,
+  border: "1px solid rgba(0,255,153,.34)",
+  background:
+    "linear-gradient(145deg, rgba(0,255,153,.07), rgba(0,0,0,.35))",
+};
+
+const kitSavingsHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap" as const,
+};
+
+const kitSavingsEyebrow = {
+  display: "block",
+  color: "#888",
+  fontSize: 9,
+  fontWeight: 900,
+  letterSpacing: ".12em",
+};
+
+const kitSavingsTitle = {
+  display: "block",
+  marginTop: 4,
+  color: "#00ff99",
+  fontSize: 23,
+};
+
+const kitSavingsAmount = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  background: "#00ff99",
+  color: "#000",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const kitSavingsComparison = {
+  marginTop: 12,
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap" as const,
+  color: "#c7c7ce",
+  fontSize: 13,
+};
+
+const bundleSavingsCard = {
+  marginTop: 16,
+  padding: 18,
+  borderRadius: 12,
+  border: "1px solid rgba(0,217,255,.22)",
+  background: "rgba(0,217,255,.045)",
+};
+
+const bundleSavingsHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  flexWrap: "wrap" as const,
+  color: "#fff",
+};
+
+const bundleTierGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 10,
+  marginTop: 16,
+};
+
+const bundleTier = {
+  display: "grid",
+  gap: 7,
+  padding: "18px 10px",
+  minHeight: 52,
+  alignContent: "center",
+  boxSizing: "border-box" as const,
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,.12)",
+  background: "#0b0b0b",
+  color: "#aaa",
+  fontSize: 15,
+  textAlign: "center" as const,
+};
+
+const bundleTierActive = {
+  border: "1px solid rgba(0,255,153,.55)",
+  background: "rgba(0,255,153,.08)",
+  color: "#bfffe3",
+};
+
+const bundleActiveBadge = {
+  padding: "4px 8px",
+  borderRadius: 999,
+  background: "#00ff99",
+  color: "#000",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const bundlePausedBadge = {
+  padding: "4px 8px",
+  borderRadius: 999,
+  background: "rgba(255,204,0,.12)",
+  border: "1px solid rgba(255,204,0,.35)",
+  color: "#ffcc00",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const bundleHelpText = {
+  margin: "10px 0 0",
+  color: "#aaa",
+  fontSize: 12,
+  lineHeight: 1.5,
+};
+
+const addButton = {
+  marginTop: 20,
+  width: "100%",
+  padding: "17px 22px",
+  border: "none",
+  borderRadius: 12,
+  background: "linear-gradient(90deg, #00b7ff, #ff2fd0)",
+  color: "#fff",
+  fontWeight: 800,
+  fontSize: 18,
+  boxShadow: "0 12px 30px rgba(255,47,208,.16)",
+};
+
+const recommendationStrip = {
+  width: "100%",
+  display: "grid",
+  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+  gap: 18,
+  marginBottom: 46,
+  alignItems: "start",
+};
+
+const recommendationSection = {
+  width: "100%",
+  marginBottom: 0,
+  padding: 14,
+  boxSizing: "border-box" as const,
+  border: "1px solid rgba(255,255,255,.10)",
+  borderRadius: 22,
+  background:
+    "linear-gradient(145deg, rgba(255,255,255,.035), rgba(0,0,0,.72))",
+};
+
+const recommendationHeader = {
+  marginBottom: 18,
+};
+
+const recommendationEyebrow = {
+  display: "block",
+  marginBottom: 7,
+  color: "#ff65dc",
+  fontSize: 12,
+  fontWeight: 900,
+  letterSpacing: "0.14em",
+};
+
+const recommendationTitle = {
+  margin: 0,
+  color: "#00d9ff",
+  fontSize: "clamp(24px, 3vw, 32px)",
+};
+
+const recommendationGrid = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: 10,
+};
+
+const recommendationLink = {
+  textDecoration: "none",
+  color: "inherit",
+};
+
+const recommendationCard = {
+  minHeight: 78,
+  overflow: "hidden",
+  display: "grid",
+  gridTemplateColumns: "78px minmax(0, 1fr)",
+  border: "1px solid rgba(0,217,255,.20)",
+  borderRadius: 16,
+  background: "#080808",
+  transition: "transform .2s ease, border-color .2s ease",
+};
+
+const recommendationImageWrap = {
+  position: "relative" as const,
+  width: 78,
+  height: 78,
+  overflow: "hidden",
+  background: "#030303",
+};
+
+const recommendationImage = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover" as const,
+  display: "block",
+};
+
+const recommendationSaleBadge = {
+  position: "absolute" as const,
+  top: 10,
+  right: 10,
+  maxWidth: "78%",
+  padding: "5px 9px",
+  borderRadius: 999,
+  background: "#00ff99",
+  color: "#000",
+  fontSize: 11,
+  fontWeight: 900,
+};
+
+const recommendationCopy = {
+  display: "grid",
+  gap: 7,
+  padding: 14,
+};
+
+const recommendationName = {
+  color: "#fff",
+  fontSize: 16,
+  lineHeight: 1.35,
+};
+
+const recommendationCampaign = {
+  color: "#ff75df",
+  fontSize: 11,
+  fontWeight: 800,
+};
+
+const recommendationCta = {
+  marginTop: 3,
+  color: "#00d9ff",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: ".08em",
+};
+
+const coaMiddlePanel = {
+  width: "100%",
+  boxSizing: "border-box" as const,
+  marginTop: 18,
+  marginBottom: 4,
+  padding: "18px 16px 20px",
+  background:
+    "linear-gradient(180deg, #080b0d 0%, #030303 58%, #000 100%)",
+  border: "1px solid rgba(0,217,255,.32)",
+  borderRadius: 18,
+  boxShadow: "0 16px 36px rgba(0,0,0,.32)",
+};
+
+const coaPanelHeader = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 18,
+  paddingBottom: 18,
+  borderBottom: "1px solid rgba(255,255,255,.10)",
+};
+
+const coaPanelEyebrow = {
+  display: "block",
+  marginBottom: 7,
+  color: "#ff65dc",
+  fontSize: 10,
+  fontWeight: 1000,
+  letterSpacing: ".16em",
+};
+
+const coaPanelTitle = {
+  margin: 0,
+  color: "#f1f4f6",
+  fontSize: 24,
+  lineHeight: 1.15,
+};
+
+const coaDosageBadge = {
+  width: "fit-content",
+  marginTop: 10,
+  padding: "6px 10px",
+  borderRadius: 999,
+  background: "rgba(0,217,255,.11)",
+  border: "1px solid rgba(0,217,255,.42)",
+  color: "#7df9ff",
+  fontSize: 12,
+  fontWeight: 1000,
+};
+
+const coaCloseButton = {
+  width: 34,
+  height: 34,
+  flex: "0 0 auto",
+  display: "grid",
+  placeItems: "center",
+  borderRadius: 9,
+  border: "1px solid rgba(255,255,255,.16)",
+  background: "#0d0d0d",
+  color: "#fff",
+  cursor: "pointer",
+  fontSize: 22,
+  lineHeight: 1,
+};
+
+const coaPanelHelp = {
+  margin: "14px 0",
+  color: "#9da3aa",
+  fontSize: 11,
+  lineHeight: 1.55,
+};
+
+const coaPrimaryRow = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap" as const,
+  marginBottom: 12,
+};
+
+const coaPrimaryLabel = {
+  display: "grid",
+  gap: 4,
+};
+
+const coaHistoryDropdown = {
+  position: "relative" as const,
+  zIndex: 20,
+};
+
+const coaHistorySummary = {
+  listStyle: "none",
+  cursor: "pointer",
+  userSelect: "none" as const,
+  padding: "8px 11px",
+  borderRadius: 10,
+  border: "1px solid rgba(0,217,255,.35)",
+  background: "rgba(0,217,255,.07)",
+  color: "#7df9ff",
+  fontSize: 11,
+  fontWeight: 900,
+  letterSpacing: ".06em",
+  whiteSpace: "nowrap" as const,
+};
+
+const coaHistoryMenu = {
+  position: "absolute" as const,
+  top: "calc(100% + 8px)",
+  right: 0,
+  width: "min(360px, 82vw)",
+  maxHeight: 300,
+  overflowY: "auto" as const,
+  padding: 8,
+  borderRadius: 12,
+  border: "1px solid rgba(255,45,216,.35)",
+  background: "#080808",
+  boxShadow: "0 18px 40px rgba(0,0,0,.55)",
+};
+
+const coaHistoryItem = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  padding: "10px 9px",
+  borderBottom: "1px solid rgba(255,255,255,.08)",
+};
+
+const coaHistoryItemCopy = {
+  minWidth: 0,
+  display: "grid",
+  gap: 3,
+};
+
+const coaHistoryDate = {
+  color: "#fff",
+  fontSize: 12,
+};
+
+const coaHistoryMeta = {
+  color: "#9aa0a6",
+  fontSize: 10,
+  lineHeight: 1.35,
+  overflowWrap: "anywhere" as const,
+};
+
+const coaHistoryViewButton = {
+  flexShrink: 0,
+  textDecoration: "none",
+  color: "#00ff99",
+  fontSize: 11,
+  fontWeight: 900,
+  padding: "6px 8px",
+  borderRadius: 8,
+  border: "1px solid rgba(0,255,153,.3)",
+  background: "rgba(0,255,153,.06)",
+};
+
+const coaHistoryUnavailable = {
+  flexShrink: 0,
+  color: "#777",
+  fontSize: 10,
+};
+
+const coaList = {
+  display: "grid",
+  gap: 10,
+};
+
+const coaEmptyState = {
+  padding: "18px 14px",
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,.11)",
+  background: "#0a0a0a",
+  color: "#a9adb3",
+  lineHeight: 1.55,
+};
+
+const coaListItem = {
+  padding: 14,
+  borderRadius: 14,
+  border: "1px solid rgba(0,217,255,.20)",
+  background:
+    "linear-gradient(145deg, rgba(0,217,255,.055), rgba(255,69,216,.03))",
+  boxShadow: "0 10px 24px rgba(0,0,0,.20)",
+};
+
+const coaListItemTop = {
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: 10,
+  marginBottom: 12,
+};
+
+const coaReportLabel = {
+  display: "block",
+  marginBottom: 4,
+  color: "#858b93",
+  fontSize: 9,
+  fontWeight: 1000,
+  letterSpacing: ".14em",
+};
+
+const coaReportDate = {
+  color: "#fff",
+  fontSize: 16,
+};
+
+const coaCurrentBadge = {
+  padding: "4px 7px",
+  borderRadius: 999,
+  background: "rgba(0,255,153,.10)",
+  border: "1px solid rgba(0,255,153,.38)",
+  color: "#00ff99",
+  fontSize: 8,
+  fontWeight: 1000,
+  letterSpacing: ".08em",
+};
+
+const coaMetaGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 8,
+};
+
+const coaMetaItem = {
+  minWidth: 0,
+  display: "grid",
+  gap: 4,
+  padding: "8px 9px",
+  borderRadius: 9,
+  background: "rgba(255,255,255,.035)",
+  color: "#d9dde1",
+  fontSize: 11,
+  overflowWrap: "anywhere" as const,
+};
+
+const coaMetaLabel = {
+  color: "#747b84",
+  fontSize: 8,
+  fontWeight: 1000,
+  letterSpacing: ".12em",
+};
+
+const coaMethod = {
+  display: "grid",
+  gap: 4,
+  marginTop: 9,
+  color: "#b9bec4",
+  fontSize: 10,
+  lineHeight: 1.5,
+};
+
+const coaViewButton = {
+  marginTop: 12,
+  width: "100%",
+  boxSizing: "border-box" as const,
+  display: "block",
+  padding: "10px 12px",
+  borderRadius: 9,
+  border: "1px solid rgba(255,69,216,.45)",
+  background:
+    "linear-gradient(90deg, rgba(0,217,255,.10), rgba(255,69,216,.11))",
+  color: "#fff",
+  textDecoration: "none",
+  textAlign: "center" as const,
+  fontSize: 10,
+  fontWeight: 1000,
+  letterSpacing: ".08em",
+};
+
+const coaUnavailable = {
+  display: "block",
+  marginTop: 10,
+  color: "#777d84",
+  fontSize: 10,
+};
+
+const backButton = {
+  background: "none",
+  border: "none",
+  color: "#00d9ff",
+  cursor: "pointer",
+  fontSize: 16,
+  padding: 0,
+};
+
+const optionPairGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 10,
+  alignItems: "stretch",
+};
+
+const optionCardHeader = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 8,
+};
+
+const optionDosage = {
+  color: "#b7c0d0",
+  fontSize: 14,
+  fontWeight: 800,
+  lineHeight: 1.2,
+};
+
+const optionSelectionDot = {
+  width: 16,
+  height: 16,
+  flexShrink: 0,
+  border: "1px solid",
+  borderRadius: "50%",
+  display: "grid",
+  placeItems: "center",
+  fontSize: 10,
+  fontWeight: 900,
+};
+
+const optionPurchaseTitle = {
+  fontSize: 18,
+  lineHeight: 1.2,
+  color: "#f6f7fb",
+};
+
+const optionPackLabel = {
+  color: "#929aab",
+  fontSize: 14,
+  marginLeft: "auto",
+  lineHeight: 1.2,
+};
+
+const optionPriceRow = {
+  display: "flex",
+  flexWrap: "wrap" as const,
+  alignItems: "baseline",
+  gap: 6,
+  marginTop: 0,
+};
+
+const optionPrice = {
+  color: "#fff",
+  fontSize: 24,
+  fontWeight: 800,
+  letterSpacing: "-.04em",
+  lineHeight: 1.1,
+};
+
+const optionDiscountBadge = {
+  display: "block",
+  alignSelf: "flex-start",
+  marginTop: 0,
+  padding: "3px 6px",
+  borderRadius: 6,
+  background: "rgba(0,255,153,.09)",
+  color: "#87f4bb",
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.25,
+};
+
+const optionStatus = {
+  color: "#ffcc66",
+  fontSize: 14,
+  fontWeight: 700,
+  lineHeight: 1.2,
+};
+
+const recommendationEmpty = {
+  margin: 0,
+  padding: "12px 0",
+  color: "#929aab",
+  fontSize: 13,
+  lineHeight: 1.6,
+};
+
+const optionHeading = {
+  display: "flex",
+  flexWrap: "wrap" as const,
+  alignItems: "baseline",
+  gap: 7,
+  minWidth: 0,
+};

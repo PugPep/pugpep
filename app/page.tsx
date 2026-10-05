@@ -1,7 +1,9 @@
-﻿"use client";
+﻿
+"use client";
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "../lib/supabaseClient";
 import { useCart } from "./cartContext";
@@ -13,6 +15,23 @@ import {
 
 const STOREFRONT_SALE_CACHE_KEY = "pugpep_storefront_sales_v1";
 const STOREFRONT_SALE_CACHE_TTL_MS = 5 * 60 * 1000;
+const CARD_CACHE_KEY = "pugpep_home_cards_v1";
+const OPTION_PRICE_CACHE_KEY = "pugpep_home_option_prices_v1";
+const CARD_CACHE_TTL = 90 * 1000;
+type CachedOptionPrice = { savedAt: number; signature: string; price: number; hasCampaign: boolean };
+function optionPriceSignature(option: CatalogOption) {
+  return JSON.stringify([option.price, option.sale_active, option.sale_percent, option.purchase_type, option.dosage]);
+}
+function readRecentCatalogCache<T>(key: string): T | null {
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(key) || "null");
+    return parsed && typeof parsed.savedAt === "number" && Date.now() - parsed.savedAt < CARD_CACHE_TTL ? parsed.value as T : null;
+  } catch { return null; }
+}
+function saveCatalogCache(key: string, value: unknown) {
+  try { sessionStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), value })); } catch {}
+}
+const CATALOG_CACHE_KEY = "pugpep_home_catalog_v1";
 
 type StorefrontSaleCache = {
   savedAt: number;
@@ -47,9 +66,16 @@ type CatalogOption = {
   archived_at?: string | null;
   sale_active: boolean;
   sale_percent: number;
+  bundle_discount_enabled?: boolean;
+  bundle_qty_1?: number;
+  bundle_discount_1?: number;
+  bundle_qty_2?: number;
+  bundle_discount_2?: number;
+  bundle_qty_3?: number;
+  bundle_discount_3?: number;
 };
 
-type CatalogPricedOption = CatalogOption & { effectivePrice: number | null };
+type CatalogPricedOption = CatalogOption & { effectivePrice: number | null; hasCampaign?: boolean };
 
 type CatalogStrengthChoice = {
   key: string;
@@ -75,7 +101,8 @@ function catalogSlug(value: string) {
 function buildCatalogStrengthChoices(
   options: CatalogOption[],
   prices: Map<string, number>,
-  failedPrices: Set<string>
+  failedPrices: Set<string>,
+  campaignOptions = new Set<string>()
 ): CatalogStrengthChoice[] {
   const dosageGroups = new Map<string, CatalogOption[]>();
   for (const option of options) {
@@ -86,7 +113,7 @@ function buildCatalogStrengthChoices(
   }
   return Array.from(dosageGroups.entries()).map(([key, group]) => {
     const withPrice = (option: CatalogOption | undefined): CatalogPricedOption | undefined => option
-      ? { ...option, effectivePrice: failedPrices.has(option.id) ? null : prices.get(option.id) ?? null }
+      ? { ...option, effectivePrice: failedPrices.has(option.id) ? null : prices.get(option.id) ?? null, hasCampaign: campaignOptions.has(option.id) }
       : undefined;
     const single = withPrice(group.find((item) => item.purchase_type === "single"));
     const kit = withPrice(group.find((item) => item.purchase_type === "kit"));
@@ -116,7 +143,54 @@ function cardQuantity(value: number) {
   return Number.isFinite(value) ? Math.max(1, Math.min(Number.MAX_SAFE_INTEGER, Math.floor(value))) : 1;
 }
 
+function catalogCampaignResult(data: unknown): Record<string, unknown> | null {
+  const value = Array.isArray(data) ? data[0] : data;
+  return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+function catalogSalePercent(option: CatalogPricedOption | undefined) {
+  const regular = Number(option?.price);
+  const current = option?.effectivePrice;
+  return current != null && Number.isFinite(regular) && regular > 0 && current < regular
+    ? Number(((1 - current / regular) * 100).toFixed(2)) : 0;
+}
+
+function catalogBundleTiers(option: CatalogPricedOption | undefined, quantity: number) {
+  if (!option || option.effectivePrice == null || option.purchase_type !== "single"
+    || quantity >= 10 || option.bundle_discount_enabled === false || option.hasCampaign
+    || (option.sale_active && Number(option.sale_percent) > 0) || catalogSalePercent(option) > 0) return [];
+  return [
+    { quantity: Number(option.bundle_qty_1), discount: Number(option.bundle_discount_1) },
+    { quantity: Number(option.bundle_qty_2), discount: Number(option.bundle_discount_2) },
+    { quantity: Number(option.bundle_qty_3), discount: Number(option.bundle_discount_3) },
+  ].filter((tier) => Number.isInteger(tier.quantity) && tier.quantity > 0 && tier.quantity < 10
+    && Number.isFinite(tier.discount) && tier.discount > 0 && tier.discount <= 100)
+    .sort((a, b) => a.quantity - b.quantity);
+}
+
+function catalogQuantityQuote(option: CatalogPricedOption | undefined, requestedQuantity: number, matchingSingle?: CatalogPricedOption) {
+  if (!option || option.effectivePrice == null || !Number.isFinite(option.effectivePrice)
+    || !Number.isFinite(Number(option.price))) return null;
+  const quantity = Math.max(1, Math.floor(Number(requestedQuantity) || 1));
+  const tier = catalogBundleTiers(option, quantity).filter((item) => quantity >= item.quantity).at(-1);
+  const unitPrice = Math.round(option.effectivePrice * (1 - (tier?.discount || 0) / 100) * 100) / 100;
+  const total = Math.round(unitPrice * quantity * 100) / 100;
+  const regularUnit = Math.round(Number(option.price) * 100) / 100;
+  const tenSingleValue = option.purchase_type === "kit" && matchingSingle && Number.isFinite(Number(matchingSingle.price))
+    ? Math.round(Number(matchingSingle.price) * 100) / 10 : 0;
+  const compareWithSingles = option.purchase_type === "kit" && unitPrice >= regularUnit && tenSingleValue > regularUnit;
+  const originalUnit = compareWithSingles ? tenSingleValue : regularUnit;
+  const originalTotal = Math.round(originalUnit * quantity * 100) / 100;
+  const singleComparisonTotal = Math.round(tenSingleValue * quantity * 100) / 100;
+  const kitSavings = Math.max(0, Math.round((singleComparisonTotal - total) * 100) / 100);
+  const savings = Math.max(0, Math.round((originalTotal - total) * 100) / 100);
+  return { quantity, unitPrice, total, originalTotal, savings, compareWithSingles, kitSavings, singleComparisonTotal,
+    percent: originalTotal > 0 ? Math.round(savings / originalTotal * 10000) / 100 : 0 };
+}
+
 export default function HomePage() {
+  const router = useRouter();
+  const pathname = usePathname();
   const supabase = useMemo(() => createClient(), []);
   const { addToCart } = useCart();
   const [cardKitSelections, setCardKitSelections] = useState<Record<string, boolean>>({});
@@ -129,6 +203,10 @@ export default function HomePage() {
   const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [researchConfirmed, setResearchConfirmed] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productLoadError, setProductLoadError] = useState("");
+  const productRequestRef = useRef(0);
+  const productAbortRef = useRef<AbortController | null>(null);
   const [saleMap, setSaleMap] = useState<Record<string, StorefrontSale>>({});
   const [catalogDetails, setCatalogDetails] = useState<Record<string, CatalogDetails>>({});
   const [selectedCardDosages, setSelectedCardDosages] = useState<Record<string, string>>({});
@@ -143,10 +221,16 @@ export default function HomePage() {
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    if (pathname !== "/") return;
     mountedRef.current = true;
+    campaignLoadStartedRef.current = false;
 
-    const accepted = localStorage.getItem("pugpep_age_verified");
-    setAgeVerified(accepted === "yes");
+    try { setAgeVerified(localStorage.getItem("pugpep_age_verified") === "yes"); }
+    catch { setAgeVerified(false); }
+
+    restoreCachedProducts();
+    const cachedCards = readRecentCatalogCache<Record<string, CatalogDetails>>(CARD_CACHE_KEY);
+    if (cachedCards && typeof cachedCards === "object" && !Array.isArray(cachedCards)) setCatalogDetails(cachedCards);
 
     const mediaQuery = window.matchMedia("(max-width: 768px)");
 
@@ -160,6 +244,20 @@ export default function HomePage() {
     // Load the catalog immediately. Campaign pricing is deliberately
     // separated so it cannot block the initial product render.
     void loadProducts();
+
+    const restoreCatalog = () => {
+      if (window.location.pathname !== "/" || !mountedRef.current) return;
+      restoreCachedProducts();
+      void loadProducts();
+    };
+    const onPageShow = () => {
+      restoreCatalog();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("popstate", restoreCatalog);
+    window.addEventListener("online", restoreCatalog);
+    const onVisible = () => { if (document.visibilityState === "visible") restoreCatalog(); };
+    document.addEventListener("visibilitychange", onVisible);
 
     // Restore recent campaign data instantly when available.
     const cachedSales = readCachedSales();
@@ -196,6 +294,12 @@ export default function HomePage() {
 
     return () => {
       mountedRef.current = false;
+      productRequestRef.current += 1;
+      productAbortRef.current?.abort();
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("popstate", restoreCatalog);
+      window.removeEventListener("online", restoreCatalog);
+      document.removeEventListener("visibilitychange", onVisible);
       mediaQuery.removeEventListener("change", updateMobile);
 
       if (
@@ -209,7 +313,22 @@ export default function HomePage() {
         globalThis.clearTimeout(timeoutId);
       }
     };
-  }, [supabase]);
+  }, [supabase, pathname]);
+
+  function restoreCachedProducts() {
+    try {
+      const raw = sessionStorage.getItem(CATALOG_CACHE_KEY);
+      if (raw) {
+        const cached = JSON.parse(raw) as { savedAt: number; products: Product[] };
+        if (typeof cached.savedAt === "number" && Date.now() - cached.savedAt < 24 * 60 * 60 * 1000
+          && Array.isArray(cached.products) && cached.products.every((item) => item && typeof item.id === "string"
+            && typeof item.slug === "string" && typeof item.name === "string")) {
+          setProducts(cached.products);
+        }
+      }
+    } catch { /* Storage is an optional navigation optimization. */ }
+
+  }
 
   function readCachedSales() {
     try {
@@ -251,23 +370,50 @@ export default function HomePage() {
   }
 
   async function loadProducts() {
-    const { data: productData, error: productError } = await supabase
-      .from("products")
-      .select(
-        "id, name, slug, color, image, category, product_family, is_new, feature_on_homepage, new_until, homepage_feature_order, is_coming_soon, coming_soon_date"
-      )
-      .eq("is_active", true)
-      .order("name", { ascending: true });
-
-    if (!mountedRef.current) return;
-
-    if (productError) {
-      console.error("Product loading failed:", productError);
-      setProducts([]);
-      return;
+    if (!mountedRef.current || window.location.pathname !== "/") return;
+    const requestId = ++productRequestRef.current;
+    productAbortRef.current?.abort();
+    setProductsLoading(true);
+    setProductLoadError("");
+    const isCurrent = () => mountedRef.current && requestId === productRequestRef.current;
+    try {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const controller = new AbortController();
+        productAbortRef.current = controller;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const query = supabase.from("products")
+            .select("id, name, slug, color, image, category, product_family, is_new, feature_on_homepage, new_until, homepage_feature_order, is_coming_soon, coming_soon_date")
+            .eq("is_active", true).order("name", { ascending: true }).abortSignal(controller.signal);
+          const timeout = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+              controller.abort();
+              reject(new Error("Product request timed out."));
+            }, 12000);
+          });
+          const { data, error } = await Promise.race([query, timeout]);
+          if (!isCurrent()) return;
+          if (error) throw error;
+          if (!Array.isArray(data)) throw new Error("Product response did not contain a catalog.");
+          const next = data as Product[];
+          setProducts(next);
+          try { sessionStorage.setItem(CATALOG_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), products: next })); }
+          catch { /* Catalog loading does not require storage. */ }
+          return;
+        } catch (error) {
+          if (!isCurrent()) return;
+          if (attempt === 1) {
+            console.error("Product loading failed:", error);
+            setProductLoadError("Unable to refresh products. Please try again.");
+          }
+        } finally {
+          if (timeoutId !== undefined) clearTimeout(timeoutId);
+          if (productAbortRef.current === controller) productAbortRef.current = null;
+        }
+      }
+    } finally {
+      if (isCurrent()) setProductsLoading(false);
     }
-
-    setProducts((productData || []) as Product[]);
   }
 
   async function loadCampaignSales() {
@@ -300,14 +446,16 @@ export default function HomePage() {
     }
   }
 
+  const catalogIdentity = products.map((product) => `${product.id}:${product.slug}`).sort().join("|");
   useEffect(() => {
-    if (products.length === 0 || campaignLoading) return;
+    if (pathname !== "/" || products.length === 0) return;
     let cancelled = false;
+    let publishTimer: ReturnType<typeof setTimeout> | undefined;
 
     async function loadCatalogDetails() {
       const results = await Promise.allSettled([
         supabase.from("product_options")
-          .select("id,product_slug,dosage,purchase_type,price,status,cost,sale_active,sale_percent")
+          .select("id,product_slug,dosage,purchase_type,price,status,cost,sale_active,sale_percent,bundle_discount_enabled,bundle_qty_1,bundle_discount_1,bundle_qty_2,bundle_discount_2,bundle_qty_3,bundle_discount_3")
           .eq("is_active", true).is("archived_at", null),
         supabase.from("coa_documents")
           .select("product_slug,file_path,storage_bucket,test_date")
@@ -318,6 +466,9 @@ export default function HomePage() {
       const documentsResult = results[1];
       const options = optionsResult.status === "fulfilled" && !optionsResult.value.error
         ? (optionsResult.value.data || []) as CatalogOption[] : [];
+      if (optionsResult.status === "rejected" || optionsResult.value.error) {
+        throw new Error("Unable to refresh product options.");
+      }
       const documents = documentsResult.status === "fulfilled" && !documentsResult.value.error
         ? documentsResult.value.data || [] : [];
       for (const result of results) {
@@ -326,44 +477,34 @@ export default function HomePage() {
       }
       const prices = new Map<string, number>();
       const failedPrices = new Set<string>();
-      let cursor = 0;
-      async function priceWorker() {
-        while (cursor < options.length && !cancelled) {
-          const option = options[cursor++];
-          const regular = Number(option.price);
-          if (!Number.isFinite(regular) || regular < 0) continue;
-          const percent = Math.min(100, Math.max(0, Number(option.sale_percent) || 0));
-          let price = option.sale_active ? regular * (1 - percent / 100) : regular;
-          const product = products.find((item) => catalogSlug(item.slug) === catalogSlug(option.product_slug));
-          if (product && saleMap[product.slug]?.isOnSale) {
-            try {
-              const { data, error } = await supabase.rpc("get_product_option_campaign_price", {
-                p_product_option_id: option.id,
-              });
-              if (error) throw error;
-              const campaign = data as Record<string, unknown> | null;
-              if (campaign?.has_campaign) {
-                const campaignPrice = Number(campaign.sale_unit_price);
-                if (!Number.isFinite(campaignPrice) || campaignPrice < 0) throw new Error("Invalid campaign price");
-                price = Math.min(price, campaignPrice);
-              }
-            } catch (error) {
-              failedPrices.add(option.id);
-              console.warn("Catalog campaign pricing unavailable:", error);
-            }
-          }
-          prices.set(option.id, Math.round(price * 100) / 100);
+      const campaignOptions = new Set<string>();
+      const priceCache = readRecentCatalogCache<Record<string, CachedOptionPrice>>(OPTION_PRICE_CACHE_KEY) || {};
+      const optionsBySlug = new Map<string, CatalogOption[]>();
+      for (const option of options) {
+        const key = catalogSlug(option.product_slug);
+        const group = optionsBySlug.get(key) || [];
+        group.push(option); optionsBySlug.set(key, group);
+        const cached = priceCache[option.id];
+        if (cached && Date.now() - cached.savedAt < CARD_CACHE_TTL && cached.signature === optionPriceSignature(option)
+          && Number.isFinite(cached.price) && cached.price >= 0) {
+          prices.set(option.id, cached.price);
+          if (cached.hasCampaign) campaignOptions.add(option.id);
         }
       }
-      await Promise.all(Array.from({ length: Math.min(4, options.length) }, () => priceWorker()));
-      if (cancelled) return;
+      const documentsBySlug = new Map<string, (typeof documents)[number]>();
+      for (const document of documents) {
+        const key = catalogSlug(String(document.product_slug));
+        if (document.file_path && !documentsBySlug.has(key)) documentsBySlug.set(key, document);
+      }
+      function publishCatalog() {
+        if (cancelled) return;
       const next: Record<string, CatalogDetails> = {};
       for (const product of products) {
         const key = catalogSlug(product.slug);
-        const productOptions = options.filter((option) => catalogSlug(option.product_slug) === key);
+        const productOptions = optionsBySlug.get(key) || [];
         const values = productOptions.map((option) => prices.get(option.id)).filter((price): price is number => price !== undefined);
-        const document = documents.find((item) => catalogSlug(String(item.product_slug)) === key && item.file_path);
-        const choices = buildCatalogStrengthChoices(productOptions, prices, failedPrices);
+        const document = documentsBySlug.get(key);
+        const choices = buildCatalogStrengthChoices(productOptions, prices, failedPrices, campaignOptions);
         next[product.slug] = {
           choices,
           strengths: Array.from(new Set(productOptions.map((option) => option.dosage).filter(Boolean)))
@@ -373,11 +514,72 @@ export default function HomePage() {
             .getPublicUrl(document.file_path).data.publicUrl : undefined,
         };
       }
-      setCatalogDetails(next);
+      setCatalogDetails((previous) => {
+        for (const product of products) {
+          const group = optionsBySlug.get(catalogSlug(product.slug)) || [];
+          if (group.some((option) => !prices.has(option.id) && !failedPrices.has(option.id)) && previous[product.slug]) {
+            next[product.slug] = previous[product.slug];
+          }
+        }
+        return next;
+      });
+      }
+      publishCatalog();
+      function schedulePublish() {
+        if (cancelled || publishTimer !== undefined) return;
+        publishTimer = setTimeout(() => { publishTimer = undefined; publishCatalog(); }, 80);
+      }
+      let cursor = 0;
+      async function priceWorker() {
+        while (cursor < options.length && !cancelled) {
+          const option = options[cursor++];
+          if (prices.has(option.id)) continue;
+          const regular = Number(option.price);
+          if (!Number.isFinite(regular) || regular < 0) continue;
+          const percent = Math.min(100, Math.max(0, Number(option.sale_percent) || 0));
+          let price = option.sale_active ? regular * (1 - percent / 100) : regular;
+          // The database assignment for this option is authoritative, even
+          // when the product-wide sale list is cached or missing this product.
+          try {
+            const { data, error } = await supabase.rpc("get_product_option_campaign_price", {
+              p_product_option_id: option.id,
+            });
+            if (error) throw error;
+            const campaign = catalogCampaignResult(data);
+            if (campaign?.has_campaign) {
+              campaignOptions.add(option.id);
+              const campaignPrice = Number(campaign.sale_unit_price);
+              if (!Number.isFinite(campaignPrice) || campaignPrice < 0) throw new Error("Invalid campaign price");
+              price = Math.min(price, campaignPrice);
+            }
+          } catch (error) {
+            failedPrices.add(option.id);
+            console.warn("Catalog campaign pricing unavailable:", error);
+          }
+          const roundedPrice = Math.round(price * 100) / 100;
+          prices.set(option.id, roundedPrice);
+          if (!failedPrices.has(option.id)) {
+            priceCache[option.id] = { savedAt: Date.now(), signature: optionPriceSignature(option), price: roundedPrice,
+              hasCampaign: campaignOptions.has(option.id) };
+          }
+          schedulePublish();
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(8, options.length) }, () => priceWorker()));
+      if (cancelled) return;
+      if (publishTimer !== undefined) { clearTimeout(publishTimer); publishTimer = undefined; }
+      publishCatalog();
+      const currentPrices: Record<string, CachedOptionPrice> = {};
+      for (const option of options) if (priceCache[option.id] && !failedPrices.has(option.id)) currentPrices[option.id] = priceCache[option.id];
+      saveCatalogCache(OPTION_PRICE_CACHE_KEY, currentPrices);
     }
     void loadCatalogDetails().catch((error) => console.warn("Catalog details unavailable:", error));
-    return () => { cancelled = true; };
-  }, [products, campaignLoading, saleMap, supabase]);
+    return () => { cancelled = true; if (publishTimer !== undefined) clearTimeout(publishTimer); };
+  }, [catalogIdentity, supabase, pathname]);
+
+  useEffect(() => {
+    if (pathname === "/" && Object.keys(catalogDetails).length > 0) saveCatalogCache(CARD_CACHE_KEY, catalogDetails);
+  }, [catalogDetails, pathname]);
 
   async function handleProductAccess(
     event: React.MouseEvent<HTMLAnchorElement>,
@@ -403,11 +605,11 @@ export default function HomePage() {
         // Redirect persistence is a convenience only.
       }
 
-      window.location.href = "/login";
+      router.push("/login");
       return;
     }
 
-    window.location.href = productPath;
+    router.push(productPath);
   }
 
   function isProductNew(product: Product) {
@@ -732,6 +934,43 @@ export default function HomePage() {
     document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function changeCatalogQuantity(product: Product, requestedQuantity: number) {
+    const details = catalogDetails[product.slug];
+    const strength = selectedCatalogStrength(details?.choices || [], selectedCardDosages[product.slug]);
+    const currentOption = catalogPurchaseOption(strength, cardKitSelections[product.slug]);
+    if (currentOption?.purchase_type === "kit" && requestedQuantity < 1 && strength?.single) {
+      setCardKitSelections((current) => ({ ...current, [product.slug]: false }));
+      setCardQuantities((current) => ({ ...current, [product.slug]: 9 }));
+      setCardMessages((current) => ({ ...current, [product.slug]: "" }));
+      return;
+    }
+    const nextQuantity = cardQuantity(requestedQuantity);
+    const kit = strength?.kit;
+    if (nextQuantity === 10 && currentOption?.purchase_type === "single" && kit
+      && kit.is_active !== false && !kit.archived_at && kit.status !== "out of stock" && kit.effectivePrice != null) {
+      setCardKitSelections((current) => ({ ...current, [product.slug]: true }));
+      setCardQuantities((current) => ({ ...current, [product.slug]: 1 }));
+      setCardMessages((current) => ({ ...current, [product.slug]: "" }));
+      return;
+    }
+    setCardQuantities((current) => ({ ...current, [product.slug]: nextQuantity }));
+    setCardMessages((current) => ({ ...current, [product.slug]: "" }));
+  }
+
+  function changeCatalogVialInput(product: Product, requestedVials: number) {
+    const details = catalogDetails[product.slug];
+    const strength = selectedCatalogStrength(details?.choices || [], selectedCardDosages[product.slug]);
+    const currentOption = catalogPurchaseOption(strength, cardKitSelections[product.slug]);
+    const vials = cardQuantity(requestedVials);
+    if (currentOption?.purchase_type === "kit" && vials < 10 && strength?.single) {
+      setCardKitSelections((current) => ({ ...current, [product.slug]: false }));
+      setCardQuantities((current) => ({ ...current, [product.slug]: vials }));
+      setCardMessages((current) => ({ ...current, [product.slug]: "" }));
+      return;
+    }
+    changeCatalogQuantity(product, currentOption?.purchase_type === "kit" ? Math.max(1, Math.floor(vials / 10)) : vials);
+  }
+
   function resetCardMessage(slug: string) {
     setCardMessages((current) => ({ ...current, [slug]: "" }));
     setCardQuantities((current) => ({ ...current, [slug]: 1 }));
@@ -779,7 +1018,7 @@ export default function HomePage() {
       if (!Number.isFinite(regular) || regular < 0) throw new Error("This option's price is unavailable.");
       const percent = Math.min(100, Math.max(0, Number(option.sale_percent) || 0));
       const manual = option.sale_active ? regular * (1 - percent / 100) : regular;
-      const campaign = data as Record<string, unknown> | null;
+      const campaign = catalogCampaignResult(data);
       const campaignPrice = campaign?.has_campaign ? Number(campaign.sale_unit_price) : regular;
       if (!Number.isFinite(campaignPrice) || campaignPrice < 0) throw new Error("Unable to confirm the current price.");
       const price = Math.round(Math.min(regular, manual, campaignPrice) * 100) / 100;
@@ -801,8 +1040,8 @@ export default function HomePage() {
         return { ...current, [product.slug]: { ...details, choices: details.choices.map((choice) => ({
           ...choice,
           price: choice.optionId === option.id ? price : choice.price,
-          single: choice.single?.id === option.id ? { ...choice.single, effectivePrice: price } : choice.single,
-          kit: choice.kit?.id === option.id ? { ...choice.kit, effectivePrice: price } : choice.kit,
+          single: choice.single?.id === option.id ? { ...option, effectivePrice: price, hasCampaign: Boolean(campaign?.has_campaign) } : choice.single,
+          kit: choice.kit?.id === option.id ? { ...option, effectivePrice: price, hasCampaign: Boolean(campaign?.has_campaign) } : choice.kit,
         })) } };
       });
       setCardMessages((current) => ({ ...current, [product.slug]: kitPresale
@@ -824,7 +1063,17 @@ export default function HomePage() {
     const kitSelected = selectedOption?.purchase_type === "kit";
     const quantity = cardQuantities[product.slug] ?? 1;
     const pending = Boolean(cardBusy[product.slug]);
-    const sale = saleMap[product.slug];
+    const kitSalePercent = catalogSalePercent(selectedStrength?.kit);
+    const singleSalePercent = catalogSalePercent(selectedStrength?.single);
+    const offerPercent = Math.max(singleSalePercent, kitSalePercent);
+    const offerBadge = kitSalePercent > singleSalePercent
+      ? `Kits ${kitSalePercent}% OFF`
+      : singleSalePercent > kitSalePercent && selectedStrength?.kit
+        ? `Singles ${singleSalePercent}% OFF` : `${offerPercent}% OFF`;
+    const bundleTiers = product.is_coming_soon ? [] : catalogBundleTiers(selectedOption, quantity);
+    const activeBundleTier = [...bundleTiers].reverse().find((tier) => quantity >= tier.quantity);
+    const quantityQuote = catalogQuantityQuote(selectedOption, quantity, selectedStrength?.single);
+    const displayedVials = kitSelected ? quantity * 10 : quantity;
     const theme = getProductTheme(product);
     const familyLabel = productFamilies.find((family) => family.value === getResearchFamily(product))?.label;
     const productPath = `/products/${product.slug}`;
@@ -837,14 +1086,19 @@ export default function HomePage() {
           <div className="pugpep-product-badges">
             {product.is_coming_soon ? <span className="pugpep-status-badge">Coming soon</span>
               : isProductNew(product) ? <span className="pugpep-status-badge">New</span> : null}
-            {!product.is_coming_soon && sale?.isOnSale && <span className="pugpep-offer-badge">{sale.badgeText || "Sale"}</span>}
+            {!product.is_coming_soon && offerPercent > 0 && <span className="pugpep-offer-badge">{offerBadge}</span>}
           </div>
         </Link>
         <div className="pugpep-product-info">
           <span className="pugpep-product-family">{isLabMaterialCategory(product.category) ? "Lab Materials"
             : isResearchSprayCategory(product.category) ? "Research Sprays" : familyLabel || "Research Compounds"}</span>
+          <div className="pugpep-product-title-row">
           <Link href={productPath} className="pugpep-product-name"
             onClick={(event) => { void handleProductAccess(event, product.slug); }}>{product.name}</Link>
+            {detail?.coaUrl && <a className="pugpep-coa-button" href={detail.coaUrl}
+              onClick={(event) => { void handleProductAccess(event, product.slug, detail.coaUrl); }}
+              aria-label={`View COA for ${product.name}`}>View COA</a>}
+          </div>
           <div className="pugpep-product-strengths" role="group" aria-label={`Select strength for ${product.name}`}>
             {detail?.choices.length ? detail.choices.map((choice) => (
               <button
@@ -863,10 +1117,28 @@ export default function HomePage() {
             )) : <span className="pugpep-option-placeholder">View available options</span>}
           </div>
           <div className="pugpep-purchase-row">
-            <div className="pugpep-product-price" aria-live="polite" aria-atomic="true">
-              {product.is_coming_soon ? "Coming soon" : selectedOption?.effectivePrice != null
-                ? `$${selectedOption.effectivePrice.toFixed(2)}` : "View pricing"}
+            <div>
+              <div className="pugpep-product-price" aria-live="polite" aria-atomic="true">
+                {product.is_coming_soon ? "Coming soon" : quantityQuote
+                  ? `$${quantityQuote.total.toFixed(2)}` : "View pricing"}
+                {!product.is_coming_soon && quantityQuote && quantityQuote.savings > 0 && <>
+                  <del className="pugpep-card-original-price" aria-label={`${quantityQuote.compareWithSingles ? "Regular price of matching single vials" : "Original total"} $${quantityQuote.originalTotal.toFixed(2)}`}>
+                    ${quantityQuote.originalTotal.toFixed(2)}
+                  </del>
+                  <span className="pugpep-card-dollar-savings">Save ${quantityQuote.savings.toFixed(2)}</span>
+                </>}
+              </div>
+              {!product.is_coming_soon && quantityQuote && <div className="pugpep-card-price-caption">
+                Total for {quantity} {kitSelected ? (quantity === 1 ? "kit (10 vials)" : `kits (${quantity * 10} vials)`)
+                  : (quantity === 1 ? "single" : "singles")}
+                {quantityQuote.savings > 0 && <span className="pugpep-card-sale-percent"> · {quantityQuote.percent}% {quantityQuote.compareWithSingles ? "saved vs singles" : "OFF"}</span>}
+              </div>}
+              {!product.is_coming_soon && kitSelected && quantityQuote && !quantityQuote.compareWithSingles
+                && quantityQuote.kitSavings > quantityQuote.savings && <div className="pugpep-card-price-caption">
+                  Save ${quantityQuote.kitSavings.toFixed(2)} compared with {quantity * 10} singles
+                </div>}
             </div>
+            <div className="pugpep-purchase-controls">
             {selectedOption && <div className="pugpep-purchase-type">
               <span>{kitSelected ? "Kit" : "Single"}</span>
               {selectedStrength?.kit && <label>
@@ -876,19 +1148,22 @@ export default function HomePage() {
                     setCardKitSelections((current) => ({ ...current, [product.slug]: event.target.checked }));
                     resetCardMessage(product.slug);
                   }} />
-                Kit (10)
+                Kit (10){!kitSelected && kitSalePercent > 0 && <span className="pugpep-kit-sale-hint"> · {kitSalePercent}% off</span>}
               </label>}
             </div>}
+          <button type="button" className="pugpep-card-cart-button"
+            onClick={() => window.dispatchEvent(new Event("pugpep:open-cart"))}>View Cart</button>
+            </div>
           </div>
           <div className="pugpep-card-buy-row">
             <div className="pugpep-card-quantity" role="group" aria-label={`Quantity for ${product.name}`}>
-              <button type="button" aria-label={`Decrease quantity for ${product.name}`} disabled={quantity <= 1 || pending || product.is_coming_soon}
-                onClick={() => setCardQuantities((current) => ({ ...current, [product.slug]: cardQuantity(quantity - 1) }))}>−</button>
-              <input type="number" min={1} step={1} value={quantity} disabled={pending || product.is_coming_soon}
-                aria-label={`${kitSelected ? "Kit" : "Item"} quantity for ${product.name}`}
-                onChange={(event) => setCardQuantities((current) => ({ ...current, [product.slug]: cardQuantity(Number(event.target.value)) }))} />
+              <button type="button" aria-label={`Decrease quantity for ${product.name}`} disabled={(!kitSelected && quantity <= 1) || (kitSelected && quantity <= 1 && !selectedStrength?.single) || pending || product.is_coming_soon}
+                onClick={() => changeCatalogQuantity(product, quantity - 1)}>−</button>
+              <input type="number" min={1} step={kitSelected ? 10 : 1} value={displayedVials} disabled={pending || product.is_coming_soon}
+                aria-label={`Vial quantity for ${product.name}`}
+                onChange={(event) => changeCatalogVialInput(product, Number(event.target.value))} />
               <button type="button" aria-label={`Increase quantity for ${product.name}`} disabled={pending || product.is_coming_soon}
-                onClick={() => setCardQuantities((current) => ({ ...current, [product.slug]: cardQuantity(quantity + 1) }))}>+</button>
+                onClick={() => changeCatalogQuantity(product, quantity + 1)}>+</button>
             </div>
             <button type="button" className="pugpep-add-button"
               disabled={pending || product.is_coming_soon || selectedOption?.effectivePrice == null}
@@ -896,13 +1171,23 @@ export default function HomePage() {
               {pending ? "Adding…" : product.is_coming_soon ? "Coming Soon" : "Add to Cart"}
             </button>
           </div>
-          {cardMessages[product.slug] && <p className="pugpep-card-message" role="status">{cardMessages[product.slug]}</p>}
-          <div className="pugpep-product-actions">
-            {detail?.coaUrl && <a className="pugpep-coa-button" href={detail.coaUrl}
-              onClick={(event) => { void handleProductAccess(event, product.slug, detail.coaUrl); }}
-              aria-label={`View COA for ${product.name}`}>View COA</a>}
 
-          </div>
+          {bundleTiers.length > 0 && <div className="pugpep-card-bundles">
+            <span className="pugpep-card-bundle-title">Bundle &amp; Save</span>
+            <div className="pugpep-card-bundle-options" role="group" aria-label={`Bundle quantities for ${product.name}`}>
+              {bundleTiers.map((tier) => <button key={`${tier.quantity}-${tier.discount}`} type="button"
+                aria-pressed={activeBundleTier?.quantity === tier.quantity}
+                disabled={pending}
+                onClick={() => {
+                  changeCatalogQuantity(product, tier.quantity);
+                }}>
+                {tier.quantity}+ · {tier.discount}% off
+              </button>)}
+            </div>
+
+          </div>}
+          {cardMessages[product.slug] && <p className="pugpep-card-message" role="status">{cardMessages[product.slug]}</p>}
+
         </div>
       </article>
     );
@@ -921,7 +1206,7 @@ export default function HomePage() {
         .pugpep-shelf-tools .pugpep-shelf-arrow { width:40px; padding:8px; font-size:20px; }
         .pugpep-view-switch { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
         .pugpep-view-switch button[aria-pressed="true"] { border-color:#7df9ff; color:#7df9ff; background:#10212a; }
-        .pugpep-product-row { display:grid; grid-auto-flow:column; grid-auto-columns:calc((100% - 64px) / 4.25); gap:16px; overflow-x:auto; scroll-snap-type:x mandatory; scroll-padding:2px; padding:4px 2px 16px; scrollbar-width:thin; scrollbar-color:#4c505b #13141a; overscroll-behavior-x:contain; }
+        .pugpep-product-row { display:grid; grid-auto-flow:column; grid-auto-columns:max(270px,calc((100% - 64px) / 4.25)); gap:16px; overflow-x:auto; scroll-snap-type:x mandatory; scroll-padding:2px; padding:4px 2px 16px; scrollbar-width:thin; scrollbar-color:#4c505b #13141a; overscroll-behavior-x:contain; }
         .pugpep-product-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; }
         .pugpep-product-card { min-width:0; scroll-snap-align:start; border:1px solid #30323a; border-radius:16px; overflow:hidden; background:#14151c; display:flex; flex-direction:column; box-shadow:0 10px 24px rgba(0,0,0,.16); transition:border-color .18s ease; }
         .pugpep-product-card:hover { border-color:var(--product-accent,#7df9ff); }
@@ -932,37 +1217,55 @@ export default function HomePage() {
         .pugpep-offer-badge { background:#d3ff69; color:#182000; margin-left:auto; }
         .pugpep-product-info { padding:16px; display:flex; flex:1; flex-direction:column; }
         .pugpep-product-family { color:var(--product-accent,#7df9ff); font-size:10px; letter-spacing:.10em; text-transform:uppercase; font-weight:800; }
-        .pugpep-product-name { display:block; color:#fff; font-size:19px; font-weight:800; line-height:1.25; text-decoration:none; margin:8px 0 0; min-height:48px; overflow-wrap:anywhere; }
-        .pugpep-product-strengths { display:flex; flex-wrap:wrap; align-content:flex-start; gap:6px; color:#aeb3c2; font-size:12px; line-height:1.5; margin:10px 0 14px; min-height:36px; }
-        .pugpep-strength-button { padding:5px 9px; min-height:32px; border:1px solid #414550; border-radius:7px; background:#1b1e27; color:#c8cddb; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
+        .pugpep-product-title-row { display:flex; align-items:flex-start; gap:8px; margin-top:8px; }
+        .pugpep-product-name { flex:1; min-width:0; display:block; color:#fff; font-size:19px; font-weight:800; line-height:1.25; text-decoration:none; margin:0; min-height:48px; overflow-wrap:anywhere; }
+        .pugpep-product-strengths { display:flex; flex-wrap:wrap; align-content:flex-start; gap:4px; color:#aeb3c2; font-size:12px; line-height:1.5; margin:10px 0 14px; min-height:36px; }
+        .pugpep-strength-button { padding:5px 5px; white-space:nowrap; min-height:32px; border:1px solid #414550; border-radius:7px; background:#1b1e27; color:#c8cddb; font:inherit; font-size:12px; font-weight:700; cursor:pointer; }
         .pugpep-strength-button[aria-pressed="true"] { color:#061f26; background:#7df9ff; border-color:#7df9ff; }
         .pugpep-strength-button:hover:not(:disabled) { border-color:#7df9ff; }
         .pugpep-strength-button:focus-visible { outline:3px solid #ff75df; outline-offset:2px; }
         .pugpep-strength-button:disabled { cursor:default; opacity:.55; }
         .pugpep-option-placeholder { padding-top:5px; }
-        .pugpep-product-price { margin:0; color:#fff; font-size:21px; font-weight:850; }
+        .pugpep-product-price { margin:0; color:#fff; font-size:26px; font-weight:850; display:flex; align-items:baseline; gap:7px; flex-wrap:wrap; }
+        .pugpep-card-price-caption { color:#aeb3c2; font-size:11px; margin-top:3px; }
+        .pugpep-card-price-caption .pugpep-card-sale-percent { color:#b5ff85; font-weight:800; }
+        .pugpep-product-price > .pugpep-card-dollar-savings { color:#b5ff85; font-size:12px; font-weight:800; white-space:nowrap; }
+        .pugpep-card-original-price { color:#aeb3c2; font-size:14px; font-weight:500; }
+        .pugpep-product-price > .pugpep-card-sale-percent { color:#b5ff85; font-size:12px; font-weight:800; white-space:nowrap; }
+        .pugpep-card-bundles { margin-top:10px; display:grid; gap:6px; }
+        .pugpep-card-bundle-title { font-size:13px; font-weight:800; color:#c6edee; }
+        .pugpep-card-bundle-options { display:flex; flex-wrap:nowrap; gap:5px; width:100%; }
+        .pugpep-card-bundle-options button { flex:1 1 0; min-width:0; box-sizing:border-box; white-space:nowrap; padding:7px 4px; min-height:34px; font:inherit; font-size:12px; font-weight:700; border:1px solid #454956; border-radius:6px; background:#1d212b; color:#dce5f0; cursor:pointer; }
+        .pugpep-card-bundle-options button[aria-pressed="true"] { color:#062027; background:#7df9ff; border-color:#7df9ff; }
+        .pugpep-card-bundle-options button:disabled { opacity:.5; cursor:default; }
+        .pugpep-card-bundle-options button:focus-visible { outline:3px solid #ff75df; outline-offset:2px; }
         .pugpep-product-price > span { color:#aeb3c2; font-size:12px; font-weight:500; }
-        .pugpep-purchase-row { margin-top:auto; margin-bottom:12px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-        .pugpep-purchase-type { display:flex; align-items:center; gap:9px; font-size:12px; color:#afb7c8; }
+        .pugpep-purchase-row { margin-top:auto; margin-bottom:12px; display:flex; flex-direction:column; align-items:stretch; gap:8px; }
+        .pugpep-purchase-controls { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
+        .pugpep-purchase-type { display:flex; align-items:center; gap:6px; font-size:14px; color:#afb7c8; }
         .pugpep-purchase-type label { display:flex; align-items:center; gap:4px; cursor:pointer; color:#e6e9f2; }
-        .pugpep-purchase-type input { accent-color:#7df9ff; margin:0; }
+        .pugpep-kit-sale-hint { color:#b5ff85; font-size:10px; font-weight:800; }
+        .pugpep-purchase-type label { flex-wrap:wrap; }
+        .pugpep-purchase-type input { accent-color:#7df9ff; margin:0; width:16px; height:16px; flex-shrink:0; }
         .pugpep-card-buy-row { display:flex; align-items:stretch; gap:7px; }
         .pugpep-card-quantity { display:flex; flex:0 0 auto; align-items:center; border:1px solid #414550; border-radius:8px; overflow:hidden; }
         .pugpep-card-quantity button { width:24px; min-height:38px; border:0; background:#20232c; color:#fff; padding:0; cursor:pointer; font-size:16px; }
-        .pugpep-card-quantity input { width:32px; min-width:0; background:#15171e; border:0; color:#fff; text-align:center; padding:0; font-size:12px; appearance:textfield; -moz-appearance:textfield; }
+        .pugpep-card-quantity input { width:32px; min-width:0; background:#15171e; border:0; color:#fff; text-align:center; padding:0; font-size:14px; appearance:textfield; -moz-appearance:textfield; }
         .pugpep-card-quantity input::-webkit-inner-spin-button, .pugpep-card-quantity input::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
-        .pugpep-add-button { flex:1; min-width:0; min-height:40px; border:1px solid #7df9ff; border-radius:8px; background:#7df9ff; color:#052027; padding:8px 9px; cursor:pointer; font:inherit; font-size:12px; line-height:1.15; font-weight:800; }
+        .pugpep-add-button { flex:1; min-width:0; min-height:40px; border:1px solid #7df9ff; border-radius:8px; background:#7df9ff; color:#052027; padding:8px 7px; cursor:pointer; font:inherit; font-size:15px; white-space:nowrap; line-height:1.15; font-weight:800; }
         .pugpep-add-button:disabled, .pugpep-card-quantity button:disabled { opacity:.5; cursor:default; }
+        .pugpep-card-cart-button { margin:0 0 0 auto; flex-shrink:0; white-space:nowrap; padding:3px 0; color:#c6cddd; background:transparent; border:0; text-decoration:underline; cursor:pointer; font:inherit; font-size:14px; font-weight:700; }
         .pugpep-card-message { color:#bfe8df; font-size:11px; line-height:1.5; margin:9px 0 0; }
-        .pugpep-product-actions { display:flex; gap:7px; flex-wrap:wrap; margin-top:8px; }
-        .pugpep-card-buy-row button:focus-visible, .pugpep-card-buy-row input:focus-visible { outline:3px solid #ff75df; outline-offset:2px; }
+        .pugpep-card-cart-button:focus-visible, .pugpep-card-buy-row button:focus-visible, .pugpep-card-buy-row input:focus-visible { outline:3px solid #ff75df; outline-offset:2px; }
         .pugpep-view-button, .pugpep-coa-button { display:flex; align-items:center; justify-content:center; gap:7px; padding:10px 11px; min-height:40px; box-sizing:border-box; border-radius:9px; font-size:11px; font-weight:800; text-decoration:none; }
         .pugpep-view-button { flex:1; background:#7df9ff; color:#052027; border:1px solid #7df9ff; white-space:nowrap; }
-        .pugpep-coa-button { background:transparent; color:#e3e6ef; border:1px solid #444753; white-space:nowrap; }
+        .pugpep-coa-button { flex-shrink:0; background:transparent; color:#e3e6ef; border:1px solid #444753; white-space:nowrap; padding:5px 7px; min-height:28px; font-size:10px; border-radius:6px; }
         .pugpep-product-card a:focus-visible, .pugpep-shelf button:focus-visible, .pugpep-view-switch button:focus-visible, .pugpep-product-row:focus-visible { outline:3px solid #ff75df; outline-offset:3px; }
-        @media(max-width:1100px) { .pugpep-product-row { grid-auto-columns:calc((100% - 44px) / 3.2); } .pugpep-product-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
-        @media(max-width:720px) { .pugpep-product-row { grid-auto-columns:calc((100% - 20px) / 2.15); gap:12px; } .pugpep-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; } .pugpep-product-info { padding:12px; } .pugpep-product-name { font-size:17px; } .pugpep-product-actions { flex-direction:column; } }
-        @media(max-width:480px) { .pugpep-product-row { grid-auto-columns:82%; } .pugpep-product-grid { grid-template-columns:minmax(0,1fr); } .pugpep-shelf-header { gap:8px; } .pugpep-shelf-title { font-size:22px; } }
+        @media(max-width:1100px) { .pugpep-product-row { grid-auto-columns:max(270px,calc((100% - 44px) / 3.2)); } .pugpep-product-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+        @media(max-width:900px) { .pugpep-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+        @media(max-width:720px) { .pugpep-product-row { grid-auto-columns:max(270px,calc((100% - 20px) / 2.15)); gap:12px; } .pugpep-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; } .pugpep-product-info { padding:12px; } .pugpep-product-name { font-size:17px; } }
+        @media(max-width:600px) { .pugpep-product-grid { grid-template-columns:minmax(0,1fr); } }
+        @media(max-width:480px) { .pugpep-product-row { grid-auto-columns:max(270px,82%); } .pugpep-product-grid { grid-template-columns:minmax(0,1fr); } .pugpep-shelf-header { gap:8px; } .pugpep-shelf-title { font-size:22px; } }
         @media(prefers-reduced-motion:reduce) { .pugpep-product-card { transition:none; } }
 
         .category-grid {
@@ -1426,7 +1729,19 @@ export default function HomePage() {
           )}
         </div>
 
-        {visibleProducts.length === 0 ? (
+        {productLoadError && products.length > 0 && <div role="status" style={{ margin: "12px 0", color: "#d7c7b4", fontSize: 13 }}>
+          {productLoadError} <button type="button" disabled={productsLoading} onClick={() => { void loadProducts(); }}
+            style={{ background: "transparent", color: "#7df9ff", border: 0, textDecoration: "underline", cursor: "pointer" }}>Retry</button>
+        </div>}
+        {products.length === 0 && (productsLoading || productLoadError) ? (
+          <div style={emptyState} role="status" aria-live="polite">
+            <h3 style={emptyTitle}>{productsLoading ? "Loading Products…" : "Products Could Not Be Loaded"}</h3>
+            {!productsLoading && <>
+              <p style={emptyText}>{productLoadError}</p>
+              <button type="button" onClick={() => { void loadProducts(); }} style={emptyButton}>TRY AGAIN</button>
+            </>}
+          </div>
+        ) : visibleProducts.length === 0 ? (
           <div style={emptyState}>
             <h3 style={emptyTitle}>No Products Found</h3>
             <p style={emptyText}>Try another search or clear your filters.</p>
