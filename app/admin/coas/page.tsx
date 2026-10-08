@@ -1,9 +1,7 @@
 "use client";
-
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "../../../lib/supabaseClient";
-
 type CoaDocument = {
   id: string;
   product_slug: string;
@@ -28,7 +26,6 @@ type CoaDocument = {
   created_at: string;
   updated_at: string;
 };
-
 type Draft = {
   product_name: string;
   dosage: string;
@@ -42,7 +39,6 @@ type Draft = {
   test_method: string;
   notes: string;
 };
-
 function makeDraft(row: CoaDocument): Draft {
   return {
     product_name: row.product_name || "",
@@ -58,7 +54,6 @@ function makeDraft(row: CoaDocument): Draft {
     notes: row.notes || "",
   };
 }
-
 export default function AdminCoasPage() {
   const supabase = useMemo(() => createClient(), []);
   const [rows, setRows] = useState<CoaDocument[]>([]);
@@ -74,7 +69,7 @@ export default function AdminCoasPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
-
+  const [syncingStorage, setSyncingStorage] = useState(false);
   async function loadCoas() {
     const { data, error } = await supabase
       .from("coa_documents")
@@ -82,21 +77,365 @@ export default function AdminCoasPage() {
       .order("product_name", { ascending: true })
       .order("dosage", { ascending: true })
       .order("created_at", { ascending: false });
-
     if (error) {
       setNotice(`Unable to load COAs: ${error.message}`);
       return;
     }
-
     const documents = (data || []) as CoaDocument[];
     const nextDrafts: Record<string, Draft> = {};
     documents.forEach((row) => {
       nextDrafts[row.id] = makeDraft(row);
     });
-
     setRows(documents);
     setDrafts(nextDrafts);
   }
+  function normalizeLookup(value: string | null | undefined) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+  }
+
+  function dosageTokensFromFileName(fileName: string) {
+    const tokens = new Set<string>();
+    const baseName = fileName.replace(/\.[^/.]+$/, "");
+    const pattern = /(\d+(?:\.\d+)?)\s*(mcg|mg|g|ml|iu)\b/gi;
+
+    for (const match of baseName.matchAll(pattern)) {
+      tokens.add(`${match[1]}${match[2]}`.toLowerCase());
+    }
+
+    return tokens;
+  }
+
+  async function syncStorageCoas(silent = false) {
+    if (syncingStorage) return;
+
+    setSyncingStorage(true);
+
+    if (!silent) {
+      setNotice("Scanning COA Storage for newly uploaded certificates...");
+    }
+
+    try {
+      const [rootResult, productResult, optionResult, indexedResult] =
+        await Promise.all([
+          supabase.storage.from("coas").list("", {
+            limit: 1000,
+            sortBy: { column: "name", order: "asc" },
+          }),
+          supabase.from("products").select("slug,name"),
+          supabase
+            .from("product_options")
+            .select("product_slug,dosage")
+            .eq("is_active", true)
+            .is("archived_at", null),
+          supabase.from("coa_documents").select("id,file_path,created_at"),
+        ]);
+
+      if (rootResult.error) {
+        throw new Error(`Unable to scan COA Storage: ${rootResult.error.message}`);
+      }
+
+      if (productResult.error) {
+        throw new Error(`Unable to load products: ${productResult.error.message}`);
+      }
+
+      if (optionResult.error) {
+        throw new Error(
+          `Unable to load product strengths: ${optionResult.error.message}`
+        );
+      }
+
+      if (indexedResult.error) {
+        throw new Error(
+          `Unable to load indexed COAs: ${indexedResult.error.message}`
+        );
+      }
+
+      const products = productResult.data || [];
+      const options = optionResult.data || [];
+      const indexedByPath = new Map<
+        string,
+        { id: string; created_at: string | null }
+      >();
+
+      for (const row of indexedResult.data || []) {
+        const filePath = String(row.file_path || "").trim();
+        if (!filePath) continue;
+
+        indexedByPath.set(filePath, {
+          id: String(row.id),
+          created_at: row.created_at ? String(row.created_at) : null,
+        });
+      }
+
+      const existingPaths = new Set(indexedByPath.keys());
+
+      const productByKey = new Map<
+        string,
+        { slug: string; name: string }
+      >();
+
+      for (const row of products) {
+        const mappedProduct = {
+          slug: String(row.slug || ""),
+          name: String(row.name || row.slug || ""),
+        };
+
+        const slugKey = normalizeLookup(mappedProduct.slug);
+        const nameKey = normalizeLookup(mappedProduct.name);
+
+        if (slugKey) productByKey.set(slugKey, mappedProduct);
+        if (nameKey) productByKey.set(nameKey, mappedProduct);
+      }
+
+      const dosageByProduct = new Map<string, string[]>();
+
+      for (const row of options) {
+        const productSlug = String(row.product_slug || "");
+        const dosage = String(row.dosage || "").trim();
+
+        if (!productSlug || !dosage) continue;
+
+        const current = dosageByProduct.get(productSlug) || [];
+
+        if (!current.includes(dosage)) {
+          current.push(dosage);
+          dosageByProduct.set(productSlug, current);
+        }
+      }
+
+      const folders = (rootResult.data || []).filter(
+        (item) =>
+          Boolean(item.name) &&
+          item.name !== ".emptyFolderPlaceholder" &&
+          !item.metadata
+      );
+
+      const pendingRows: Array<{
+        product_slug: string;
+        product_name: string;
+        dosage: string | null;
+        storage_bucket: string;
+        file_path: string;
+        file_name: string;
+        mime_type: string | null;
+        file_type: string | null;
+        status: "active";
+        is_current: boolean;
+        notes: string;
+        created_at: string;
+        updated_at: string;
+      }> = [];
+
+      const timestampRepairs: Array<{
+        id: string;
+        created_at: string;
+      }> = [];
+
+      const skippedFolders: string[] = [];
+
+      for (const folder of folders) {
+        const folderName = String(folder.name || "");
+        const mappedProduct = productByKey.get(normalizeLookup(folderName));
+
+        if (!mappedProduct) {
+          skippedFolders.push(folderName);
+          continue;
+        }
+
+        const fileResult = await supabase.storage.from("coas").list(
+          folderName,
+          {
+            limit: 1000,
+            sortBy: { column: "name", order: "desc" },
+          }
+        );
+
+        if (fileResult.error) {
+          console.warn(
+            `Unable to scan COA folder ${folderName}:`,
+            fileResult.error
+          );
+          continue;
+        }
+
+        const productDosages =
+          dosageByProduct.get(mappedProduct.slug) || [];
+
+        for (const file of fileResult.data || []) {
+          if (
+            !file.name ||
+            file.name === ".emptyFolderPlaceholder" ||
+            !file.metadata
+          ) {
+            continue;
+          }
+
+          const filePath = `${folderName}/${file.name}`;
+
+          /*
+            Supabase Storage exposes both created_at and updated_at.
+            updated_at is used first so an overwritten/replaced file counts
+            as the most recently uploaded version of that object.
+          */
+          const storageUploadTime =
+            String(file.updated_at || file.created_at || "").trim() ||
+            new Date().toISOString();
+
+          const indexedRow = indexedByPath.get(filePath);
+
+          if (indexedRow) {
+            const databaseTime = indexedRow.created_at
+              ? new Date(indexedRow.created_at).getTime()
+              : 0;
+            const storageTime = new Date(storageUploadTime).getTime();
+
+            if (
+              Number.isFinite(storageTime) &&
+              storageTime > 0 &&
+              Math.abs(storageTime - databaseTime) > 1000
+            ) {
+              timestampRepairs.push({
+                id: indexedRow.id,
+                created_at: storageUploadTime,
+              });
+            }
+
+            continue;
+          }
+
+          const dosageTokens = dosageTokensFromFileName(file.name);
+          const normalizedFileName = normalizeLookup(
+            file.name.replace(/\.[^/.]+$/, "")
+          );
+          const normalizedProductSlug = normalizeLookup(mappedProduct.slug);
+          const normalizedProductName = normalizeLookup(mappedProduct.name);
+
+          const matchedDosage =
+            productDosages.find((dosage) => {
+              const normalizedDosage = normalizeLookup(dosage);
+
+              // Normal case: filename contains the full strength, e.g. 30mg.
+              if (dosageTokens.has(normalizedDosage)) {
+                return true;
+              }
+
+              /*
+                Some existing PugPep COA filenames omit the unit:
+                Tri-Agonist30-COA-OCT26.jpg
+                while the product option is stored as 30mg.
+
+                Match the numeric strength immediately after the normalized
+                product slug/name so month/year numbers do not get mistaken
+                for the dosage.
+              */
+              const numericStrength =
+                normalizedDosage.match(/^\d+(?:\.\d+)?/)?.[0];
+
+              if (!numericStrength) {
+                return false;
+              }
+
+              return (
+                normalizedFileName.startsWith(
+                  `${normalizedProductSlug}${numericStrength}`
+                ) ||
+                normalizedFileName.startsWith(
+                  `${normalizedProductName}${numericStrength}`
+                )
+              );
+            }) || null;
+
+          const extension = file.name.includes(".")
+            ? file.name.split(".").pop()?.toLowerCase() || null
+            : null;
+
+          const metadata = file.metadata as Record<string, unknown> | null;
+          const mimeType =
+            metadata && typeof metadata.mimetype === "string"
+              ? metadata.mimetype
+              : null;
+
+          pendingRows.push({
+            product_slug: mappedProduct.slug,
+            product_name: mappedProduct.name,
+            dosage: matchedDosage,
+            storage_bucket: "coas",
+            file_path: filePath,
+            file_name: file.name,
+            mime_type: mimeType,
+            file_type: extension,
+            status: "active",
+            is_current: false,
+            notes: matchedDosage
+              ? "Imported automatically from COA Storage. Verify metadata and lot number, then mark Current when ready."
+              : "Imported automatically from COA Storage. Strength could not be detected from the filename. Select the correct strength, verify metadata and lot number, then mark Current.",
+            created_at: storageUploadTime,
+            updated_at: storageUploadTime,
+          });
+
+          existingPaths.add(filePath);
+        }
+      }
+
+      if (pendingRows.length > 0) {
+        const { error: insertError } = await supabase
+          .from("coa_documents")
+          .insert(pendingRows);
+
+        if (insertError) {
+          throw new Error(
+            `Storage files were found, but could not be indexed in coa_documents: ${insertError.message}`
+          );
+        }
+      }
+
+      /*
+        Older COAs may have been indexed long after they were uploaded.
+        Repair their database created_at values so storefront ordering
+        follows the actual Storage upload/update timestamp.
+      */
+      for (const repair of timestampRepairs) {
+        const { error: repairError } = await supabase
+          .from("coa_documents")
+          .update({ created_at: repair.created_at })
+          .eq("id", repair.id);
+
+        if (repairError) {
+          console.warn(
+            `Unable to repair COA timestamp for ${repair.id}:`,
+            repairError
+          );
+        }
+      }
+
+      if (!silent) {
+        const skipped =
+          skippedFolders.length > 0
+            ? ` ${skippedFolders.length} folder(s) did not match a product and were skipped.`
+            : "";
+
+        setNotice(
+          pendingRows.length > 0 || timestampRepairs.length > 0
+            ? `${pendingRows.length} new COA file(s) imported and ${timestampRepairs.length} existing timestamp(s) synchronized to Storage upload time.${skipped}`
+            : `COA Storage is already synchronized.${skipped}`
+        );
+      }
+    } catch (error) {
+      console.error("COA Storage synchronization failed:", error);
+
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Unable to synchronize COA Storage."
+      );
+    } finally {
+      setSyncingStorage(false);
+    }
+  }
+
 
   useEffect(() => {
     async function boot() {
@@ -105,32 +444,26 @@ export default function AdminCoasPage() {
         setScopedProduct(params.get("product") || "");
         setScopedDosage(params.get("dosage") || "");
       }
-
       const { data: userData, error: userError } = await supabase.auth.getUser();
-
       if (userError || !userData.user) {
         setNotice(userError?.message || "You must be logged in.");
         setLoading(false);
         return;
       }
-
       const { data: adminAccess, error: adminError } =
         await supabase.rpc("is_pugpep_admin");
-
       if (adminError || !adminAccess) {
         setNotice(adminError?.message || "Admin access required.");
         setLoading(false);
         return;
       }
-
       setAuthorized(true);
+      await syncStorageCoas(true);
       await loadCoas();
       setLoading(false);
     }
-
     void boot();
   }, [supabase]);
-
   function updateDraft(id: string, key: keyof Draft, value: string) {
     setDrafts((current) => ({
       ...current,
@@ -140,30 +473,24 @@ export default function AdminCoasPage() {
       },
     }));
   }
-
   function getPublicUrl(row: CoaDocument) {
     return supabase.storage
       .from(row.storage_bucket || "coas")
       .getPublicUrl(row.file_path).data.publicUrl;
   }
-
   async function saveMetadata(row: CoaDocument) {
     const draft = drafts[row.id];
     if (!draft || savingId) return;
-
     const purity =
       draft.purity_percent.trim() === ""
         ? null
         : Number(draft.purity_percent.trim());
-
     if (purity != null && (!Number.isFinite(purity) || purity < 0 || purity > 100)) {
       setNotice("Purity must be between 0 and 100.");
       return;
     }
-
     setSavingId(row.id);
     setNotice("");
-
     try {
       const { error } = await supabase
         .from("coa_documents")
@@ -182,26 +509,22 @@ export default function AdminCoasPage() {
           updated_at: new Date().toISOString(),
         })
         .eq("id", row.id);
-
       if (error) {
         setNotice(`Save failed: ${error.message}`);
         return;
       }
-
       setNotice(`${row.product_name} ${row.dosage || ""} saved.`);
       await loadCoas();
     } finally {
       setSavingId(null);
     }
   }
-
   async function makeCurrent(row: CoaDocument) {
     const draft = drafts[row.id];
     if (!draft?.lot_number.trim()) {
       setNotice("Enter and save the verified lot number before marking a COA current.");
       return;
     }
-
     if (
       !window.confirm(
         `Make this the current COA for ${row.product_name} ${row.dosage || ""}?`
@@ -209,30 +532,24 @@ export default function AdminCoasPage() {
     ) {
       return;
     }
-
     setCurrentId(row.id);
     setNotice("");
-
     try {
       const { error } = await supabase.rpc("admin_set_current_coa", {
         target_coa_id: row.id,
       });
-
       if (error) {
         setNotice(`Unable to set current COA: ${error.message}`);
         return;
       }
-
       setNotice(`${row.product_name} ${row.dosage || ""} is now current.`);
       await loadCoas();
     } finally {
       setCurrentId(null);
     }
   }
-
   async function toggleArchive(row: CoaDocument) {
     const nextStatus = row.status === "archived" ? "active" : "archived";
-
     if (
       !window.confirm(
         nextStatus === "archived"
@@ -242,10 +559,8 @@ export default function AdminCoasPage() {
     ) {
       return;
     }
-
     setArchivingId(row.id);
     setNotice("");
-
     try {
       const { error } = await supabase
         .from("coa_documents")
@@ -255,22 +570,18 @@ export default function AdminCoasPage() {
           updated_at: new Date().toISOString(),
         })
         .eq("id", row.id);
-
       if (error) {
         setNotice(`Status update failed: ${error.message}`);
         return;
       }
-
       await loadCoas();
       setNotice(nextStatus === "archived" ? "COA archived." : "COA restored.");
     } finally {
       setArchivingId(null);
     }
   }
-
   const filtered = rows.filter((row) => {
     const q = search.trim().toLowerCase();
-
     const matchesSearch =
       !q ||
       row.product_name.toLowerCase().includes(q) ||
@@ -280,16 +591,13 @@ export default function AdminCoasPage() {
       (row.lab_name || "").toLowerCase().includes(q) ||
       (row.report_id || "").toLowerCase().includes(q) ||
       row.file_name.toLowerCase().includes(q);
-
     if (!matchesSearch) return false;
-
     if (
       scopedProduct &&
       row.product_slug !== scopedProduct
     ) {
       return false;
     }
-
     if (
       scopedDosage &&
       String(row.dosage || "").trim().toLowerCase() !==
@@ -297,18 +605,15 @@ export default function AdminCoasPage() {
     ) {
       return false;
     }
-
     if (filter === "active") return row.status === "active";
     if (filter === "archived") return row.status === "archived";
     if (filter === "current") return row.is_current;
     if (filter === "missing-lot") return !row.lot_number;
     return true;
   });
-
   if (loading) {
     return <main style={page}><div style={shell}><h1>Loading COA Engine...</h1></div></main>;
   }
-
   if (!authorized) {
     return (
       <main style={page}>
@@ -322,11 +627,9 @@ export default function AdminCoasPage() {
       </main>
     );
   }
-
   const activeCount = rows.filter((row) => row.status === "active").length;
   const currentCount = rows.filter((row) => row.is_current).length;
   const missingLot = rows.filter((row) => !row.lot_number).length;
-
   return (
     <main style={page}>
       <style jsx global>{`
@@ -338,7 +641,6 @@ export default function AdminCoasPage() {
           .coa-head { flex-direction: column !important; align-items: flex-start !important; }
         }
       `}</style>
-
       <div style={shell}>
         <header style={hero}>
           <div>
@@ -353,20 +655,17 @@ export default function AdminCoasPage() {
               and the current COA for each product strength.
             </p>
           </div>
-
           <div style={actions}>
             <Link href="/admin" style={secondaryLink}>Operations</Link>
             <Link href="/admin/product-images" style={primaryLink}>Product Images</Link>
           </div>
         </header>
-
         {notice && (
           <div style={noticeBox}>
             <span>{notice}</span>
             <button onClick={() => setNotice("")} style={closeButton}>×</button>
           </div>
         )}
-
         <section style={panel}>
           <div style={sectionHead}>
             <div>
@@ -375,14 +674,12 @@ export default function AdminCoasPage() {
             </div>
             <span style={greenBadge}>{rows.length} INDEXED CERTIFICATES</span>
           </div>
-
           <div style={stats}>
             <Stat label="Active" value={activeCount} accent="#00ff99" />
             <Stat label="Current" value={currentCount} accent="#00d9ff" />
             <Stat label="Missing Lot" value={missingLot} accent="#ffcc00" />
           </div>
         </section>
-
         <section style={panel}>
           <div style={sectionHead}>
             <div>
@@ -391,7 +688,6 @@ export default function AdminCoasPage() {
             </div>
             <span style={cyanBadge}>{filtered.length} VISIBLE</span>
           </div>
-
           <div className="coa-toolbar" style={toolbar}>
             <label style={field}>
               <span style={label}>SEARCH</span>
@@ -402,7 +698,6 @@ export default function AdminCoasPage() {
                 style={input}
               />
             </label>
-
             <label style={field}>
               <span style={label}>STATUS</span>
               <select value={filter} onChange={(e) => setFilter(e.target.value)} style={input}>
@@ -413,9 +708,27 @@ export default function AdminCoasPage() {
                 <option value="archived">Archived</option>
               </select>
             </label>
+            <div style={{ display: "flex", alignItems: "flex-end" }}>
+              <button
+                type="button"
+                disabled={syncingStorage}
+                onClick={async () => {
+                  await syncStorageCoas(false);
+                  await loadCoas();
+                }}
+                style={{
+                  ...smallPrimary,
+                  width: "100%",
+                  minHeight: "42px",
+                  opacity: syncingStorage ? 0.6 : 1,
+                  cursor: syncingStorage ? "wait" : "pointer",
+                }}
+              >
+                {syncingStorage ? "SYNCING STORAGE..." : "SYNC NEW STORAGE COAs"}
+              </button>
+            </div>
           </div>
         </section>
-
         {(scopedProduct || scopedDosage) && (
           <section style={infoBox}>
             <strong style={{ color: "#00ff99" }}>
@@ -430,7 +743,6 @@ export default function AdminCoasPage() {
               onClick={() => {
                 setScopedProduct("");
                 setScopedDosage("");
-
                 if (typeof window !== "undefined") {
                   window.history.replaceState(
                     null,
@@ -445,7 +757,6 @@ export default function AdminCoasPage() {
             </button>
           </section>
         )}
-
         <section style={infoBox}>
           <strong style={{ color: "#7df9ff" }}>Current COA → Product Image</strong>
           <span style={muted}>
@@ -453,7 +764,6 @@ export default function AdminCoasPage() {
             can read its lot number from <code style={{ color: "#ff75df" }}>current_product_coas</code>.
           </span>
         </section>
-
         <section className="coa-grid" style={grid}>
           {filtered.map((row) => {
             const draft = drafts[row.id] || makeDraft(row);
@@ -461,7 +771,6 @@ export default function AdminCoasPage() {
             const url = getPublicUrl(row);
             const ext = (row.file_type || row.file_name.split(".").pop() || "").toLowerCase();
             const isPdf = ext.includes("pdf");
-
             return (
               <article
                 key={row.id}
@@ -485,7 +794,6 @@ export default function AdminCoasPage() {
                     <h2 style={productTitle}>{row.product_name}</h2>
                     <p style={fileMeta}>{row.dosage || "No strength"} • {row.file_name}</p>
                   </div>
-
                   <div style={actions}>
                     <a href={url} target="_blank" rel="noreferrer" style={secondaryLink}>Open COA</a>
                     <button
@@ -496,7 +804,6 @@ export default function AdminCoasPage() {
                     </button>
                   </div>
                 </div>
-
                 <div style={summaryGrid}>
                   <Summary label="Lot" value={row.lot_number || "NOT ENTERED"} accent={row.lot_number ? "#00ff99" : "#ffcc00"} />
                   <Summary label="Lab" value={row.lab_name || "Not entered"} />
@@ -506,7 +813,6 @@ export default function AdminCoasPage() {
                     value={row.purity_percent == null ? "Not entered" : `${Number(row.purity_percent).toFixed(3)}%`}
                   />
                 </div>
-
                 <div style={preview}>
                   {isPdf ? (
                     <iframe src={url} title={`${row.product_name} COA`} style={pdfPreview} />
@@ -514,7 +820,6 @@ export default function AdminCoasPage() {
                     <img src={url} alt={`${row.product_name} COA`} style={imagePreview} />
                   )}
                 </div>
-
                 {expanded && (
                   <div style={editor}>
                     <div className="edit-grid" style={editGrid}>
@@ -529,7 +834,6 @@ export default function AdminCoasPage() {
                       <Field label="Net Content" value={draft.net_content} onChange={(v) => updateDraft(row.id, "net_content", v)} />
                       <Field label="Test Method" value={draft.test_method} onChange={(v) => updateDraft(row.id, "test_method", v)} />
                     </div>
-
                     <label style={field}>
                       <span style={label}>NOTES</span>
                       <textarea
@@ -539,11 +843,9 @@ export default function AdminCoasPage() {
                         style={{ ...input, resize: "vertical" }}
                       />
                     </label>
-
                     <p style={storageText}>
                       Storage: {row.storage_bucket}/{row.file_path}
                     </p>
-
                     <div style={actions}>
                       <button
                         onClick={() => void saveMetadata(row)}
@@ -552,7 +854,6 @@ export default function AdminCoasPage() {
                       >
                         {savingId === row.id ? "Saving..." : "Save Metadata"}
                       </button>
-
                       <button
                         onClick={() => void makeCurrent(row)}
                         disabled={row.is_current || row.status === "archived" || currentId === row.id}
@@ -560,7 +861,6 @@ export default function AdminCoasPage() {
                       >
                         {currentId === row.id ? "Updating..." : row.is_current ? "Current ✓" : "Make Current"}
                       </button>
-
                       <button
                         onClick={() => void toggleArchive(row)}
                         disabled={archivingId === row.id}
@@ -579,7 +879,6 @@ export default function AdminCoasPage() {
     </main>
   );
 }
-
 function Field({
   label: text,
   value,
@@ -607,7 +906,6 @@ function Field({
     </label>
   );
 }
-
 function Stat({ label, value, accent }: { label: string; value: number; accent: string }) {
   return (
     <div style={stat}>
@@ -616,7 +914,6 @@ function Stat({ label, value, accent }: { label: string; value: number; accent: 
     </div>
   );
 }
-
 function Summary({ label, value, accent }: { label: string; value: string; accent?: string }) {
   return (
     <div style={summary}>
@@ -625,7 +922,6 @@ function Summary({ label, value, accent }: { label: string; value: string; accen
     </div>
   );
 }
-
 const page = { minHeight: "100vh", background: "#050507", color: "#fff", padding: "32px 18px 72px" };
 const shell = { width: "min(1500px, 100%)", margin: "0 auto" };
 const hero = {

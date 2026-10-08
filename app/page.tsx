@@ -15,7 +15,7 @@ import {
 
 const STOREFRONT_SALE_CACHE_KEY = "pugpep_storefront_sales_v1";
 const STOREFRONT_SALE_CACHE_TTL_MS = 5 * 60 * 1000;
-const CARD_CACHE_KEY = "pugpep_home_cards_v1";
+const CARD_CACHE_KEY = "pugpep_home_cards_v2";
 const OPTION_PRICE_CACHE_KEY = "pugpep_home_option_prices_v1";
 const CARD_CACHE_TTL = 90 * 1000;
 type CachedOptionPrice = { savedAt: number; signature: string; price: number; hasCampaign: boolean };
@@ -92,6 +92,7 @@ type CatalogDetails = {
   strengths: string[];
   startingPrice: number | null;
   coaUrl?: string;
+  coaUrlsByStrength: Record<string, string>;
 };
 
 function catalogSlug(value: string) {
@@ -458,8 +459,9 @@ export default function HomePage() {
           .select("id,product_slug,dosage,purchase_type,price,status,cost,sale_active,sale_percent,bundle_discount_enabled,bundle_qty_1,bundle_discount_1,bundle_qty_2,bundle_discount_2,bundle_qty_3,bundle_discount_3")
           .eq("is_active", true).is("archived_at", null),
         supabase.from("coa_documents")
-          .select("product_slug,file_path,storage_bucket,test_date")
-          .eq("status", "active").order("test_date", { ascending: false }),
+          .select("product_slug,dosage,file_path,storage_bucket,test_date,created_at,is_current")
+          .eq("status", "active")
+          .order("created_at", { ascending: false }),
       ]);
       if (cancelled) return;
       const optionsResult = results[0];
@@ -491,10 +493,13 @@ export default function HomePage() {
           if (cached.hasCampaign) campaignOptions.add(option.id);
         }
       }
-      const documentsBySlug = new Map<string, (typeof documents)[number]>();
+      const documentsBySlug = new Map<string, (typeof documents)[number][]>();
       for (const document of documents) {
+        if (!document.file_path) continue;
         const key = catalogSlug(String(document.product_slug));
-        if (document.file_path && !documentsBySlug.has(key)) documentsBySlug.set(key, document);
+        const group = documentsBySlug.get(key) || [];
+        group.push(document);
+        documentsBySlug.set(key, group);
       }
       function publishCatalog() {
         if (cancelled) return;
@@ -503,15 +508,49 @@ export default function HomePage() {
         const key = catalogSlug(product.slug);
         const productOptions = optionsBySlug.get(key) || [];
         const values = productOptions.map((option) => prices.get(option.id)).filter((price): price is number => price !== undefined);
-        const document = documentsBySlug.get(key);
+        const productDocuments = documentsBySlug.get(key) || [];
         const choices = buildCatalogStrengthChoices(productOptions, prices, failedPrices, campaignOptions);
+        const coaUrlsByStrength: Record<string, string> = {};
+
+        for (const document of productDocuments) {
+          const dosageKey = String(document.dosage || "")
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, "");
+
+          const publicUrl = supabase.storage
+            .from(document.storage_bucket || "coas")
+            .getPublicUrl(document.file_path).data.publicUrl;
+
+          /*
+            productDocuments is ordered by created_at descending.
+            The first COA found for each strength is therefore the
+            most recently uploaded active certificate.
+          */
+          if (dosageKey && !coaUrlsByStrength[dosageKey]) {
+            coaUrlsByStrength[dosageKey] = publicUrl;
+          }
+        }
+
+        const productLevelDocument =
+          productDocuments.find(
+            (document) => !String(document.dosage || "").trim()
+          );
+
+        const fallbackDocument =
+          productLevelDocument || productDocuments[0];
+
         next[product.slug] = {
           choices,
           strengths: Array.from(new Set(productOptions.map((option) => option.dosage).filter(Boolean)))
             .sort((a, b) => a.localeCompare(b, undefined, { numeric: true })),
           startingPrice: !productOptions.some((option) => failedPrices.has(option.id)) && values.length > 0 ? Math.min(...values) : null,
-          coaUrl: document ? supabase.storage.from(document.storage_bucket || "coas")
-            .getPublicUrl(document.file_path).data.publicUrl : undefined,
+          coaUrl: fallbackDocument
+            ? supabase.storage
+                .from(fallbackDocument.storage_bucket || "coas")
+                .getPublicUrl(fallbackDocument.file_path).data.publicUrl
+            : undefined,
+          coaUrlsByStrength,
         };
       }
       setCatalogDetails((previous) => {
@@ -1077,6 +1116,11 @@ export default function HomePage() {
     const theme = getProductTheme(product);
     const familyLabel = productFamilies.find((family) => family.value === getResearchFamily(product))?.label;
     const productPath = `/products/${product.slug}`;
+    const selectedCoaUrl =
+      (selectedStrength?.key
+        ? detail?.coaUrlsByStrength?.[selectedStrength.key]
+        : undefined) ||
+      detail?.coaUrl;
     return (
       <article key={product.id} className="pugpep-product-card" style={{ "--product-accent": theme.color } as React.CSSProperties}>
         <Link href={productPath} className="pugpep-product-image-link"
@@ -1095,9 +1139,9 @@ export default function HomePage() {
           <div className="pugpep-product-title-row">
           <Link href={productPath} className="pugpep-product-name"
             onClick={(event) => { void handleProductAccess(event, product.slug); }}>{product.name}</Link>
-            {detail?.coaUrl && <a className="pugpep-coa-button" href={detail.coaUrl}
-              onClick={(event) => { void handleProductAccess(event, product.slug, detail.coaUrl); }}
-              aria-label={`View COA for ${product.name}`}>View COA</a>}
+            {selectedCoaUrl && <a className="pugpep-coa-button" href={selectedCoaUrl}
+              onClick={(event) => { void handleProductAccess(event, product.slug, selectedCoaUrl); }}
+              aria-label={`View current COA for ${product.name}${selectedStrength?.label ? ` ${selectedStrength.label}` : ""}`}>View COA</a>}
           </div>
           <div className="pugpep-product-strengths" role="group" aria-label={`Select strength for ${product.name}`}>
             {detail?.choices.length ? detail.choices.map((choice) => (

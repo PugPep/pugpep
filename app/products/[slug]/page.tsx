@@ -197,6 +197,10 @@ export default function ProductDetailPage() {
           normalizeDosageKey(document.dosage) === selectedDosage
       )
       .sort((a, b) => {
+        if (Boolean(a.is_current) !== Boolean(b.is_current)) {
+          return a.is_current ? -1 : 1;
+        }
+
         const aDate = a.test_date
           ? new Date(
               a.test_date.includes("T")
@@ -705,7 +709,9 @@ export default function ProductDetailPage() {
           "id,product_slug,product_name,dosage,report_id,lab_name,test_date,purity_percent,identity_result,net_content,test_method,file_path,file_name,mime_type,file_type,status,is_current,storage_bucket,created_at"
         )
         .eq("status", "active")
-        .order("test_date", { ascending: false });
+        .order("is_current", { ascending: false })
+        .order("test_date", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false });
 
       if (coaError) {
         console.warn("COA loading error:", coaError);
