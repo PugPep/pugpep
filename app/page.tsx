@@ -211,7 +211,6 @@ export default function HomePage() {
   const [saleMap, setSaleMap] = useState<Record<string, StorefrontSale>>({});
   const [catalogDetails, setCatalogDetails] = useState<Record<string, CatalogDetails>>({});
   const [selectedCardDosages, setSelectedCardDosages] = useState<Record<string, string>>({});
-  const [catalogView, setCatalogView] = useState<"rows" | "grid">("rows");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [familyFilter, setFamilyFilter] = useState("all");
@@ -947,16 +946,14 @@ export default function HomePage() {
   const compounds = visibleProducts.filter((product) =>
     !isResearchSprayCategory(product.category) && !isLabMaterialCategory(product.category));
   const knownFamilyKeys = new Set(productFamilies.slice(1).map((family) => family.value));
-  const compoundGroups = catalogView === "grid"
-    ? [{ key: "compounds", eyebrow: "CORE RESEARCH CATALOG", title: "Research Compounds", products: compounds }]
-    : [
-        ...productFamilies.slice(1).map((family) => ({
-          key: family.value, eyebrow: "RESEARCH COMPOUNDS", title: family.label,
-          products: compounds.filter((product) => getResearchFamily(product) === family.value),
-        })),
-        { key: "compounds", eyebrow: "CORE RESEARCH CATALOG", title: "More Research Compounds",
-          products: compounds.filter((product) => !knownFamilyKeys.has(getResearchFamily(product) || "")) },
-      ];
+  const compoundGroups = [
+    ...productFamilies.slice(1).map((family) => ({
+      key: family.value, eyebrow: "RESEARCH COMPOUNDS", title: family.label,
+      products: compounds.filter((product) => getResearchFamily(product) === family.value),
+    })),
+    { key: "compounds", eyebrow: "CORE RESEARCH CATALOG", title: "More Research Compounds",
+      products: compounds.filter((product) => !knownFamilyKeys.has(getResearchFamily(product) || "")) },
+  ];
   const catalogGroups = [
     ...compoundGroups,
     { key: "sprays", eyebrow: "SPRAY CATALOG", title: "Research Sprays",
@@ -969,7 +966,6 @@ export default function HomePage() {
     setFilter(type);
     setFamilyFilter(family);
     setSearch("");
-    setCatalogView("grid");
     document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -1245,14 +1241,12 @@ export default function HomePage() {
         .pugpep-shelf-kicker { color:#7df9ff; font-size:10px; font-weight:800; letter-spacing:.15em; }
         .pugpep-shelf-title { margin:5px 0; color:#fff; font-size:clamp(22px,2.4vw,30px); letter-spacing:-.025em; }
         .pugpep-shelf-tools { display:flex; align-items:center; gap:8px; }
-        .pugpep-shelf-tools button, .pugpep-view-switch button { border:1px solid #34363e; border-radius:10px; background:#15161d; color:#eee; cursor:pointer; font:inherit; font-size:12px; font-weight:700; padding:10px 13px; min-height:40px; }
+        .pugpep-shelf-tools button { border:1px solid #34363e; border-radius:10px; background:#15161d; color:#eee; cursor:pointer; font:inherit; font-size:12px; font-weight:700; padding:10px 13px; min-height:40px; }
         .pugpep-shelf-tools button:disabled { opacity:.3; cursor:default; }
         .pugpep-shelf-tools .pugpep-shelf-arrow { width:40px; padding:8px; font-size:20px; }
-        .pugpep-view-switch { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
-        .pugpep-view-switch button[aria-pressed="true"] { border-color:#7df9ff; color:#7df9ff; background:#10212a; }
-        .pugpep-product-row { display:grid; grid-auto-flow:column; grid-auto-columns:max(270px,calc((100% - 64px) / 4.25)); gap:16px; overflow-x:auto; scroll-snap-type:x mandatory; scroll-padding:2px; padding:4px 2px 16px; scrollbar-width:thin; scrollbar-color:#4c505b #13141a; overscroll-behavior-x:contain; }
+        .pugpep-product-row { display:grid; grid-auto-flow:column; grid-auto-columns:max(270px,calc((100% - 64px) / 4.25)); gap:16px; overflow-x:auto; scroll-snap-type:none; scroll-padding:2px; padding:4px 2px 16px; scrollbar-width:thin; scrollbar-color:#4c505b #13141a; overscroll-behavior-x:contain; }
         .pugpep-product-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; }
-        .pugpep-product-card { min-width:0; scroll-snap-align:start; border:1px solid #30323a; border-radius:16px; overflow:hidden; background:#14151c; display:flex; flex-direction:column; box-shadow:0 10px 24px rgba(0,0,0,.16); transition:border-color .18s ease; }
+        .pugpep-product-card { min-width:0; border:1px solid #30323a; border-radius:16px; overflow:hidden; background:#14151c; display:flex; flex-direction:column; box-shadow:0 10px 24px rgba(0,0,0,.16); transition:border-color .18s ease; }
         .pugpep-product-card:hover { border-color:var(--product-accent,#7df9ff); }
         .pugpep-product-image-link { position:relative; display:block; aspect-ratio:1 / 1; background:#fff; overflow:hidden; }
         .pugpep-product-image-link img { display:block; width:100%; height:100%; object-fit:contain; }
@@ -1304,7 +1298,7 @@ export default function HomePage() {
         .pugpep-view-button, .pugpep-coa-button { display:flex; align-items:center; justify-content:center; gap:7px; padding:10px 11px; min-height:40px; box-sizing:border-box; border-radius:9px; font-size:11px; font-weight:800; text-decoration:none; }
         .pugpep-view-button { flex:1; background:#7df9ff; color:#052027; border:1px solid #7df9ff; white-space:nowrap; }
         .pugpep-coa-button { flex-shrink:0; background:transparent; color:#e3e6ef; border:1px solid #444753; white-space:nowrap; padding:5px 7px; min-height:28px; font-size:10px; border-radius:6px; }
-        .pugpep-product-card a:focus-visible, .pugpep-shelf button:focus-visible, .pugpep-view-switch button:focus-visible, .pugpep-product-row:focus-visible { outline:3px solid #ff75df; outline-offset:3px; }
+        .pugpep-product-card a:focus-visible, .pugpep-shelf button:focus-visible, .pugpep-product-row:focus-visible { outline:3px solid #ff75df; outline-offset:3px; }
         @media(max-width:1100px) { .pugpep-product-row { grid-auto-columns:max(270px,calc((100% - 44px) / 3.2)); } .pugpep-product-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
         @media(max-width:900px) { .pugpep-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
         @media(max-width:720px) { .pugpep-product-row { grid-auto-columns:max(270px,calc((100% - 20px) / 2.15)); gap:12px; } .pugpep-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; } .pugpep-product-info { padding:12px; } .pugpep-product-name { font-size:17px; } }
@@ -1365,6 +1359,18 @@ export default function HomePage() {
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
           }
 
+          .shop-by-focus-grid .category-card {
+            min-height: 0 !important;
+            aspect-ratio: 4 / 3;
+            background: #050507 !important;
+          }
+
+          .shop-by-focus-grid .shop-by-focus-image {
+            object-fit: contain !important;
+            object-position: center center !important;
+            background: #050507;
+          }
+
           .catalog-products-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
           }
@@ -1373,6 +1379,10 @@ export default function HomePage() {
         @media (max-width: 420px) {
           .category-grid {
             grid-template-columns: 1fr !important;
+          }
+
+          .shop-by-focus-grid .category-card {
+            aspect-ratio: 16 / 10;
           }
 
           .catalog-products-grid {
@@ -1571,6 +1581,7 @@ export default function HomePage() {
             style={categoryCardButton}
           >
             <img
+              className="shop-by-focus-image"
               src="/marketing/research-peptides.png"
               alt="PugPep research peptides category"
               style={categoryImage}
@@ -1595,6 +1606,7 @@ export default function HomePage() {
             style={categoryCardButton}
           >
             <img
+              className="shop-by-focus-image"
               src="/marketing/research-sprays.png"
               alt="PugPep research sprays category"
               style={categoryImage}
@@ -1619,6 +1631,7 @@ export default function HomePage() {
             style={categoryCardButton}
           >
             <img
+              className="shop-by-focus-image"
               src="/marketing/lab-materials.png"
               alt="PugPep laboratory materials category"
               style={categoryImage}
@@ -1665,11 +1678,6 @@ export default function HomePage() {
             <span>{saleCount} On Sale</span>
             <span>{visibleProducts.length} Showing</span>
           </div>
-        </div>
-
-        <div className="pugpep-view-switch" aria-label="Catalog layout">
-          <button type="button" aria-pressed={catalogView === "rows"} onClick={() => setCatalogView("rows")}>Scrolling Rows</button>
-          <button type="button" aria-pressed={catalogView === "grid"} onClick={() => setCatalogView("grid")}>View All Products</button>
         </div>
 
         <div style={catalogFamilyRow}>
@@ -1806,7 +1814,7 @@ export default function HomePage() {
           <div style={groupedCatalog}>
             {catalogGroups.map((group) => (
               <ProductShelf key={group.key} id={`catalog-row-${group.key}`} title={group.title} eyebrow={group.eyebrow}
-                products={group.products} renderProduct={renderCatalogProduct} grid={catalogView === "grid"}
+                products={group.products} renderProduct={renderCatalogProduct}
                 onViewAll={() => viewAllProducts(group.key === "sprays" ? "sprays"
                   : group.key === "materials" ? "lab materials" : "peptides",
                   knownFamilyKeys.has(group.key) ? group.key : "all")} />
@@ -1941,6 +1949,7 @@ function ProductShelf(props: {
   const rowRef = useRef<HTMLDivElement>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
+  const [autoPaused, setAutoPaused] = useState(false);
   useEffect(() => {
     const row = rowRef.current;
     if (!row || props.grid) return;
@@ -1954,6 +1963,44 @@ function ProductShelf(props: {
     observer.observe(row);
     return () => { row.removeEventListener("scroll", update); observer.disconnect(); };
   }, [props.products.length, props.grid]);
+
+  useEffect(() => {
+    const row = rowRef.current;
+
+    if (!row || props.grid || autoPaused) return;
+
+    const reduceMotion =
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (reduceMotion) return;
+
+    let direction: 1 | -1 = 1;
+
+    // Continuous marquee-style movement: start -> end -> start -> repeat.
+    // One physical pixel per tick avoids sub-pixel rounding issues on mobile.
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+
+      const maxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
+      if (maxScrollLeft <= 2) return;
+
+      if (direction === 1 && row.scrollLeft >= maxScrollLeft - 1) {
+        direction = -1;
+      } else if (direction === -1 && row.scrollLeft <= 1) {
+        direction = 1;
+      }
+
+      row.scrollLeft = Math.max(
+        0,
+        Math.min(maxScrollLeft, row.scrollLeft + direction)
+      );
+    }, 28);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [props.products.length, props.grid, autoPaused]);
+
   function move(direction: number) {
     const row = rowRef.current;
     if (!row) return;
@@ -1978,8 +2025,22 @@ function ProductShelf(props: {
           <span style={{ color: "#9198a9", fontSize: 12 }}>{props.products.length} products</span>
         </div>
       </div>
-      <div ref={rowRef} id={props.id} className={props.grid ? "pugpep-product-grid" : "pugpep-product-row"}
-        tabIndex={props.grid ? undefined : 0} aria-label={props.title}
+      <div
+        ref={rowRef}
+        id={props.id}
+        className={props.grid ? "pugpep-product-grid" : "pugpep-product-row"}
+        tabIndex={props.grid ? undefined : 0}
+        aria-label={props.title}
+        onMouseEnter={() => setAutoPaused(true)}
+        onMouseLeave={() => setAutoPaused(false)}
+        onFocusCapture={() => setAutoPaused(true)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setAutoPaused(false);
+          }
+        }}
+        onTouchStart={() => setAutoPaused(true)}
+        onTouchEnd={() => setAutoPaused(false)}
         onKeyDown={(event) => {
           if (props.grid || event.target !== event.currentTarget) return;
           if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
