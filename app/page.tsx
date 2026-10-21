@@ -1125,7 +1125,14 @@ export default function HomePage() {
               onClick={(event) => { void handleProductAccess(event, product.slug, selectedCoaUrl); }}
               aria-label={`View current COA for ${product.name}${selectedStrength?.label ? ` ${selectedStrength.label}` : ""}`}>View COA</a>}
           </div>
-          <div className="pugpep-product-strengths" role="group" aria-label={`Select strength for ${product.name}`}>
+          <div
+            className="pugpep-product-strengths"
+            role="group"
+            aria-label={`Select strength for ${product.name}`}
+            style={{
+              gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+            }}
+          >
             {detail?.choices.length ? detail.choices.map((choice) => (
               <button
                 key={choice.key}
@@ -1408,6 +1415,64 @@ export default function HomePage() {
           .catalog-products-grid {
             grid-template-columns: 1fr !important;
           }
+        }
+
+
+        /* Uniform dosage buttons: five fixed equal columns for every product card.
+           Products with fewer strengths leave the remaining slots empty. */
+        .pugpep-product-strengths {
+          display: grid !important;
+          width: 100%;
+          align-content: start;
+          gap: 5px;
+          margin-top: 12px;
+          margin-bottom: 16px;
+          min-height: 38px;
+        }
+        .pugpep-product-strengths .pugpep-strength-button {
+          min-width: 0;
+          width: 100%;
+          box-sizing: border-box;
+          min-height: 38px;
+          padding: 7px 2px;
+          font-size: 13px;
+          line-height: 1.15;
+          white-space: normal;
+          overflow-wrap: anywhere;
+          text-align: center;
+        }
+        .pugpep-product-family { font-size: 12px; }
+        .pugpep-product-name { font-size: 20px; }
+        .pugpep-product-info .pugpep-card-price-caption { font-size: 13px; line-height: 1.5; }
+        .pugpep-product-info .pugpep-card-original-price { font-size: 15px; }
+        .pugpep-product-info .pugpep-card-dollar-savings,
+        .pugpep-product-info .pugpep-card-sale-percent { font-size: 13px; }
+        .pugpep-product-info .pugpep-purchase-type { font-size: 15px; }
+        .pugpep-product-info .pugpep-kit-sale-hint { font-size: 12px; }
+        .pugpep-product-info .pugpep-card-bundle-title { font-size: 15px; }
+        .pugpep-product-info .pugpep-card-message { font-size: 13px; }
+        .pugpep-product-card .pugpep-card-bundle-options button {
+          font-size: 13px; min-height: 38px;
+          padding: 8px 5px;
+        }
+        .pugpep-product-card .pugpep-coa-button {
+          font-size: 12px; min-height: 34px; padding: 7px 9px;
+        }
+        .pugpep-product-card .pugpep-add-button {
+          font-size: 16px; min-height: 44px;
+        }
+        .pugpep-product-card .pugpep-card-quantity button {
+          font-size: 19px; min-height: 44px;
+        }
+        .pugpep-product-card .pugpep-card-quantity input { font-size: 16px; }
+        /* View Cart: slightly larger control, without enlarging it as much as the others. */
+        .pugpep-product-card .pugpep-card-cart-button {
+          font-size: 14px; min-height: 32px; padding: 5px 9px;
+          border-radius: 7px;
+        }
+        @media (max-width: 720px) {
+          .pugpep-product-name { font-size: 19px; }
+          .pugpep-product-strengths .pugpep-strength-button { font-size: 12px; }
         }
 
         @keyframes campaignGlow {

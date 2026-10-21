@@ -124,7 +124,7 @@ const LEGACY_PENDING_PROMO_KEY =
 const RESEARCH_ACKNOWLEDGMENT_VERSION = "pugpep-ruo-checkout-2026-10-v1";
 
 const RESEARCH_ACKNOWLEDGMENT_TEXT =
-  "I acknowledge that the products in my order are sold exclusively for legitimate laboratory research and are not intended for human or veterinary consumption, injection, administration, or other personal use. I confirm that my purchase is for a legitimate, lawful research purpose; that I will comply with applicable laws and appropriate handling and storage requirements; and that I have reviewed PugPep's Research Use Policy and Terms & Conditions. I understand that PugPep does not authorize use outside the stated research purpose and disclaims responsibility for unauthorized use to the extent permitted by applicable law. This acknowledgment does not waive any rights or protections that cannot legally be waived.";
+  "I acknowledge that these products are for lawful laboratory research only, not for human or veterinary use, consumption, or administration. I agree to handle and store them safely and follow applicable laws and PugPep's Research Use Policy and Terms. I understand PugPep does not authorize other uses and disclaims responsibility for unauthorized use to the extent permitted by law, without limiting rights that cannot legally be waived.";
 
 const SMS_ENABLED =
   process.env.NEXT_PUBLIC_SMS_ENABLED ===
@@ -2083,6 +2083,46 @@ export default function CheckoutPage() {
                 pricing
               }
             />
+
+        <section
+          id="research-use-agreement"
+          aria-labelledby="research-use-title"
+          style={{
+            background: "#101115",
+            border: `1px solid ${acknowledgmentError ? "#ff8080" : "rgba(255,255,255,.38)"}`,
+            borderRadius: 16,
+            padding: "clamp(18px, 3vw, 28px)",
+            marginTop: 18,
+            marginBottom: 18,
+            color: "#ffffff",
+          }}
+        >
+          <h2 id="research-use-title" style={{ margin: "0 0 14px", color: "#ffffff", fontSize: 21 }}>
+            Research Use Agreement
+          </h2>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 14, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              required
+              checked={researchAccepted}
+              onChange={(event) => {
+                setResearchAccepted(event.target.checked);
+                setAcknowledgmentError("");
+              }}
+              aria-describedby="research-agreement-text"
+              style={{ width: 23, height: 23, marginTop: 3, flexShrink: 0, accentColor: "#ffffff" }}
+            />
+            <span id="research-agreement-text" style={{ color: "#ffffff", fontSize: 16, lineHeight: 1.65 }}>
+              {RESEARCH_ACKNOWLEDGMENT_TEXT}
+            </span>
+          </label>
+          <p style={{ margin: "12px 0 0 37px", color: "#ffffff", fontSize: 15, lineHeight: 1.8 }}>
+            <a href="/research-use-policy" target="_blank" rel="noreferrer" style={{ color: "#ffffff", textDecoration: "underline" }}>Research Use Policy</a>
+            {" · "}
+            <a href="/terms" target="_blank" rel="noreferrer" style={{ color: "#ffffff", textDecoration: "underline" }}>Terms &amp; Conditions</a>
+          </p>
+          {acknowledgmentError && <p role="alert" style={{ color: "#ffb4b4", fontSize: 16, margin: "16px 0 0" }}>{acknowledgmentError}</p>}
+        </section>
           </section>
 
           <section
@@ -2163,48 +2203,6 @@ export default function CheckoutPage() {
           </section>
         </div>
 
-        <section
-          id="research-use-agreement"
-          aria-labelledby="research-use-title"
-          style={{
-            background: "#101115",
-            border: `1px solid ${acknowledgmentError ? "#ff8080" : "rgba(255,255,255,.38)"}`,
-            borderRadius: 16,
-            padding: "clamp(18px, 3vw, 28px)",
-            marginTop: 24,
-            marginBottom: 20,
-            color: "#ffffff",
-          }}
-        >
-          <h2 id="research-use-title" style={{ margin: "0 0 12px", color: "#ffffff", fontSize: 22 }}>
-            Research Use Agreement
-          </h2>
-          <p style={{ margin: "0 0 18px", color: "#ffffff", fontSize: 16, lineHeight: 1.8 }}>
-            Please review and acknowledge the permitted research purpose before proceeding to payment.
-          </p>
-          <label style={{ display: "flex", alignItems: "flex-start", gap: 14, cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              required
-              checked={researchAccepted}
-              onChange={(event) => {
-                setResearchAccepted(event.target.checked);
-                setAcknowledgmentError("");
-              }}
-              aria-describedby="research-agreement-text"
-              style={{ width: 23, height: 23, marginTop: 3, flexShrink: 0, accentColor: "#ffffff" }}
-            />
-            <span id="research-agreement-text" style={{ color: "#ffffff", fontSize: 16, lineHeight: 1.8 }}>
-              {RESEARCH_ACKNOWLEDGMENT_TEXT}
-            </span>
-          </label>
-          <p style={{ margin: "14px 0 0 37px", color: "#ffffff", fontSize: 15, lineHeight: 1.8 }}>
-            <a href="/research-use-policy" target="_blank" rel="noreferrer" style={{ color: "#ffffff", textDecoration: "underline" }}>Research Use Policy</a>
-            {" · "}
-            <a href="/terms" target="_blank" rel="noreferrer" style={{ color: "#ffffff", textDecoration: "underline" }}>Terms &amp; Conditions</a>
-          </p>
-          {acknowledgmentError && <p role="alert" style={{ color: "#ffb4b4", fontSize: 16, margin: "16px 0 0" }}>{acknowledgmentError}</p>}
-        </section>
 
         <FinalReview
           pricing={
