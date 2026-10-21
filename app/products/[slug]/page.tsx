@@ -784,7 +784,7 @@ export default function ProductDetailPage() {
   }
 
   function getPurchaseLabel(purchaseType: string) {
-    if (product?.category === "lab-material") {
+    if (["lab-material", "laboratory-supplies"].includes(product?.category || "")) {
       return purchaseType === "kit" ? "10 Pack" : "Single Item";
     }
 

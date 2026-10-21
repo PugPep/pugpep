@@ -15,6 +15,7 @@ import {
 
 const STOREFRONT_SALE_CACHE_KEY = "pugpep_storefront_sales_v1";
 const STOREFRONT_SALE_CACHE_TTL_MS = 5 * 60 * 1000;
+const RESEARCH_ACKNOWLEDGMENT_KEY = "pugpep_research_ack_v2";
 const CARD_CACHE_KEY = "pugpep_home_cards_v2";
 const OPTION_PRICE_CACHE_KEY = "pugpep_home_option_prices_v1";
 const CARD_CACHE_TTL = 90 * 1000;
@@ -213,7 +214,6 @@ export default function HomePage() {
   const [selectedCardDosages, setSelectedCardDosages] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [familyFilter, setFamilyFilter] = useState("all");
   const [sort, setSort] = useState("featured");
   const [isMobile, setIsMobile] = useState<boolean | null>(null);
   const [campaignLoading, setCampaignLoading] = useState(true);
@@ -225,7 +225,7 @@ export default function HomePage() {
     mountedRef.current = true;
     campaignLoadStartedRef.current = false;
 
-    try { setAgeVerified(localStorage.getItem("pugpep_age_verified") === "yes"); }
+    try { setAgeVerified(localStorage.getItem(RESEARCH_ACKNOWLEDGMENT_KEY) === "accepted"); }
     catch { setAgeVerified(false); }
 
     restoreCachedProducts();
@@ -704,11 +704,11 @@ export default function HomePage() {
 
   const productFamilies = [
     { value: "all", label: "All Research" },
-    { value: "metabolism-research", label: "Compound Series A" },
-    { value: "brain-nerve-research", label: "Compound Series B" },
-    { value: "cell-energy-research", label: "Compound Series C" },
-    { value: "peptide-molecular-research", label: "Compound Series D" },
-    { value: "hormone-signaling-research", label: "Compound Series E" },
+    { value: "individual-peptides", label: "Individual Peptides" },
+    { value: "peptide-blends", label: "Peptide Blends" },
+    { value: "research-sprays", label: "Research Sprays" },
+    { value: "biochemical-compounds", label: "Biochemical Compounds" },
+    { value: "laboratory-supplies", label: "Laboratory Supplies" },
   ];
 
   const researchFamilyThemes: Record<
@@ -779,8 +779,16 @@ export default function HomePage() {
     },
   };
 
+  const categoryThemes: Record<string, string> = {
+    "individual-peptides": "peptide-molecular-research",
+    "peptide-blends": "cell-energy-research",
+    "research-sprays": "brain-nerve-research",
+    "biochemical-compounds": "hormone-signaling-research",
+    "laboratory-supplies": "lab-materials",
+  };
+
   function getThemeForFamily(value: string) {
-    return researchFamilyThemes[value] || researchFamilyThemes.all;
+    return researchFamilyThemes[categoryThemes[value] || value] || researchFamilyThemes.all;
   }
 
   function getProductTheme(product: Product) {
@@ -788,7 +796,7 @@ export default function HomePage() {
       return researchFamilyThemes["lab-materials"];
     }
 
-    return getThemeForFamily(getResearchFamily(product) || "all");
+    return getThemeForFamily(normalizeProductCategory(product.category) || "all");
   }
 
   function normalizeProductCategory(value?: string | null) {
@@ -809,7 +817,8 @@ export default function HomePage() {
       category === "nasal spray" ||
       category === "research-spray" ||
       category === "research spray" ||
-      category === "research sprays"
+      category === "research sprays" ||
+      category === "research-sprays"
     );
   }
 
@@ -821,6 +830,7 @@ export default function HomePage() {
       category === "lab material" ||
       category === "lab-materials" ||
       category === "lab materials" ||
+      category === "laboratory-supplies" ||
       category === "laboratory-material" ||
       category === "laboratory material" ||
       category === "laboratory-materials" ||
@@ -891,17 +901,11 @@ export default function HomePage() {
       const query = search.trim().toLowerCase();
       const category = normalizeProductCategory(product.category);
       const sale = saleMap[product.slug];
-      const productFamily = getResearchFamily(product);
 
       const matchesSearch =
         !query ||
         product.name.toLowerCase().includes(query) ||
         product.slug.toLowerCase().includes(query);
-
-      const matchesFamily =
-        familyFilter === "all"
-          ? true
-          : productFamily === familyFilter;
 
       const isSpray =
         isResearchSprayCategory(product.category);
@@ -909,20 +913,12 @@ export default function HomePage() {
       const isLabMaterial =
         isLabMaterialCategory(product.category);
 
-      const matchesFilter =
-        filter === "all"
-          ? true
-          : filter === "sale"
-          ? Boolean(sale?.isOnSale)
-          : filter === "peptides"
-          ? !isSpray && !isLabMaterial
-          : filter === "sprays"
-          ? isSpray
-          : filter === "lab materials"
-          ? isLabMaterial
-          : true;
+      const matchesFilter = filter === "all"
+        || (filter === "sale" && Boolean(sale?.isOnSale))
+        || (filter === "new" && isProductNew(product))
+        || category === filter;
 
-      return matchesSearch && matchesFilter && matchesFamily;
+      return matchesSearch && matchesFilter;
     })
     .sort((a, b) => {
       if (sort === "az") return a.name.localeCompare(b.name);
@@ -943,28 +939,20 @@ export default function HomePage() {
   ).length;
 
 
-  const compounds = visibleProducts.filter((product) =>
-    !isResearchSprayCategory(product.category) && !isLabMaterialCategory(product.category));
   const knownFamilyKeys = new Set(productFamilies.slice(1).map((family) => family.value));
-  const compoundGroups = [
-    ...productFamilies.slice(1).map((family) => ({
-      key: family.value, eyebrow: "RESEARCH COMPOUNDS", title: family.label,
-      products: compounds.filter((product) => getResearchFamily(product) === family.value),
-    })),
-    { key: "compounds", eyebrow: "CORE RESEARCH CATALOG", title: "More Research Compounds",
-      products: compounds.filter((product) => !knownFamilyKeys.has(getResearchFamily(product) || "")) },
-  ];
   const catalogGroups = [
-    ...compoundGroups,
-    { key: "sprays", eyebrow: "SPRAY CATALOG", title: "Research Sprays",
-      products: visibleProducts.filter((product) => isResearchSprayCategory(product.category)) },
-    { key: "materials", eyebrow: "LAB ESSENTIALS", title: "Lab Materials",
-      products: visibleProducts.filter((product) => isLabMaterialCategory(product.category)) },
+    ...productFamilies.slice(1).map((family) => ({
+      key: family.value,
+      eyebrow: "RESEARCH CATALOG",
+      title: family.label,
+      products: visibleProducts.filter((product) => normalizeProductCategory(product.category) === family.value),
+    })),
+    { key: "other", eyebrow: "RESEARCH CATALOG", title: "Other Research Products",
+      products: visibleProducts.filter((product) => !knownFamilyKeys.has(normalizeProductCategory(product.category))) },
   ].filter((group) => group.products.length > 0);
 
   function viewAllProducts(type = "all", family = "all") {
-    setFilter(type);
-    setFamilyFilter(family);
+    setFilter(family !== "all" ? family : type);
     setSearch("");
     document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -1109,8 +1097,7 @@ export default function HomePage() {
     const activeBundleTier = [...bundleTiers].reverse().find((tier) => quantity >= tier.quantity);
     const quantityQuote = catalogQuantityQuote(selectedOption, quantity, selectedStrength?.single);
     const displayedVials = kitSelected ? quantity * 10 : quantity;
-    const theme = getProductTheme(product);
-    const familyLabel = productFamilies.find((family) => family.value === getResearchFamily(product))?.label;
+    const familyLabel = productFamilies.find((family) => family.value === normalizeProductCategory(product.category))?.label;
     const productPath = `/products/${product.slug}`;
     const selectedCoaUrl =
       (selectedStrength?.key
@@ -1118,7 +1105,7 @@ export default function HomePage() {
         : undefined) ||
       detail?.coaUrl;
     return (
-      <article key={product.id} className="pugpep-product-card" style={{ "--product-accent": theme.color } as React.CSSProperties}>
+      <article key={product.id} className="pugpep-product-card">
         <Link href={productPath} className="pugpep-product-image-link"
           onClick={(event) => { void handleProductAccess(event, product.slug); }}
           aria-label={`View ${product.name}`}>
@@ -1130,8 +1117,7 @@ export default function HomePage() {
           </div>
         </Link>
         <div className="pugpep-product-info">
-          <span className="pugpep-product-family">{isLabMaterialCategory(product.category) ? "Lab Materials"
-            : isResearchSprayCategory(product.category) ? "Research Sprays" : familyLabel || "Research Compounds"}</span>
+          <span className="pugpep-product-family">{familyLabel || "Research Products"}</span>
           <div className="pugpep-product-title-row">
           <Link href={productPath} className="pugpep-product-name"
             onClick={(event) => { void handleProductAccess(event, product.slug); }}>{product.name}</Link>
@@ -1244,17 +1230,20 @@ export default function HomePage() {
         .pugpep-shelf-tools button { border:1px solid #34363e; border-radius:10px; background:#15161d; color:#eee; cursor:pointer; font:inherit; font-size:12px; font-weight:700; padding:10px 13px; min-height:40px; }
         .pugpep-shelf-tools button:disabled { opacity:.3; cursor:default; }
         .pugpep-shelf-tools .pugpep-shelf-arrow { width:40px; padding:8px; font-size:20px; }
-        .pugpep-product-row { display:grid; grid-auto-flow:column; grid-auto-columns:max(270px,calc((100% - 64px) / 4.25)); gap:16px; overflow-x:auto; scroll-snap-type:none; scroll-padding:2px; padding:4px 2px 16px; scrollbar-width:thin; scrollbar-color:#4c505b #13141a; overscroll-behavior-x:contain; }
+        .pugpep-product-row { display:grid; grid-auto-flow:column; grid-auto-columns:max(270px,calc((100% - 64px) / 4.25)); gap:16px; overflow-x:auto; scroll-snap-type:x proximity; scroll-padding:2px; padding:4px 2px 16px; scrollbar-width:thin; scrollbar-color:#4c505b #13141a; overscroll-behavior-x:contain; }
+        .pugpep-product-row > * { scroll-snap-align:start; }
         .pugpep-product-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; }
         .pugpep-product-card { min-width:0; border:1px solid #30323a; border-radius:16px; overflow:hidden; background:#14151c; display:flex; flex-direction:column; box-shadow:0 10px 24px rgba(0,0,0,.16); transition:border-color .18s ease; }
-        .pugpep-product-card:hover { border-color:var(--product-accent,#7df9ff); }
+        .pugpep-product-card:hover { border-color:#7df9ff; }
         .pugpep-product-image-link { position:relative; display:block; aspect-ratio:1 / 1; background:#fff; overflow:hidden; }
         .pugpep-product-image-link img { display:block; width:100%; height:100%; object-fit:contain; }
         .pugpep-product-badges { position:absolute; top:10px; left:10px; right:10px; display:flex; flex-wrap:wrap; justify-content:space-between; gap:5px; pointer-events:none; }
         .pugpep-status-badge, .pugpep-offer-badge { border-radius:7px; padding:6px 8px; font-size:10px; font-weight:850; background:#181a22; color:#fff; box-shadow:0 2px 8px #0002; }
         .pugpep-offer-badge { background:#d3ff69; color:#182000; margin-left:auto; }
         .pugpep-product-info { padding:16px; display:flex; flex:1; flex-direction:column; }
-        .pugpep-product-family { color:var(--product-accent,#7df9ff); font-size:10px; letter-spacing:.10em; text-transform:uppercase; font-weight:800; }
+        /* Unified neutral product typography without changing button contrast. */
+        .pugpep-product-info .pugpep-product-family, .pugpep-product-info .pugpep-product-name, .pugpep-product-info .pugpep-card-price-caption, .pugpep-product-info .pugpep-card-sale-percent, .pugpep-product-info .pugpep-card-dollar-savings, .pugpep-product-info .pugpep-card-bundle-title, .pugpep-product-info .pugpep-card-original-price, .pugpep-product-info .pugpep-purchase-type, .pugpep-product-info .pugpep-kit-sale-hint, .pugpep-product-info .pugpep-card-message { color:#fff; }
+        .pugpep-product-family { color:#fff; font-size:10px; letter-spacing:.10em; text-transform:uppercase; font-weight:800; }
         .pugpep-product-title-row { display:flex; align-items:flex-start; gap:8px; margin-top:8px; }
         .pugpep-product-name { flex:1; min-width:0; display:block; color:#fff; font-size:19px; font-weight:800; line-height:1.25; text-decoration:none; margin:0; min-height:48px; overflow-wrap:anywhere; }
         .pugpep-product-strengths { display:flex; flex-wrap:wrap; align-content:flex-start; gap:4px; color:#aeb3c2; font-size:12px; line-height:1.5; margin:10px 0 14px; min-height:36px; }
@@ -1299,6 +1288,37 @@ export default function HomePage() {
         .pugpep-view-button { flex:1; background:#7df9ff; color:#052027; border:1px solid #7df9ff; white-space:nowrap; }
         .pugpep-coa-button { flex-shrink:0; background:transparent; color:#e3e6ef; border:1px solid #444753; white-space:nowrap; padding:5px 7px; min-height:28px; font-size:10px; border-radius:6px; }
         .pugpep-product-card a:focus-visible, .pugpep-shelf button:focus-visible, .pugpep-product-row:focus-visible { outline:3px solid #ff75df; outline-offset:3px; }
+        /* Clinical storefront controls: keep existing neon environment, standardize the controls. */
+        .pugpep-product-card { --product-accent: #ffffff !important; }
+        .pugpep-product-info, .pugpep-product-info :is(span, p, label, strong, small),
+        .pugpep-product-name, .pugpep-product-family, .pugpep-product-price,
+        .pugpep-card-price-caption, .pugpep-card-dollar-savings,
+        .pugpep-card-original-price, .pugpep-card-sale-percent,
+        .pugpep-card-bundle-title, .pugpep-card-message,
+        .pugpep-kit-sale-hint, .pugpep-purchase-type,
+        .pugpep-purchase-type label { color:#fff !important; }
+        .pugpep-product-card :is(.pugpep-strength-button, .pugpep-add-button,
+          .pugpep-card-cart-button, .pugpep-coa-button,
+          .pugpep-card-bundle-options button, .pugpep-card-quantity button) {
+          background:#17191f !important; border:1px solid #f5f5f5 !important;
+          color:#fff !important; text-decoration:none;
+        }
+        .pugpep-product-card :is(.pugpep-strength-button, .pugpep-add-button,
+          .pugpep-card-cart-button, .pugpep-coa-button,
+          .pugpep-card-bundle-options button, .pugpep-card-quantity button):hover:not(:disabled) {
+          background:#34363b !important;
+        }
+        .pugpep-product-card :is(.pugpep-strength-button[aria-pressed="true"],
+          .pugpep-card-bundle-options button[aria-pressed="true"]) {
+          background:#fff !important; color:#111 !important; border-color:#fff !important;
+        }
+        .pugpep-product-card :is(.pugpep-strength-button, .pugpep-add-button,
+          .pugpep-card-cart-button, .pugpep-coa-button,
+          .pugpep-card-bundle-options button, .pugpep-card-quantity button):focus-visible {
+          outline:3px solid #fff; outline-offset:2px;
+        }
+        .pugpep-shelf-tools button { color:#fff; border-color:#fff; }
+        .pugpep-shelf-tools button:hover:not(:disabled) { background:#292b32; }
         @media(max-width:1100px) { .pugpep-product-row { grid-auto-columns:max(270px,calc((100% - 44px) / 3.2)); } .pugpep-product-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
         @media(max-width:900px) { .pugpep-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
         @media(max-width:720px) { .pugpep-product-row { grid-auto-columns:max(270px,calc((100% - 20px) / 2.15)); gap:12px; } .pugpep-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; } .pugpep-product-info { padding:12px; } .pugpep-product-name { font-size:17px; } }
@@ -1417,9 +1437,10 @@ export default function HomePage() {
 
             <h1 style={{ color: "#ff45d8" }}>PUGPEP Disclaimer</h1>
 
-            <p style={{ color: "#ddd", lineHeight: 1.6 }}>
-              Access to PUGPEP requires confirmation of the following research
-              eligibility requirements.
+            <p style={{ color: "#fff", lineHeight: 1.6, fontSize: 17 }}>
+              Before accessing the research catalog, please read and affirm each
+              requirement below. This acknowledgment is required for first-time visitors
+              and does not replace purchaser verification at checkout.
             </p>
 
             <label style={gateCheckboxRow}>
@@ -1442,11 +1463,11 @@ export default function HomePage() {
                 style={gateCheckbox}
               />
               <span>
-                I confirm that I am an authorized representative of an
-                independent research laboratory, research organization, or
-                other qualified research entity, and that I am accessing
-                PUGPEP solely for lawful laboratory research purposes.
-                Products are not for human or veterinary use.
+                I confirm that I am authorized to obtain laboratory research materials
+                for legitimate research purposes only. I understand that
+                PUGPEP research products are not for human or veterinary use,
+                including consumption, injection, or administration, and I
+                will not purchase them for those purposes.
               </span>
             </label>
 
@@ -1456,7 +1477,7 @@ export default function HomePage() {
               onClick={() => {
                 if (!ageConfirmed || !researchConfirmed) return;
 
-                localStorage.setItem("pugpep_age_verified", "yes");
+                localStorage.setItem(RESEARCH_ACKNOWLEDGMENT_KEY, "accepted");
                 setAgeVerified(true);
               }}
               style={{
@@ -1666,10 +1687,10 @@ export default function HomePage() {
       <section id="catalog" style={catalogShell}>
         <div style={catalogHeader}>
           <div>
-            <span style={catalogEyebrow}>BROWSE BY RESEARCH FAMILY</span>
+            <span style={catalogEyebrow}>RESEARCH PRODUCT CATEGORIES</span>
             <h2 style={catalogTitle}>Browse the Full Catalog</h2>
             <p style={catalogIntroText}>
-              Choose a research family or product type to instantly narrow the catalog.
+              Choose a category, view new arrivals or current sale items, or search by product name.
             </p>
           </div>
 
@@ -1680,74 +1701,28 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div style={catalogFamilyRow}>
-          <div style={familyFilterScroller}>
-            <div style={familyFilterButtons}>
-              {productFamilies.map((family) => {
-                const active = familyFilter === family.value;
-
-                return (
-                  <button
-                    key={family.value}
-                    type="button"
-                    onClick={() => {
-                      setFamilyFilter(family.value);
-                      setFilter("all");
-                    }}
-                    style={{
-                      ...familyFilterButton,
-                      borderColor: active
-                        ? getThemeForFamily(family.value).border
-                        : `${getThemeForFamily(family.value).color}55`,
-                      color: active
-                        ? "#ffffff"
-                        : getThemeForFamily(family.value).color,
-                      background: active
-                        ? getThemeForFamily(family.value).soft
-                        : "rgba(255,255,255,.018)",
-                      boxShadow: active
-                        ? `0 0 22px ${getThemeForFamily(family.value).glow}`
-                        : "none",
-                      transform: active ? "translateY(-1px)" : "none",
-                    }}
-                    aria-pressed={active}
-                  >
-                    {family.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
         <div style={searchSection}>
           <div style={catalogControls}>
             <div style={filterButtons}>
               {[
-                { value: "all", label: "ALL TYPES" },
+                { value: "all", label: "ALL PRODUCTS" },
+                { value: "new", label: "NEW PRODUCTS" },
                 { value: "sale", label: "SALE" },
-                { value: "peptides", label: "RESEARCH COMPOUNDS" },
-                { value: "sprays", label: "RESEARCH SPRAYS" },
-                { value: "lab materials", label: "LAB MATERIALS" },
+                ...productFamilies.slice(1),
               ].map((item) => (
                 <button
                   key={item.value}
                   type="button"
                   onClick={() => {
                     setFilter(item.value);
-                    setFamilyFilter("all");
                   }}
                   style={{
                     ...filterButton,
-                    border:
-                      filter === item.value
-                        ? "1px solid #00ff99"
-                        : "1px solid rgba(255,255,255,.12)",
-                    color: filter === item.value ? "#00ff99" : "#ccc",
-                    background:
-                      filter === item.value
-                        ? "rgba(0,255,153,.07)"
-                        : "rgba(255,255,255,.025)",
+                    border: filter === item.value
+                      ? "1px solid #ffffff" : "1px solid rgba(255,255,255,.45)",
+                    color: filter === item.value ? "#111111" : "#ffffff",
+                    background: filter === item.value
+                      ? "#ffffff" : "rgba(255,255,255,.025)",
                   }}
                 >
                   {item.label}
@@ -1802,7 +1777,6 @@ export default function HomePage() {
               onClick={() => {
                 setSearch("");
                 setFilter("all");
-                setFamilyFilter("all");
                 setSort("featured");
               }}
               style={emptyButton}
@@ -1815,9 +1789,7 @@ export default function HomePage() {
             {catalogGroups.map((group) => (
               <ProductShelf key={group.key} id={`catalog-row-${group.key}`} title={group.title} eyebrow={group.eyebrow}
                 products={group.products} renderProduct={renderCatalogProduct}
-                onViewAll={() => viewAllProducts(group.key === "sprays" ? "sprays"
-                  : group.key === "materials" ? "lab materials" : "peptides",
-                  knownFamilyKeys.has(group.key) ? group.key : "all")} />
+                onViewAll={() => viewAllProducts("all", knownFamilyKeys.has(group.key) ? group.key : "all")} />
             ))}
           </div>
         )}
@@ -1907,7 +1879,7 @@ export default function HomePage() {
         <div style={footerDivider} />
 
         <p style={footerResearchNotice}>
-          <strong style={{ color: "#00ff99" }}>
+          <strong style={{ color: "#ffffff" }}>
             RESEARCH USE ONLY:
           </strong>{" "}
           PugPep products are intended for laboratory research purposes only.
@@ -1949,7 +1921,6 @@ function ProductShelf(props: {
   const rowRef = useRef<HTMLDivElement>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
-  const [autoPaused, setAutoPaused] = useState(false);
   useEffect(() => {
     const row = rowRef.current;
     if (!row || props.grid) return;
@@ -1963,43 +1934,6 @@ function ProductShelf(props: {
     observer.observe(row);
     return () => { row.removeEventListener("scroll", update); observer.disconnect(); };
   }, [props.products.length, props.grid]);
-
-  useEffect(() => {
-    const row = rowRef.current;
-
-    if (!row || props.grid || autoPaused) return;
-
-    const reduceMotion =
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    if (reduceMotion) return;
-
-    let direction: 1 | -1 = 1;
-
-    // Continuous marquee-style movement: start -> end -> start -> repeat.
-    // One physical pixel per tick avoids sub-pixel rounding issues on mobile.
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-
-      const maxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
-      if (maxScrollLeft <= 2) return;
-
-      if (direction === 1 && row.scrollLeft >= maxScrollLeft - 1) {
-        direction = -1;
-      } else if (direction === -1 && row.scrollLeft <= 1) {
-        direction = 1;
-      }
-
-      row.scrollLeft = Math.max(
-        0,
-        Math.min(maxScrollLeft, row.scrollLeft + direction)
-      );
-    }, 28);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [props.products.length, props.grid, autoPaused]);
 
   function move(direction: number) {
     const row = rowRef.current;
@@ -2031,16 +1965,6 @@ function ProductShelf(props: {
         className={props.grid ? "pugpep-product-grid" : "pugpep-product-row"}
         tabIndex={props.grid ? undefined : 0}
         aria-label={props.title}
-        onMouseEnter={() => setAutoPaused(true)}
-        onMouseLeave={() => setAutoPaused(false)}
-        onFocusCapture={() => setAutoPaused(true)}
-        onBlurCapture={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-            setAutoPaused(false);
-          }
-        }}
-        onTouchStart={() => setAutoPaused(true)}
-        onTouchEnd={() => setAutoPaused(false)}
         onKeyDown={(event) => {
           if (props.grid || event.target !== event.currentTarget) return;
           if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
@@ -3433,7 +3357,10 @@ const overlay = {
 };
 
 const modal = {
-  maxWidth: 520,
+  maxWidth: 620,
+  width: "100%",
+  maxHeight: "90vh",
+  overflowY: "auto" as const,
   padding: 22,
   border: "1px solid #ff45d8",
   borderRadius: 18,
@@ -3453,7 +3380,7 @@ const gateCheckboxRow = {
   color: "#e5e5ea",
   textAlign: "left" as const,
   lineHeight: 1.55,
-  fontSize: 11,
+  fontSize: 16,
   cursor: "pointer",
 };
 
@@ -3553,19 +3480,19 @@ const footerDivider = {
 
 const footerResearchNotice = {
   maxWidth: 1100,
-  margin: "0 auto 14px",
-  color: "#cfcfd5",
+  margin: "0 auto 18px",
+  color: "#ffffff",
   lineHeight: 1.7,
-  fontSize: 11,
+  fontSize: 17,
   textAlign: "center" as const,
 };
 
 const footerText = {
   maxWidth: 1100,
-  margin: "0 auto 14px",
-  color: "#888",
+  margin: "0 auto 16px",
+  color: "#f0f0f0",
   lineHeight: 1.7,
-  fontSize: 11,
+  fontSize: 15,
   textAlign: "center" as const,
 };
 

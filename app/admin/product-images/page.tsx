@@ -132,6 +132,14 @@ const IMAGE_ENGINE_SESSIONS_KEY =
 
 const BULK_PREVIEW_CONCURRENCY = 1;
 
+const STOREFRONT_CATEGORIES = [
+  { value: "individual-peptides", label: "Individual Peptides" },
+  { value: "peptide-blends", label: "Peptide Blends" },
+  { value: "research-sprays", label: "Research Sprays" },
+  { value: "biochemical-compounds", label: "Biochemical Compounds" },
+  { value: "laboratory-supplies", label: "Laboratory Supplies" },
+] as const;
+
 const PRODUCT_FAMILY_OPTIONS: Array<{
   value: ResearchFamily;
   label: string;
@@ -209,6 +217,8 @@ export default function ProductImagesAdminPage() {
     useState<Family>(
       "peptides"
     );
+
+  const [storefrontCategoryFilter, setStorefrontCategoryFilter] = useState("all");
 
   const [
     productFamilyFilter,
@@ -3556,13 +3566,14 @@ export default function ProductImagesAdminPage() {
       () =>
         products.filter(
           (product) =>
-            productFamilyFilter === "all" ||
-            product.product_family ===
-              productFamilyFilter
+            (productFamilyFilter === "all" ||
+            product.product_family === productFamilyFilter) &&
+            (storefrontCategoryFilter === "all" || product.category === storefrontCategoryFilter)
         ),
       [
         products,
         productFamilyFilter,
+        storefrontCategoryFilter,
       ]
     );
 
@@ -3629,7 +3640,9 @@ export default function ProductImagesAdminPage() {
     );
 
   function productsForSelection(nextFamily: "all" | ResearchFamily) {
-    return nextFamily === "all" ? products : products.filter((product) => product.product_family === nextFamily);
+    return products.filter((product) =>
+      (nextFamily === "all" || product.product_family === nextFamily) &&
+      (storefrontCategoryFilter === "all" || product.category === storefrontCategoryFilter));
   }
 
   function syncImageSelections(nextProductId: string, nextTemplate: Template | undefined, nextFamily: "all" | ResearchFamily) {
@@ -4309,15 +4322,37 @@ export default function ProductImagesAdminPage() {
 
 
           <p style={helperText}>
-            Choose a Product Family and template, then click Preview All Products to render that selection. Approve the images
+            Choose a storefront category, legacy template group (if needed), and template, then click Preview All Products to render that selection. Approve the images
             that look correct, then publish directly from the same action row. Nothing is published until you
             use one of the regenerate buttons.
           </p>
 
           <div style={bulkFilterBar}>
             <div style={bulkFamilyFilterField}>
+              <span style={previewSetupLabel}>STOREFRONT CATEGORY</span>
+              <select
+                value={storefrontCategoryFilter}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setStorefrontCategoryFilter(next);
+                  setSelectedProductId("");
+                  for (const item of bulkPreviewsRef.current) {
+                    if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+                  }
+                  bulkPreviewsRef.current = [];
+                  setBulkPreviews([]);
+                }}
+                style={input}
+              >
+                <option value="all">All Categories</option>
+                {STOREFRONT_CATEGORIES.map((entry) => (
+                  <option key={entry.value} value={entry.value}>{entry.label}</option>
+                ))}
+              </select>
+            </div>
+            <div style={bulkFamilyFilterField}>
               <span style={previewSetupLabel}>
-                PRODUCT FAMILY FILTER
+                LEGACY TEMPLATE GROUP FILTER
               </span>
 
               <select

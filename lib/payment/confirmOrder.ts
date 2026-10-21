@@ -67,6 +67,7 @@ export async function confirmOrderTransaction({
       .from("orders")
       .select("id")
       .eq("id", order.id)
+      .eq("user_id", user.id)
       .maybeSingle();
 
     if (existingOrderError) {
@@ -114,6 +115,40 @@ export async function confirmOrderTransaction({
           confirmed: true,
         },
       };
+    }
+
+    /*
+     * A customer must actively accept the current RUO agreement
+     * during checkout before a new order can be confirmed.
+     * Read the recorded acceptance from Supabase rather than
+     * trusting a checkbox flag or localStorage on the payment page.
+     *
+     * Existing confirmed orders are handled above for safe retries.
+     */
+    const requiredAcknowledgmentVersion =
+      "pugpep-ruo-checkout-2026-10-v1";
+
+    const {
+      data: researchAcknowledgment,
+      error: acknowledgmentError,
+    } = await supabase
+      .from("research_checkout_acknowledgments")
+      .select("id")
+      .eq("order_id", order.id)
+      .eq("user_id", user.id)
+      .eq("agreement_version", requiredAcknowledgmentVersion)
+      .maybeSingle();
+
+    if (acknowledgmentError) {
+      throw new Error(
+        `Unable to verify the Research Use Acknowledgment: ${acknowledgmentError.message}`
+      );
+    }
+
+    if (!researchAcknowledgment) {
+      throw new Error(
+        "You must accept the Research Use Acknowledgment at checkout before confirming this order. Return to checkout and check the agreement box."
+      );
     }
 
     /*

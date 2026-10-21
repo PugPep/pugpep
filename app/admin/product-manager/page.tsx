@@ -108,6 +108,14 @@ function normalize(value: string | null | undefined) {
 
 }
 
+const STOREFRONT_CATEGORIES = [
+  { value: "individual-peptides", label: "Individual Peptides" },
+  { value: "peptide-blends", label: "Peptide Blends" },
+  { value: "research-sprays", label: "Research Sprays" },
+  { value: "biochemical-compounds", label: "Biochemical Compounds" },
+  { value: "laboratory-supplies", label: "Laboratory Supplies" },
+] as const;
+
 const PRODUCT_FAMILIES = [
 
   { value: "metabolism-research", label: "Compound Series A" },
@@ -164,7 +172,7 @@ export default function ProductManagerPage() {
 
     image: "",
 
-    category: "peptide",
+    category: "individual-peptides",
 
     product_family: "",
 
@@ -492,11 +500,11 @@ export default function ProductManagerPage() {
 
     ? `/admin/product-images?product=${encodeURIComponent(selectedSlug)}&family=${encodeURIComponent(
 
-        product?.category === "nasal-spray"
+        product?.category === "research-sprays" || product?.category === "nasal-spray"
 
           ? "sprays"
 
-          : product?.category === "lab-material"
+          : product?.category === "laboratory-supplies" || product?.category === "lab-material"
 
           ? "lab-materials"
 
@@ -704,7 +712,7 @@ export default function ProductManagerPage() {
 
         image: "",
 
-        category: "peptide",
+        category: "individual-peptides",
 
         product_family: "",
 
@@ -1146,17 +1154,17 @@ export default function ProductManagerPage() {
 
                 >
 
-                  <option value="peptide">Compound</option>
-
-                  <option value="nasal-spray">Spray</option>
-
-                  <option value="lab-material">Lab Material</option>
+                  <option value="individual-peptides">Individual Peptides</option>
+                  <option value="peptide-blends">Peptide Blends</option>
+                  <option value="research-sprays">Research Sprays</option>
+                  <option value="biochemical-compounds">Biochemical Compounds</option>
+                  <option value="laboratory-supplies">Laboratory Supplies</option>
 
                 </select>
 
               </Field>
 
-              <Field label="Product Family">
+              <Field label="Legacy Image Template Group (optional)">
 
                 <select
 
@@ -1800,7 +1808,7 @@ export default function ProductManagerPage() {
 
                 <select
 
-                  value={product.category || "peptide"}
+                  value={product.category || "individual-peptides"}
 
                   onChange={(e) =>
 
@@ -1812,17 +1820,17 @@ export default function ProductManagerPage() {
 
                 >
 
-                  <option value="peptide">Compound</option>
-
-                  <option value="nasal-spray">Spray</option>
-
-                  <option value="lab-material">Lab Material</option>
+                  <option value="individual-peptides">Individual Peptides</option>
+                  <option value="peptide-blends">Peptide Blends</option>
+                  <option value="research-sprays">Research Sprays</option>
+                  <option value="biochemical-compounds">Biochemical Compounds</option>
+                  <option value="laboratory-supplies">Laboratory Supplies</option>
 
                 </select>
 
               </Field>
 
-              <Field label="Product Family">
+              <Field label="Legacy Image Template Group (optional)">
 
                 <select
 
