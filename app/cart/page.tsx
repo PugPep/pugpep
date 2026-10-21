@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -314,7 +313,7 @@ export default function CartPage() {
                       href={`/products/${item.slug}`}
                       style={imageLink}
                     >
-                      <Image
+                      <img
                         src={
                           item.image ||
                           "/pugpep-logo.png"
@@ -324,6 +323,8 @@ export default function CartPage() {
                         }
                         width={170}
                         height={170}
+                        loading="lazy"
+                        decoding="async"
                         style={productImage}
                       />
                     </Link>
