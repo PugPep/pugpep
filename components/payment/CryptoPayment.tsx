@@ -88,8 +88,8 @@ export function CryptoPayment({
 
   return (
     <div style={cryptoWrap}>
-      <h2 style={{ color: "#ff45d8" }}>
-        Crypto Payment
+      <h2 style={{ color: "#F7931A" }}>
+        Pay with Crypto using AURPAY
       </h2>
 
       <p style={paymentMessage}>

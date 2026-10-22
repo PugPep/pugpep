@@ -1,153 +1,86 @@
-import { trackEvent } from "../../lib/trackEvent";
-import type {
-  PaymentMethod,
-} from "../../lib/payment/types";
+"use client";
 
+import { trackEvent } from "../../lib/trackEvent";
+import type { PaymentMethod } from "../../lib/payment/types";
 import {
-  card,
-  methodButton,
-  methodGrid,
-  methodIcon,
-  sectionHeading,
-  sectionHelper,
-  sectionNumber,
-  sectionTitle,
-  selectedDot,
+  card, methodButton, methodGrid, sectionHeading,
+  sectionHelper, sectionNumber, sectionTitle, selectedDot,
 } from "./paymentTheme";
 
-const methods: [
-  PaymentMethod,
-  string,
-  string
-][] = [
-  ["cashapp", "Cash App", "$"],
-  ["venmo", "Venmo", "V"],
-  ["zelle", "Zelle", "Z"],
-  ["crypto", "Crypto", "₿"],
+type MethodOption = {
+  value: PaymentMethod;
+  label: string;
+  logo?: string;
+  accent: string;
+  comingSoon?: boolean;
+};
+
+const methods: MethodOption[] = [
+  { value: "cashapp", label: "Cash App", logo: "/cashapp.png", accent: "#31d86f" },
+  { value: "venmo", label: "Venmo", logo: "/venmo.png", accent: "#00bfff" },
+  { value: "zelle", label: "Zelle", logo: "/zelle.png", accent: "#b86cff" },
+  { value: "crypto", label: "Crypto", logo: "/aurpay.png", accent: "#f7931a" },
+  { value: "credit_card", label: "Credit Card", accent: "#7df9ff", comingSoon: true },
+  { value: "debit_card", label: "Debit Card", accent: "#7df9ff", comingSoon: true },
 ];
 
-export function PaymentMethodSelector({
-  method,
-  setMethod,
-  orderNumber,
-}: {
+export function PaymentMethodSelector({ method, setMethod, orderNumber }: {
   method: PaymentMethod;
-  setMethod: (
-    method: PaymentMethod
-  ) => void;
+  setMethod: (method: PaymentMethod) => void;
   orderNumber: string;
 }) {
   return (
     <div style={card}>
       <div style={sectionHeading}>
-        <span style={sectionNumber}>
-          2
-        </span>
-
+        <span style={sectionNumber}>2</span>
         <div>
-          <h2 style={sectionTitle}>
-            Payment Method
-          </h2>
-
-          <p style={sectionHelper}>
-            Select the option you plan to use.
-          </p>
+          <h2 style={sectionTitle}>Payment Method</h2>
+          <p style={{ ...sectionHelper, color: "#ffffff" }}>Select the option you plan to use.</p>
         </div>
       </div>
-
-      <div
-        className="payment-method-grid"
-        style={methodGrid}
-      >
-        {methods.map(
-          ([
-            value,
-            label,
-            icon,
-          ]) => {
-            const selected =
-              method === value;
-
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() => {
-                  setMethod(
-                    value
-                  );
-
-                  void trackEvent({
-                    event_type:
-                      "payment_method_selected",
-
-                    payment_method:
-                      value,
-
-                    order_number:
-                      orderNumber,
-                  });
-                }}
-                style={{
-                  ...methodButton,
-
-                  borderColor:
-                    selected
-                      ? "#ff45d8"
-                      : "rgba(0,217,255,.28)",
-
-                  background:
-                    selected
-                      ? "linear-gradient(145deg, rgba(255,47,208,.18), rgba(0,217,255,.11))"
-                      : "linear-gradient(145deg, rgba(8,8,12,.96), rgba(14,8,17,.94))",
-
-                  boxShadow:
-                    selected
-                      ? "0 0 18px rgba(255,47,208,.22)"
-                      : "none",
-                }}
-              >
-                <span
-                  style={{
-                    ...methodIcon,
-
-                    color:
-                      selected
-                        ? "#ff75df"
-                        : "#7df9ff",
-
-                    borderColor:
-                      selected
-                        ? "#ff45d8"
-                        : "#00d9ff",
-                  }}
-                >
-                  {icon}
-                </span>
-
-                <span>
-                  {label}
-                </span>
-
-                <span
-                  style={{
-                    ...selectedDot,
-
-                    background:
-                      selected
-                        ? "#00ff99"
-                        : "transparent",
-
-                    borderColor:
-                      selected
-                        ? "#00ff99"
-                        : "#555",
-                  }}
-                />
-              </button>
-            );
-          }
-        )}
+      <div className="payment-method-grid" style={{ ...methodGrid, gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        {methods.map(({ value, label, logo, accent, comingSoon }) => {
+          const selected = method === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => {
+                setMethod(value);
+                void trackEvent({
+                  event_type: "payment_method_selected",
+                  payment_method: value,
+                  order_number: orderNumber,
+                });
+              }}
+              style={{
+                ...methodButton,
+                minHeight: 116,
+                borderColor: selected ? accent : "rgba(255,255,255,.3)",
+                borderWidth: selected ? 2 : 1,
+                background: selected ? `linear-gradient(145deg, ${accent}20, #0b0d11)` : "#0b0d11",
+                boxShadow: selected ? `0 0 13px ${accent}55` : "none",
+                color: "#ffffff",
+              }}
+            >
+              {logo ? (
+                <img src={logo} alt={`${label} logo`} style={{
+                  width: "100%", maxWidth: 115, height: 40,
+                  objectFit: "contain", display: "block",
+                }} />
+              ) : (
+                <span aria-hidden="true" style={{ fontSize: 27, lineHeight: "40px", color: accent }}>▤</span>
+              )}
+              <span style={{ color: "#ffffff", fontSize: 14, lineHeight: 1.2, textAlign: "center" }}>{label}</span>
+              {comingSoon && <span style={{ fontSize: 10, color: "#ffffff", opacity: .9 }}>Coming Soon</span>}
+              <span style={{
+                ...selectedDot, background: selected ? accent : "transparent",
+                borderColor: selected ? accent : "#707070",
+              }} />
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,24 +1,11 @@
-import type {
-  PricingResult,
-  PricingSnapshot,
-  ShippingMethod,
-} from "../pricing/types";
+import type { PricingResult, PricingSnapshot, ShippingMethod } from "../pricing/types";
 
 export type PaymentMethod =
-  | "cashapp"
-  | "venmo"
-  | "zelle"
-  | "crypto";
+  | "cashapp" | "venmo" | "zelle" | "crypto" | "credit_card" | "debit_card";
 
 export type PendingCustomer = {
-  organization: string;
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  state: string;
-  zip: string;
+  organization: string; name: string; email: string; phone: string;
+  address: string; city: string; state: string; zip: string;
 };
 
 export type PendingCartItem = {
@@ -26,9 +13,7 @@ export type PendingCartItem = {
   slug: string;
   name: string;
   dosage: string;
-  purchaseType:
-    | "single"
-    | "kit";
+  purchaseType: "single" | "kit";
   price: number;
   regularPrice?: number;
   salePrice?: number;
@@ -43,131 +28,51 @@ export type PendingCartItem = {
 
 export type PendingOrder = {
   id: string;
-  userId:
-    | string
-    | null;
+  userId: string | null;
   orderNumber: string;
-
-  customer:
-    PendingCustomer;
-
-  items:
-    PendingCartItem[];
-
-  /*
-   * Explicit customer consent for transactional SMS messages.
-   *
-   * This is optional for backwards compatibility with pending
-   * orders created before SMS consent was added to checkout.
-   *
-   * Only a strict `true` value should be treated as consent.
-   */
-  smsConsent?:
-    boolean;
-
+  customer: PendingCustomer;
+  items: PendingCartItem[];
+  /** Only strict true constitutes consent; older orders may omit this field. */
+  smsConsent?: boolean;
   pricingInput?: {
-    items: {
-      productOptionId?: string;
-      quantity: number;
-    }[];
-
-    promoCode?:
-      | string
-      | null;
-
-    rewardPointsRequested?:
-      number;
-
-    shippingMethod?:
-      ShippingMethod;
-
+    items: { productOptionId?: string; quantity: number }[];
+    promoCode?: string | null;
+    rewardPointsRequested?: number;
+    shippingMethod?: ShippingMethod;
     shippingAddress: {
-      countryCode: string;
-      stateCode: string;
-      postalCode: string;
-      city?: string;
-      county?: string;
+      countryCode: string; stateCode: string; postalCode: string;
+      city?: string; county?: string;
     };
   };
-
-  pricing?:
-    PricingResult;
-
-  pricingSnapshot?:
-    PricingSnapshot;
-
-  shippingMethod?:
-    ShippingMethod;
-
-  shippingMethodLabel?:
-    string;
-
-  paymentMethod?:
-    PaymentMethod;
-
+  pricing?: PricingResult;
+  pricingSnapshot?: PricingSnapshot;
+  shippingMethod?: ShippingMethod;
+  shippingMethodLabel?: string;
+  paymentMethod?: PaymentMethod;
   subtotal: number;
   shipping: number;
-
   salesTax?: number;
-
-  rewardPointsUsed?:
-    number;
-
-  rewardDiscount?:
-    number;
-
-  promoCode?:
-    | string
-    | null;
-
-  promoSource?:
-    | string
-    | null;
-
-  promoDiscountAllowed?:
-    boolean;
-
-  promoDiscountType?:
-    | string
-    | null;
-
-  promoDiscountValue?:
-    number;
-
-  promoDiscount?:
-    number;
-
-  totalDiscount?:
-    number;
-
+  rewardPointsUsed?: number;
+  rewardDiscount?: number;
+  promoCode?: string | null;
+  promoSource?: string | null;
+  promoDiscountAllowed?: boolean;
+  promoDiscountType?: string | null;
+  promoDiscountValue?: number;
+  promoDiscount?: number;
+  totalDiscount?: number;
   total: number;
-
-  hasLifetimeFreeShipping?:
-    boolean;
-
+  hasLifetimeFreeShipping?: boolean;
   createdAt: string;
-
-  confirmed?:
-    boolean;
+  confirmed?: boolean;
 };
-
 export type CustomerProfileRow = {
-  reward_points:
-    number | null;
-
-  lifetime_spend:
-    number | null;
+  reward_points: number | null;
+  lifetime_spend: number | null;
 };
-
 export type SupabaseErrorDetails = {
-  message?: string;
-  details?: string;
-  hint?: string;
-  code?: string;
+  message?: string; details?: string; hint?: string; code?: string;
 };
-
 export type InsertedOrderItem = {
-  id: string;
-  product_option_id:
-    string;
+  id: string; product_option_id: string;
 };

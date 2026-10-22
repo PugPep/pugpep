@@ -30,26 +30,57 @@ export function ZellePayment({
     <div style={zelleWrap}>
       <div style={zelleHeader}>
         <div>
-          <p style={zelleEyebrow}>
+          <p
+            style={{
+              ...zelleEyebrow,
+              color: "#B86CFF",
+            }}
+          >
             ZELLE PAYMENT
           </p>
 
-          <h2 style={zelleTitle}>
+          <h2
+            style={{
+              ...zelleTitle,
+              color: "#B86CFF",
+            }}
+          >
             Scan to Pay PugPep
           </h2>
 
-          <p style={paymentMessage}>
+          <p
+            style={{
+              ...paymentMessage,
+              color: "#FFFFFF",
+            }}
+          >
             Use your bank&apos;s Zelle feature to scan the QR code below.
             Verify that the recipient displays as PUGPEP LLC before sending.
           </p>
         </div>
 
-        <div style={zelleAmountBox}>
-          <span style={zelleAmountLabel}>
+        <div
+          style={{
+            ...zelleAmountBox,
+            border: "1px solid rgba(184,108,255,.55)",
+            background: "rgba(184,108,255,.08)",
+          }}
+        >
+          <span
+            style={{
+              ...zelleAmountLabel,
+              color: "#FFFFFF",
+            }}
+          >
             AMOUNT DUE
           </span>
 
-          <strong style={zelleAmount}>
+          <strong
+            style={{
+              ...zelleAmount,
+              color: "#B86CFF",
+            }}
+          >
             {money(amount)}
           </strong>
         </div>
@@ -73,21 +104,33 @@ export function ZellePayment({
         </div>
       </div>
 
-      <div style={zelleNotice}>
-        <strong style={{ color: "#ffffff" }}>
+      <div
+        style={{
+          ...zelleNotice,
+          color: "#FFFFFF",
+          border: "1px solid rgba(184,108,255,.5)",
+          background: "rgba(184,108,255,.09)",
+        }}
+      >
+        <strong style={{ color: "#FFFFFF" }}>
           Before sending:
         </strong>{" "}
         confirm the recipient name is{" "}
-        <strong style={{ color: "#b86cff" }}>
+        <strong style={{ color: "#B86CFF" }}>
           PUGPEP LLC
         </strong>{" "}
         and send exactly{" "}
-        <strong style={{ color: "#00ff99" }}>
+        <strong style={{ color: "#B86CFF" }}>
           {money(amount)}
         </strong>.
       </div>
 
-      <p style={zelleMemoText}>
+      <p
+        style={{
+          ...zelleMemoText,
+          color: "#FFFFFF",
+        }}
+      >
         If your bank provides a memo or note field, include only your first
         and last name. Do not include product names or order details.
       </p>
