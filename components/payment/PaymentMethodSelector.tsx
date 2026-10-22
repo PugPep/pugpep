@@ -20,8 +20,8 @@ const methods: MethodOption[] = [
   { value: "venmo", label: "Venmo", logo: "/venmo.png", accent: "#00bfff" },
   { value: "zelle", label: "Zelle", logo: "/zelle.png", accent: "#b86cff" },
   { value: "crypto", label: "Crypto", logo: "/aurpay.png", accent: "#f7931a" },
-  { value: "credit_card", label: "Credit Card", accent: "#7df9ff", comingSoon: true },
-  { value: "debit_card", label: "Debit Card", accent: "#7df9ff", comingSoon: true },
+  { value: "credit_card", label: "Credit Card", logo: "/credit.png", accent: "#d4af37", comingSoon: true },
+  { value: "debit_card", label: "Debit Card", logo: "/debit.png", accent: "#20c997", comingSoon: true },
 ];
 
 export function PaymentMethodSelector({ method, setMethod, orderNumber }: {
