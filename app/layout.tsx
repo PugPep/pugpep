@@ -500,7 +500,13 @@ export default function RootLayout({
 
                 >
 
-                  <span style={logoPug}>PUG</span><span style={logoPep}>PEP</span>
+                  <img
+                    src="/pugpep-header-logo.png"
+                    alt="PugPep"
+                    width={220}
+                    height={45}
+                    style={headerLogoImage}
+                  />
 
                 </Link>
 
@@ -1217,51 +1223,19 @@ const navStyle = {
 };
 
 const logoText = {
-
   textDecoration: "none",
-
-  fontSize: 30,
-
-  fontWeight: 950,
-
-  letterSpacing: 1,
-
   display: "inline-flex",
-
-  alignItems: "baseline",
-
-  whiteSpace: "nowrap" as const,
-
-  transform: "skewX(-8deg)",
-
-  fontStyle: "italic",
-
-  lineHeight: 1.1,
-
+  alignItems: "center",
+  flexShrink: 0,
+  lineHeight: 1,
 };
 
-// Softer, two-tone biotech wordmark inspired by the PUGPEP lab sign.
-// Keep the glow restrained so the text stays sharp and legible.
-const logoPug = {
-  background: "linear-gradient(180deg, #82D8F9 0%, #39AFE9 43%, #238BDB 100%)",
-  WebkitBackgroundClip: "text",
-  backgroundClip: "text",
-  WebkitTextFillColor: "transparent",
-  WebkitTextStroke: "0.35px rgba(119,218,255,.52)",
-  fontWeight: 950,
-  letterSpacing: 1,
-  textShadow: "0 0 7px rgba(41,168,242,.20)",
-};
-
-const logoPep = {
-  background: "linear-gradient(180deg, #FFACD6 0%, #F478B8 43%, #DA4C9D 100%)",
-  WebkitBackgroundClip: "text",
-  backgroundClip: "text",
-  WebkitTextFillColor: "transparent",
-  WebkitTextStroke: "0.35px rgba(255,166,213,.48)",
-  fontWeight: 950,
-  letterSpacing: 1,
-  textShadow: "0 0 7px rgba(242,91,173,.19)",
+const headerLogoImage = {
+  display: "block",
+  width: "clamp(145px, 17vw, 220px)",
+  height: "auto",
+  maxHeight: 48,
+  objectFit: "contain" as const,
 };
 
 const navLinks = {
