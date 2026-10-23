@@ -195,6 +195,13 @@ export default function RootLayout({
 
           }
 
+          .tickerTrack > span:nth-child(odd) {
+            color: #168EDB;
+          }
+          .tickerTrack > span:nth-child(even) {
+            color: #D83B90;
+          }
+
           .siteHeaderShell {
 
             transform: translateY(-100%);
@@ -493,15 +500,7 @@ export default function RootLayout({
 
                 >
 
-                  <span
-
-                    style={logoGradient}
-
-                  >
-
-                    PUGPEP
-
-                  </span>
+                  <span style={logoPug}>PUG</span><span style={logoPep}>PEP</span>
 
                 </Link>
 
@@ -1221,34 +1220,48 @@ const logoText = {
 
   textDecoration: "none",
 
-  fontSize: 28,
+  fontSize: 30,
 
-  fontWeight: 900,
+  fontWeight: 950,
 
-  letterSpacing: 2,
+  letterSpacing: 1,
+
+  display: "inline-flex",
+
+  alignItems: "baseline",
+
+  whiteSpace: "nowrap" as const,
+
+  transform: "skewX(-8deg)",
+
+  fontStyle: "italic",
+
+  lineHeight: 1.1,
 
 };
 
-const logoGradient = {
+// Softer, two-tone biotech wordmark inspired by the PUGPEP lab sign.
+// Keep the glow restrained so the text stays sharp and legible.
+const logoPug = {
+  background: "linear-gradient(180deg, #82D8F9 0%, #39AFE9 43%, #238BDB 100%)",
+  WebkitBackgroundClip: "text",
+  backgroundClip: "text",
+  WebkitTextFillColor: "transparent",
+  WebkitTextStroke: "0.35px rgba(119,218,255,.52)",
+  fontWeight: 950,
+  letterSpacing: 1,
+  textShadow: "0 0 7px rgba(41,168,242,.20)",
+};
 
-  background:
-
-    "linear-gradient(90deg, #00d9ff, #ff45d8, #7cff00)",
-
-  WebkitBackgroundClip:
-
-    "text",
-
-  color: "transparent",
-
-  fontWeight: 900,
-
-  letterSpacing: 2,
-
-  textShadow:
-
-    "0 0 18px rgba(255,45,210,.35)",
-
+const logoPep = {
+  background: "linear-gradient(180deg, #FFACD6 0%, #F478B8 43%, #DA4C9D 100%)",
+  WebkitBackgroundClip: "text",
+  backgroundClip: "text",
+  WebkitTextFillColor: "transparent",
+  WebkitTextStroke: "0.35px rgba(255,166,213,.48)",
+  fontWeight: 950,
+  letterSpacing: 1,
+  textShadow: "0 0 7px rgba(242,91,173,.19)",
 };
 
 const navLinks = {
@@ -1405,11 +1418,11 @@ const topTicker = {
 
   borderBottom:
 
-    "1px solid rgba(255,255,255,.25)",
+    "1px solid rgba(41,168,242,.27)",
 
   background:
 
-    "linear-gradient(90deg, #ff2fd0, #00d9ff, #7cff00, #ff2fd0)",
+    "#ffffff",
 
   color: "#000000",
 
