@@ -150,8 +150,13 @@ function catalogCampaignResult(data: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? value as Record<string, unknown> : null;
 }
 
-function catalogSalePercent(option: CatalogPricedOption | undefined) {
-  const regular = Number(option?.price);
+function catalogSalePercent(option: CatalogPricedOption | undefined, matchingSingle?: CatalogPricedOption) {
+  // A kit's retail comparison is the price of ten matching single vials.
+  // Its stored option.price already includes the standard kit savings.
+  const tenSingleRetail = matchingSingle && Number.isFinite(Number(matchingSingle.price))
+    ? Math.round(Number(matchingSingle.price) * 1000) / 100 : 0;
+  const regular = option?.purchase_type === "kit" && tenSingleRetail > 0
+    ? tenSingleRetail : Number(option?.price);
   const current = option?.effectivePrice;
   return current != null && Number.isFinite(regular) && regular > 0 && current < regular
     ? Number(((1 - current / regular) * 100).toFixed(2)) : 0;
@@ -180,7 +185,8 @@ function catalogQuantityQuote(option: CatalogPricedOption | undefined, requested
   const regularUnit = Math.round(Number(option.price) * 100) / 100;
   const tenSingleValue = option.purchase_type === "kit" && matchingSingle && Number.isFinite(Number(matchingSingle.price))
     ? Math.round(Number(matchingSingle.price) * 100) / 10 : 0;
-  const compareWithSingles = option.purchase_type === "kit" && unitPrice >= regularUnit && tenSingleValue > regularUnit;
+  // Always show the full ten-single retail value for a kit, including during a campaign.
+  const compareWithSingles = option.purchase_type === "kit" && tenSingleValue > 0;
   const originalUnit = compareWithSingles ? tenSingleValue : regularUnit;
   const originalTotal = Math.round(originalUnit * quantity * 100) / 100;
   const singleComparisonTotal = Math.round(tenSingleValue * quantity * 100) / 100;
@@ -1086,7 +1092,7 @@ export default function HomePage() {
     const kitSelected = selectedOption?.purchase_type === "kit";
     const quantity = cardQuantities[product.slug] ?? 1;
     const pending = Boolean(cardBusy[product.slug]);
-    const kitSalePercent = catalogSalePercent(selectedStrength?.kit);
+    const kitSalePercent = catalogSalePercent(selectedStrength?.kit, selectedStrength?.single);
     const singleSalePercent = catalogSalePercent(selectedStrength?.single);
     const offerPercent = Math.max(singleSalePercent, kitSalePercent);
     const offerBadge = kitSalePercent > singleSalePercent

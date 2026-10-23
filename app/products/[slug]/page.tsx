@@ -1586,9 +1586,9 @@ export default function ProductDetailPage() {
                         : 0;
 
                       const original =
-                        saleSaving > 0
-                          ? regular
-                          : kitSavings?.tenSingleValue || regular;
+                        isKit && kitSavings?.tenSingleValue
+                          ? kitSavings.tenSingleValue
+                          : regular;
 
                       const campaign =
                         getEffectiveCampaign(selectedOption);
@@ -1706,9 +1706,9 @@ export default function ProductDetailPage() {
                                   title={
                                     bundleQuote
                                       ? "Original bundle total"
-                                      : saleSaving > 0
-                                        ? "Original total"
-                                        : `${quantity * 10} single vials at regular price`
+                                      : isKit && kitSavings
+                                        ? `${quantity * 10} single vials at regular price`
+                                        : "Original total"
                                   }
                                   style={{
                                     color: "#a8afbf",
@@ -1730,8 +1730,8 @@ export default function ProductDetailPage() {
                                   }}
                                 >
                                   {`${displayPercent}% ${
-                                    isKit && saleSaving === 0
-                                      ? "saved vs singles"
+                                    isKit && kitSavings
+                                      ? "OFF vs singles"
                                       : "OFF"
                                   } · Save $${displaySavings.toFixed(2)}`}
                                 </span>
