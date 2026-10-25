@@ -76,14 +76,19 @@ function normalizeCartItem(item: Partial<CartItem>): CartItem {
     wasOnSale: Boolean(item.wasOnSale), salePercent: safeNumber(item.salePercent), quantity: count(item.quantity),
     status: text(item.status), cost: safeNumber(item.cost),
     maxAvailable: item.maxAvailable == null ? undefined : Math.floor(safeNumber(item.maxAvailable)),
-    basePrice: money(safeNumber(item.basePrice, price)), hasCampaign: Boolean(item.hasCampaign ?? (item.wasOnSale && price >= safeNumber(item.regularPrice, price))), bundleTiers: normalizeTiers(item.bundleTiers),
+    basePrice: money(safeNumber(item.basePrice, price)), hasCampaign: Boolean(item.hasCampaign), bundleTiers: normalizeTiers(item.bundleTiers),
     singleOption: normalizeVariant(item.singleOption), kitOption: normalizeVariant(item.kitOption), variantsLoadedAt: safeNumber(item.variantsLoadedAt),
   });
 }
 function applyDisplayPrice(item: CartItem): CartItem {
   const base = money(safeNumber(item.basePrice, item.price));
-  const tiers = item.purchaseType === "single" && item.quantity < 10 && !item.hasCampaign && base >= item.regularPrice
-    ? normalizeTiers(item.bundleTiers) : [];
+  // Standard kit savings are already included in the stored kit base price.
+  // Quantity discounts apply on top, but never on an active campaign or manual sale.
+  const tiers = !item.hasCampaign && base >= item.regularPrice
+    && (item.purchaseType === "kit" || item.quantity < 10)
+    ? (item.purchaseType === "kit"
+      ? [{ quantity: 3, discount: 2 }, { quantity: 5, discount: 4 }, { quantity: 8, discount: 7 }]
+      : normalizeTiers(item.bundleTiers)) : [];
   const tier = tiers.filter((candidate) => item.quantity >= candidate.quantity).at(-1);
   const price = money(base * (1 - (tier?.discount || 0) / 100));
   return { ...item, price, basePrice: base, salePrice: price, wasOnSale: price < item.regularPrice || Boolean(item.hasCampaign),
@@ -179,6 +184,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       if (cancelled || controller.signal.aborted) return;
       const singleOption = variants.find((variant) => variant.purchaseType === "single");
       const kitOption = variants.find((variant) => variant.purchaseType === "kit");
+      if (kitOption && !kitOption.bundleTiers?.length && singleOption?.bundleTiers?.length) {
+        kitOption.bundleTiers = [...singleOption.bundleTiers];
+      }
       setCart((previous) => consolidate(previous.map((current) => {
         if (current.slug !== item.slug || dosageKey(current.dosage) !== dosageKey(item.dosage)) return current;
         const next = { ...current, singleOption, kitOption, variantsLoadedAt: Date.now() };

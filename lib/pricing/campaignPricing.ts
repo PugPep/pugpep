@@ -603,14 +603,22 @@ function buildPricedLine({
     number | null = null;
 
   if (
-    campaignPrice.purchaseType === "single" &&
-    quantity < 10 &&
+    (campaignPrice.purchaseType === "kit" || quantity < 10) &&
     !campaignPrice.hasCampaign &&
     !manualSaleAvailable &&
-    optionMetadata.bundle_discount_enabled !==
-      false
+    (campaignPrice.purchaseType === "kit" ||
+      optionMetadata.bundle_discount_enabled !== false)
   ) {
-    const tiers = [
+    // Kits receive the same 3 / 5 / 8 quantity tiers as singles.
+    // These are additional discounts on the stored (already 15%-reduced)
+    // kit option price. The quantity is a count of kits, not vials.
+    const tiers = campaignPrice.purchaseType === "kit"
+      ? [
+          { quantity: 3, percent: 2 },
+          { quantity: 5, percent: 4 },
+          { quantity: 8, percent: 7 },
+        ]
+      : [
       {
         quantity: Math.max(
           1,

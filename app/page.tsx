@@ -162,15 +162,41 @@ function catalogSalePercent(option: CatalogPricedOption | undefined, matchingSin
     ? Number(((1 - current / regular) * 100).toFixed(2)) : 0;
 }
 
+// Current Offers is exclusively for database-confirmed campaigns on the
+// EXACT selected product option (dosage + single/kit). Standard kit savings,
+// manually calculated discounts, and cached old prices cannot qualify.
+function catalogActivePromotion(option?: CatalogPricedOption): boolean {
+  const regular = Number(option?.price);
+  const effective = option?.effectivePrice;
+  return option?.hasCampaign === true && effective != null
+    && Number.isFinite(regular) && regular > 0
+    && effective < regular - 0.005;
+}
+
+function catalogPromotedChoice(choice: CatalogStrengthChoice): boolean {
+  return catalogActivePromotion(choice.single) || catalogActivePromotion(choice.kit);
+}
+
 function catalogBundleTiers(option: CatalogPricedOption | undefined, quantity: number) {
-  if (!option || option.effectivePrice == null || option.purchase_type !== "single"
-    || quantity >= 10 || option.bundle_discount_enabled === false || option.hasCampaign
-    || (option.sale_active && Number(option.sale_percent) > 0) || catalogSalePercent(option) > 0) return [];
+  // Bundle tiers are configured on each product option, including kit options.
+  // The normal built-in kit savings are not a campaign and do not disable tiers.
+  if (!option || option.effectivePrice == null || (option.purchase_type !== "kit" && option.bundle_discount_enabled === false)
+    || option.hasCampaign || (option.sale_active && Number(option.sale_percent) > 0)
+    || (option.purchase_type === "single" && catalogSalePercent(option) > 0)) return [];
+  // A kit is already discounted versus ten singles. Bundle & Save provides
+  // ADDITIONAL quantity savings based on kits purchased, not vial count.
+  // The three tiers mirror PugPep's single-vial Bundle & Save program.
+  if (option.purchase_type === "kit") return [
+    { quantity: 3, discount: 2 },
+    { quantity: 5, discount: 4 },
+    { quantity: 8, discount: 7 },
+  ];
   return [
     { quantity: Number(option.bundle_qty_1), discount: Number(option.bundle_discount_1) },
     { quantity: Number(option.bundle_qty_2), discount: Number(option.bundle_discount_2) },
     { quantity: Number(option.bundle_qty_3), discount: Number(option.bundle_discount_3) },
-  ].filter((tier) => Number.isInteger(tier.quantity) && tier.quantity > 0 && tier.quantity < 10
+  ].filter((tier) => Number.isInteger(tier.quantity) && tier.quantity > 0
+    && (option.purchase_type === "kit" || tier.quantity < 10)
     && Number.isFinite(tier.discount) && tier.discount > 0 && tier.discount <= 100)
     .sort((a, b) => a.quantity - b.quantity);
 }
@@ -494,8 +520,11 @@ export default function HomePage() {
         const cached = priceCache[option.id];
         if (cached && Date.now() - cached.savedAt < CARD_CACHE_TTL && cached.signature === optionPriceSignature(option)
           && Number.isFinite(cached.price) && cached.price >= 0) {
-          prices.set(option.id, cached.price);
-          if (cached.hasCampaign) campaignOptions.add(option.id);
+          // Price cache improves initial rendering, but an old campaign
+          // must NEVER be shown as currently active until RPC revalidates it.
+          const regular = Number(option.price);
+          const manualPercent = Math.min(100, Math.max(0, Number(option.sale_percent) || 0));
+          prices.set(option.id, Math.round((option.sale_active ? regular * (1 - manualPercent / 100) : regular) * 100) / 100);
         }
       }
       const documentsBySlug = new Map<string, (typeof documents)[number][]>();
@@ -577,7 +606,8 @@ export default function HomePage() {
       async function priceWorker() {
         while (cursor < options.length && !cancelled) {
           const option = options[cursor++];
-          if (prices.has(option.id)) continue;
+          // Always revalidate campaign membership, including cached options.
+          // Otherwise expired kit campaigns can remain in Current Offers.
           const regular = Number(option.price);
           if (!Number.isFinite(regular) || regular < 0) continue;
           const percent = Math.min(100, Math.max(0, Number(option.sale_percent) || 0));
@@ -597,6 +627,7 @@ export default function HomePage() {
               price = Math.min(price, campaignPrice);
             }
           } catch (error) {
+            campaignOptions.delete(option.id);
             failedPrices.add(option.id);
             console.warn("Catalog campaign pricing unavailable:", error);
           }
@@ -697,14 +728,12 @@ export default function HomePage() {
     })
     .slice(0, 6);
 
+  // One sale card per product, showing only strengths that have a genuine
+  // option-level promotion. Ordinary kit savings do not qualify.
   const saleProducts = products
-    .filter(
-      (product) =>
-        !product.is_coming_soon &&
-        Boolean(saleMap[product.slug]?.isOnSale)
-    )
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .slice(0, 6);
+    .filter((product) => !product.is_coming_soon &&
+      (catalogDetails[product.slug]?.choices || []).some(catalogPromotedChoice))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const primaryCampaign = getPrimaryStorefrontCampaign(saleMap);
 
@@ -813,6 +842,16 @@ export default function HomePage() {
       .replace(/\s+/g, " ");
   }
 
+  function canonicalProductCategory(value?: string | null) {
+    const category = normalizeProductCategory(value).replace(/\s+/g, "-");
+    if (["research-sprays", "research-spray", "sprays", "spray", "nasal-sprays", "nasal-spray"].includes(category)) return "research-sprays";
+    if (["laboratory-supplies", "laboratory-materials", "laboratory-material", "lab-materials", "lab-material", "lab-supplies", "lab-supply", "supplies"].includes(category)) return "laboratory-supplies";
+    if (["individual-peptides", "individual-peptide", "peptides", "peptide", "research-peptides", "research-peptide"].includes(category)) return "individual-peptides";
+    if (["peptide-blends", "peptide-blend", "blends", "blend"].includes(category)) return "peptide-blends";
+    if (["biochemical-compounds", "biochemical-compound", "biochemicals"].includes(category)) return "biochemical-compounds";
+    return category;
+  }
+
   function isResearchSprayCategory(value?: string | null) {
     const category = normalizeProductCategory(value);
 
@@ -905,8 +944,7 @@ export default function HomePage() {
   const visibleProducts = products
     .filter((product) => {
       const query = search.trim().toLowerCase();
-      const category = normalizeProductCategory(product.category);
-      const sale = saleMap[product.slug];
+      const category = canonicalProductCategory(product.category);
 
       const matchesSearch =
         !query ||
@@ -920,8 +958,10 @@ export default function HomePage() {
         isLabMaterialCategory(product.category);
 
       const matchesFilter = filter === "all"
-        || (filter === "sale" && Boolean(sale?.isOnSale))
+        || (filter === "sale" && (catalogDetails[product.slug]?.choices || []).some(catalogPromotedChoice))
         || (filter === "new" && isProductNew(product))
+        || (filter === "research-sprays" && isSpray)
+        || (filter === "laboratory-supplies" && isLabMaterial)
         || category === filter;
 
       return matchesSearch && matchesFilter;
@@ -941,7 +981,7 @@ export default function HomePage() {
     });
 
   const saleCount = products.filter(
-    (product) => saleMap[product.slug]?.isOnSale
+    (product) => (catalogDetails[product.slug]?.choices || []).some(catalogPromotedChoice)
   ).length;
 
 
@@ -951,10 +991,10 @@ export default function HomePage() {
       key: family.value,
       eyebrow: "RESEARCH CATALOG",
       title: family.label,
-      products: visibleProducts.filter((product) => normalizeProductCategory(product.category) === family.value),
+      products: visibleProducts.filter((product) => canonicalProductCategory(product.category) === family.value),
     })),
     { key: "other", eyebrow: "RESEARCH CATALOG", title: "Other Research Products",
-      products: visibleProducts.filter((product) => !knownFamilyKeys.has(normalizeProductCategory(product.category))) },
+      products: visibleProducts.filter((product) => !knownFamilyKeys.has(canonicalProductCategory(product.category))) },
   ].filter((group) => group.products.length > 0);
 
   function viewAllProducts(type = "all", family = "all") {
@@ -963,10 +1003,13 @@ export default function HomePage() {
     document.getElementById("catalog")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function changeCatalogQuantity(product: Product, requestedQuantity: number) {
+  function changeCatalogQuantity(product: Product, requestedQuantity: number, saleOnly = false) {
     const details = catalogDetails[product.slug];
-    const strength = selectedCatalogStrength(details?.choices || [], selectedCardDosages[product.slug]);
-    const currentOption = catalogPurchaseOption(strength, cardKitSelections[product.slug]);
+    const choices = saleOnly ? (details?.choices || []).filter(catalogPromotedChoice) : (details?.choices || []);
+    const strength = selectedCatalogStrength(choices, selectedCardDosages[product.slug]);
+    const requestedOption = catalogPurchaseOption(strength, cardKitSelections[product.slug]);
+    const currentOption = saleOnly && !catalogActivePromotion(requestedOption)
+      ? (catalogActivePromotion(strength?.single) ? strength?.single : strength?.kit) : requestedOption;
     if (currentOption?.purchase_type === "kit" && requestedQuantity < 1 && strength?.single) {
       setCardKitSelections((current) => ({ ...current, [product.slug]: false }));
       setCardQuantities((current) => ({ ...current, [product.slug]: 9 }));
@@ -986,10 +1029,13 @@ export default function HomePage() {
     setCardMessages((current) => ({ ...current, [product.slug]: "" }));
   }
 
-  function changeCatalogVialInput(product: Product, requestedVials: number) {
+  function changeCatalogVialInput(product: Product, requestedVials: number, saleOnly = false) {
     const details = catalogDetails[product.slug];
-    const strength = selectedCatalogStrength(details?.choices || [], selectedCardDosages[product.slug]);
-    const currentOption = catalogPurchaseOption(strength, cardKitSelections[product.slug]);
+    const choices = saleOnly ? (details?.choices || []).filter(catalogPromotedChoice) : (details?.choices || []);
+    const strength = selectedCatalogStrength(choices, selectedCardDosages[product.slug]);
+    const requestedOption = catalogPurchaseOption(strength, cardKitSelections[product.slug]);
+    const currentOption = saleOnly && !catalogActivePromotion(requestedOption)
+      ? (catalogActivePromotion(strength?.single) ? strength?.single : strength?.kit) : requestedOption;
     const vials = cardQuantity(requestedVials);
     if (currentOption?.purchase_type === "kit" && vials < 10 && strength?.single) {
       setCardKitSelections((current) => ({ ...current, [product.slug]: false }));
@@ -997,7 +1043,7 @@ export default function HomePage() {
       setCardMessages((current) => ({ ...current, [product.slug]: "" }));
       return;
     }
-    changeCatalogQuantity(product, currentOption?.purchase_type === "kit" ? Math.max(1, Math.floor(vials / 10)) : vials);
+    changeCatalogQuantity(product, currentOption?.purchase_type === "kit" ? Math.max(1, Math.floor(vials / 10)) : vials, saleOnly);
   }
 
   function resetCardMessage(slug: string) {
@@ -1050,12 +1096,22 @@ export default function HomePage() {
       const campaign = catalogCampaignResult(data);
       const campaignPrice = campaign?.has_campaign ? Number(campaign.sale_unit_price) : regular;
       if (!Number.isFinite(campaignPrice) || campaignPrice < 0) throw new Error("Unable to confirm the current price.");
-      const price = Math.round(Math.min(regular, manual, campaignPrice) * 100) / 100;
+      const basePrice = Math.round(Math.min(regular, manual, campaignPrice) * 100) / 100;
+      const selectedForBundle: CatalogPricedOption = {
+        ...option, effectivePrice: basePrice, hasCampaign: Boolean(campaign?.has_campaign),
+      };
+      const eligibleBundleTier = catalogBundleTiers(selectedForBundle, quantity)
+        .filter((tier) => quantity >= tier.quantity).at(-1);
+      // CartContext calculates quantity discounts as the single source of truth.
+      // Send the unbundled option price to avoid double applying Bundle & Save.
+      const price = basePrice;
       const kitPresale = option.purchase_type === "kit" && quantity > maxKits;
       addToCart({
         productOptionId: option.id,
         name: product.name, slug: product.slug, image: product.image, dosage: option.dosage,
-        price, regularPrice: regular, salePrice: price,
+        price, basePrice, hasCampaign: Boolean(campaign?.has_campaign),
+        bundleTiers: catalogBundleTiers(selectedForBundle, quantity),
+        regularPrice: regular, salePrice: price,
         wasOnSale: price < regular || Boolean(campaign?.has_campaign),
         salePercent: regular > 0 ? Number((((regular - price) / regular) * 100).toFixed(2)) : 0,
         cost: Number(option.cost) || 0,
@@ -1068,9 +1124,9 @@ export default function HomePage() {
         if (!details) return current;
         return { ...current, [product.slug]: { ...details, choices: details.choices.map((choice) => ({
           ...choice,
-          price: choice.optionId === option.id ? price : choice.price,
-          single: choice.single?.id === option.id ? { ...option, effectivePrice: price, hasCampaign: Boolean(campaign?.has_campaign) } : choice.single,
-          kit: choice.kit?.id === option.id ? { ...option, effectivePrice: price, hasCampaign: Boolean(campaign?.has_campaign) } : choice.kit,
+          price: choice.optionId === option.id ? basePrice : choice.price,
+          single: choice.single?.id === option.id ? { ...option, effectivePrice: basePrice, hasCampaign: Boolean(campaign?.has_campaign) } : choice.single,
+          kit: choice.kit?.id === option.id ? { ...option, effectivePrice: basePrice, hasCampaign: Boolean(campaign?.has_campaign) } : choice.kit,
         })) } };
       });
       setCardMessages((current) => ({ ...current, [product.slug]: kitPresale
@@ -1085,25 +1141,34 @@ export default function HomePage() {
     }
   }
 
-  function renderCatalogProduct(product: Product) {
+  function renderCatalogProduct(product: Product, saleOnly = false) {
     const detail = catalogDetails[product.slug];
-    const selectedStrength = selectedCatalogStrength(detail?.choices || [], selectedCardDosages[product.slug]);
-    const selectedOption = catalogPurchaseOption(selectedStrength, cardKitSelections[product.slug]);
+    // A sale shelf shows ONLY strengths with an actual option-level promotion.
+    // Other shelves continue to show every available dosage.
+    const choices = saleOnly
+      ? (detail?.choices || []).filter(catalogPromotedChoice)
+      : (detail?.choices || []);
+    const selectedStrength = selectedCatalogStrength(choices, selectedCardDosages[product.slug]);
+    const requestedOption = catalogPurchaseOption(selectedStrength, cardKitSelections[product.slug]);
+    const selectedOption = saleOnly && !catalogActivePromotion(requestedOption)
+      ? (catalogActivePromotion(selectedStrength?.single) ? selectedStrength?.single
+        : catalogActivePromotion(selectedStrength?.kit) ? selectedStrength?.kit : undefined)
+      : requestedOption;
     const kitSelected = selectedOption?.purchase_type === "kit";
     const quantity = cardQuantities[product.slug] ?? 1;
     const pending = Boolean(cardBusy[product.slug]);
     const kitSalePercent = catalogSalePercent(selectedStrength?.kit, selectedStrength?.single);
     const singleSalePercent = catalogSalePercent(selectedStrength?.single);
-    const offerPercent = Math.max(singleSalePercent, kitSalePercent);
-    const offerBadge = kitSalePercent > singleSalePercent
-      ? `Kits ${kitSalePercent}% OFF`
-      : singleSalePercent > kitSalePercent && selectedStrength?.kit
-        ? `Singles ${singleSalePercent}% OFF` : `${offerPercent}% OFF`;
+    // A badge must describe the selected dosage AND selected purchase type.
+    // Do not call an entire product 15% off just because its regular kit saves 15%.
+    const offerPercent = catalogActivePromotion(selectedOption)
+      ? catalogSalePercent(selectedOption, selectedStrength?.single) : 0;
+    const offerBadge = `${offerPercent}% OFF`;
     const bundleTiers = product.is_coming_soon ? [] : catalogBundleTiers(selectedOption, quantity);
     const activeBundleTier = [...bundleTiers].reverse().find((tier) => quantity >= tier.quantity);
     const quantityQuote = catalogQuantityQuote(selectedOption, quantity, selectedStrength?.single);
     const displayedVials = kitSelected ? quantity * 10 : quantity;
-    const familyLabel = productFamilies.find((family) => family.value === normalizeProductCategory(product.category))?.label;
+    const familyLabel = productFamilies.find((family) => family.value === canonicalProductCategory(product.category))?.label;
     const productPath = `/products/${product.slug}`;
     const selectedCoaUrl =
       (selectedStrength?.key
@@ -1139,7 +1204,7 @@ export default function HomePage() {
               gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
             }}
           >
-            {detail?.choices.length ? detail.choices.map((choice) => (
+            {choices.length ? choices.map((choice) => (
               <button
                 key={choice.key}
                 type="button"
@@ -1148,6 +1213,9 @@ export default function HomePage() {
                 disabled={product.is_coming_soon || pending}
                 onClick={() => {
                   setSelectedCardDosages((current) => ({ ...current, [product.slug]: choice.key }));
+                  if (saleOnly) setCardKitSelections((current) => ({
+                    ...current, [product.slug]: !catalogActivePromotion(choice.single) && catalogActivePromotion(choice.kit)
+                  }));
                   resetCardMessage(product.slug);
                 }}
               >
@@ -1170,8 +1238,14 @@ export default function HomePage() {
               {!product.is_coming_soon && quantityQuote && <div className="pugpep-card-price-caption">
                 Total for {quantity} {kitSelected ? (quantity === 1 ? "kit (10 vials)" : `kits (${quantity * 10} vials)`)
                   : (quantity === 1 ? "single" : "singles")}
-                {quantityQuote.savings > 0 && <span className="pugpep-card-sale-percent"> · {quantityQuote.percent}% {quantityQuote.compareWithSingles ? "saved vs singles" : "OFF"}</span>}
+                {quantityQuote.savings > 0 && (!kitSelected || !activeBundleTier) && <span className="pugpep-card-sale-percent"> · {quantityQuote.percent}% {quantityQuote.compareWithSingles ? "saved vs singles" : "OFF"}</span>}
               </div>}
+              {!product.is_coming_soon && kitSelected && quantityQuote && activeBundleTier && !selectedOption?.hasCampaign && (
+                <div className="pugpep-card-price-caption" aria-label="Separate kit and additional bundle savings">
+                  <span>Standard Kit Savings: 15% off</span>
+                  <span className="pugpep-card-sale-percent"> · Bundle &amp; Save: Additional {activeBundleTier.discount}% off</span>
+                </div>
+              )}
               {!product.is_coming_soon && kitSelected && quantityQuote && !quantityQuote.compareWithSingles
                 && quantityQuote.kitSavings > quantityQuote.savings && <div className="pugpep-card-price-caption">
                   Save ${quantityQuote.kitSavings.toFixed(2)} compared with {quantity * 10} singles
@@ -1182,12 +1256,13 @@ export default function HomePage() {
               <span>{kitSelected ? "Kit" : "Single"}</span>
               {selectedStrength?.kit && <label>
                 <input type="checkbox" checked={kitSelected}
-                  disabled={pending || product.is_coming_soon || !selectedStrength.single}
+                  disabled={pending || product.is_coming_soon || !selectedStrength.single ||
+                    (saleOnly && (!catalogActivePromotion(selectedStrength.kit) || !catalogActivePromotion(selectedStrength.single)))}
                   onChange={(event) => {
                     setCardKitSelections((current) => ({ ...current, [product.slug]: event.target.checked }));
                     resetCardMessage(product.slug);
                   }} />
-                Kit (10){!kitSelected && kitSalePercent > 0 && <span className="pugpep-kit-sale-hint"> · {kitSalePercent}% off</span>}
+                Kit (10){!kitSelected && kitSalePercent > 0 && <span className="pugpep-kit-sale-hint"> · {kitSalePercent}% kit savings</span>}
               </label>}
             </div>}
           <button type="button" className="pugpep-card-cart-button"
@@ -1197,12 +1272,12 @@ export default function HomePage() {
           <div className="pugpep-card-buy-row">
             <div className="pugpep-card-quantity" role="group" aria-label={`Quantity for ${product.name}`}>
               <button type="button" aria-label={`Decrease quantity for ${product.name}`} disabled={(!kitSelected && quantity <= 1) || (kitSelected && quantity <= 1 && !selectedStrength?.single) || pending || product.is_coming_soon}
-                onClick={() => changeCatalogQuantity(product, quantity - 1)}>−</button>
+                onClick={() => changeCatalogQuantity(product, quantity - 1, saleOnly)}>−</button>
               <input type="number" min={1} step={kitSelected ? 10 : 1} value={displayedVials} disabled={pending || product.is_coming_soon}
                 aria-label={`Vial quantity for ${product.name}`}
-                onChange={(event) => changeCatalogVialInput(product, Number(event.target.value))} />
+                onChange={(event) => changeCatalogVialInput(product, Number(event.target.value), saleOnly)} />
               <button type="button" aria-label={`Increase quantity for ${product.name}`} disabled={pending || product.is_coming_soon}
-                onClick={() => changeCatalogQuantity(product, quantity + 1)}>+</button>
+                onClick={() => changeCatalogQuantity(product, quantity + 1, saleOnly)}>+</button>
             </div>
             <button type="button" className="pugpep-add-button"
               disabled={pending || product.is_coming_soon || selectedOption?.effectivePrice == null}
@@ -1218,9 +1293,9 @@ export default function HomePage() {
                 aria-pressed={activeBundleTier?.quantity === tier.quantity}
                 disabled={pending}
                 onClick={() => {
-                  changeCatalogQuantity(product, tier.quantity);
+                  changeCatalogQuantity(product, tier.quantity, saleOnly);
                 }}>
-                {tier.quantity}+ · {tier.discount}% off
+                Buy {tier.quantity} · {tier.discount}% off
               </button>)}
             </div>
 
@@ -1243,9 +1318,9 @@ export default function HomePage() {
         .pugpep-shelf-tools button { border:1px solid #34363e; border-radius:10px; background:#15161d; color:#eee; cursor:pointer; font:inherit; font-size:12px; font-weight:700; padding:10px 13px; min-height:40px; }
         .pugpep-shelf-tools button:disabled { opacity:.3; cursor:default; }
         .pugpep-shelf-tools .pugpep-shelf-arrow { width:40px; padding:8px; font-size:20px; }
-        .pugpep-product-row { display:grid; grid-auto-flow:column; grid-auto-columns:max(270px,calc((100% - 64px) / 4.25)); gap:16px; overflow-x:auto; scroll-snap-type:x proximity; scroll-padding:2px; padding:4px 2px 16px; scrollbar-width:thin; scrollbar-color:#4c505b #13141a; overscroll-behavior-x:contain; }
+        .pugpep-product-row { display:grid; align-items:stretch; grid-auto-flow:column; grid-auto-columns:max(270px,calc((100% - 64px) / 4.25)); gap:16px; overflow-x:auto; scroll-snap-type:x proximity; scroll-padding:2px; padding:4px 2px 16px; scrollbar-width:thin; scrollbar-color:#4c505b #13141a; overscroll-behavior-x:contain; }
         .pugpep-product-row > * { scroll-snap-align:start; }
-        .pugpep-product-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; }
+        .pugpep-product-grid { display:grid; align-items:stretch; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; }
         .pugpep-product-card { min-width:0; border:1px solid #30323a; border-radius:16px; overflow:hidden; background:#14151c; display:flex; flex-direction:column; box-shadow:0 10px 24px rgba(0,0,0,.16); transition:border-color .18s ease; }
         .pugpep-product-card:hover { border-color:#7df9ff; }
         .pugpep-product-image-link { position:relative; display:block; aspect-ratio:1 / 1; background:#fff; overflow:hidden; }
@@ -1280,12 +1355,12 @@ export default function HomePage() {
         .pugpep-card-bundle-options button:disabled { opacity:.5; cursor:default; }
         .pugpep-card-bundle-options button:focus-visible { outline:3px solid #ff75df; outline-offset:2px; }
         .pugpep-product-price > span { color:#aeb3c2; font-size:12px; font-weight:500; }
-        .pugpep-purchase-row { margin-top:auto; margin-bottom:12px; display:flex; flex-direction:column; align-items:stretch; gap:8px; }
+        .pugpep-purchase-row { margin-top:0; margin-bottom:12px; display:flex; flex-direction:column; align-items:stretch; gap:8px; }
         .pugpep-purchase-controls { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
         .pugpep-purchase-type { display:flex; align-items:center; gap:6px; font-size:14px; color:#afb7c8; }
         .pugpep-purchase-type label { display:flex; align-items:center; gap:4px; cursor:pointer; color:#e6e9f2; }
         .pugpep-kit-sale-hint { color:#b5ff85; font-size:10px; font-weight:800; }
-        .pugpep-purchase-type label { flex-wrap:wrap; }
+        .pugpep-purchase-type label { flex-wrap:nowrap; }
         .pugpep-purchase-type input { accent-color:#7df9ff; margin:0; width:16px; height:16px; flex-shrink:0; }
         .pugpep-card-buy-row { display:flex; align-items:stretch; gap:7px; }
         .pugpep-card-quantity { display:flex; flex:0 0 auto; align-items:center; border:1px solid #414550; border-radius:8px; overflow:hidden; }
@@ -1596,7 +1671,7 @@ export default function HomePage() {
       {featuredNewProducts.length > 0 && (
         <section style={newProductsSection}>
           <ProductShelf id="new-products-row" title="New & Coming Soon" eyebrow="LATEST ADDITIONS"
-            products={featuredNewProducts} renderProduct={renderCatalogProduct}
+            products={featuredNewProducts} renderProduct={(product) => renderCatalogProduct(product, filter === "sale")}
             onViewAll={() => viewAllProducts()} />
         </section>
       )}
@@ -1664,7 +1739,8 @@ export default function HomePage() {
           <button
             type="button"
             onClick={() => {
-              setFilter("peptides");
+              setFilter("individual-peptides");
+              setSearch("");
               document
                 .getElementById("catalog")
                 ?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1689,7 +1765,8 @@ export default function HomePage() {
           <button
             type="button"
             onClick={() => {
-              setFilter("sprays");
+              setFilter("research-sprays");
+              setSearch("");
               document
                 .getElementById("catalog")
                 ?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1714,7 +1791,8 @@ export default function HomePage() {
           <button
             type="button"
             onClick={() => {
-              setFilter("lab materials");
+              setFilter("laboratory-supplies");
+              setSearch("");
               document
                 .getElementById("catalog")
                 ?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1740,17 +1818,24 @@ export default function HomePage() {
       </section>
 
       {saleProducts.length > 0 && (
-        <section id="current-offers" style={saleShowcaseSection}>
-          <ProductShelf id="sale-products-row" title="Current Offers" eyebrow="ACTIVE PROMOTIONS"
-            products={saleProducts} renderProduct={renderCatalogProduct}
-            onViewAll={() => viewAllProducts("sale")} />
+        <section id="current-offers" style={saleShowcaseSection} aria-labelledby="current-offers-heading">
+          <div className="pugpep-shelf-header">
+            <div>
+              <span className="pugpep-shelf-kicker">ACTIVE PROMOTIONS</span>
+              <h3 id="current-offers-heading" className="pugpep-shelf-title">Current Offers</h3>
+            </div>
+            <span style={{ color: "#ffffff", fontSize: 12 }}>{saleProducts.length} products on sale</span>
+          </div>
+          <div className="pugpep-product-grid" style={{ marginTop: 18 }}>
+            {saleProducts.map((product) => renderCatalogProduct(product, true))}
+          </div>
         </section>
       )}
 
       {featuredProducts.length > 0 && (
         <section style={newProductsSection}>
           <ProductShelf id="featured-products-row" title="Featured Products" eyebrow="CATALOG HIGHLIGHTS"
-            products={featuredProducts} renderProduct={renderCatalogProduct}
+            products={featuredProducts} renderProduct={(product) => renderCatalogProduct(product, filter === "sale")}
             onViewAll={() => viewAllProducts()} />
         </section>
       )}
@@ -1859,7 +1944,7 @@ export default function HomePage() {
           <div style={groupedCatalog}>
             {catalogGroups.map((group) => (
               <ProductShelf key={group.key} id={`catalog-row-${group.key}`} title={group.title} eyebrow={group.eyebrow}
-                products={group.products} renderProduct={renderCatalogProduct}
+                products={group.products} renderProduct={(product) => renderCatalogProduct(product, filter === "sale")}
                 onViewAll={() => viewAllProducts("all", knownFamilyKeys.has(group.key) ? group.key : "all")} />
             ))}
           </div>
@@ -2842,20 +2927,21 @@ const catalogControls = {
 
 const filterButtons = {
   display: "flex",
-  gap: 5,
+  gap: 7,
   flexWrap: "nowrap" as const,
   minWidth: "max-content",
 };
 
 const filterButton = {
-  minHeight: 32,
-  padding: "6px 9px",
+  minHeight: 38,
+  padding: "8px 11px",
   flex: "0 0 auto",
-  whiteSpace: "nowrap",
+  whiteSpace: "nowrap" as const,
   borderRadius: 999,
   cursor: "pointer",
   fontWeight: 900,
-  fontSize: 10,
+  fontSize: 12,
+  lineHeight: 1.15,
 };
 
 const sortSelect = {

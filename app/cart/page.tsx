@@ -355,7 +355,7 @@ export default function CartPage() {
 
                         {item.wasOnSale &&
                           item.salePercent >
-                            0 && (
+                            0 && !(item.purchaseType === "kit" && !item.hasCampaign && Number(item.quantity) >= 3) && (
                           <span style={saleBadge}>
                             {
                               item.salePercent
@@ -365,6 +365,14 @@ export default function CartPage() {
                         )}
                       </div>
 
+                      {item.purchaseType === "kit" && !item.hasCampaign && Number(item.quantity) >= 3 && (
+                        <p style={{ ...itemMeta, marginTop: 5, marginBottom: 5 }}>
+                          Standard Kit Savings: 15% off
+                          <span style={{ display: "block", color: "#7df9ff", fontWeight: 700 }}>
+                            Bundle &amp; Save: Additional {Number(item.quantity) >= 8 ? 7 : Number(item.quantity) >= 5 ? 4 : 2}% off
+                          </span>
+                        </p>
+                      )}
                       <div style={priceRow}>
                         <div>
                           {lineSavings >

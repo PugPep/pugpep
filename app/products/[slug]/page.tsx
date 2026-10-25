@@ -942,11 +942,18 @@ export default function ProductDetailPage() {
 
   function getProductBundleChoices(option: ProductOption) {
     if (
-      option.purchase_type !== "single" ||
-      option.bundle_discount_enabled === false ||
+      (option.purchase_type !== "kit" && option.bundle_discount_enabled === false) ||
       hasActiveSaleForOption(option)
     ) {
       return [];
+    }
+
+    if (option.purchase_type === "kit") {
+      return [
+        { quantity: 3, discount: 2 },
+        { quantity: 5, discount: 4 },
+        { quantity: 8, discount: 7 },
+      ];
     }
 
     return [
@@ -1027,8 +1034,7 @@ export default function ProductDetailPage() {
     requestedQuantity: number
   ) {
     if (
-      option.purchase_type !== "single" ||
-      requestedQuantity >= 10
+      (option.purchase_type === "single" && requestedQuantity >= 10)
     ) {
       return null;
     }
@@ -1042,12 +1048,18 @@ export default function ProductDetailPage() {
 
     if (
       saleActive ||
-      option.bundle_discount_enabled === false
+      (option.purchase_type !== "kit" && option.bundle_discount_enabled === false)
     ) {
       return null;
     }
 
-    const tiers = [
+    const tiers = option.purchase_type === "kit"
+      ? [
+          { quantity: 3, discount: 2 },
+          { quantity: 5, discount: 4 },
+          { quantity: 8, discount: 7 },
+        ]
+      : [
       {
         quantity: Number(option.bundle_qty_1 || 0),
         discount: Number(option.bundle_discount_1 || 0),
@@ -1604,7 +1616,6 @@ export default function ProductDetailPage() {
                         productQuantityTotal(current, quantity);
 
                       const displayOriginal =
-                        bundleQuote?.regularTotal ??
                         productQuantityTotal(original, quantity);
 
                       const displaySavings = Math.max(
@@ -1720,7 +1731,7 @@ export default function ProductDetailPage() {
                                 </del>
                               )}
 
-                              {displaySavings > 0 && (
+                              {displaySavings > 0 && !(isKit && bundleQuote) && (
                                 <span
                                   style={{
                                     color: "#7df9ff",
@@ -1747,7 +1758,7 @@ export default function ProductDetailPage() {
                               }}
                             >
                               {bundleQuote
-                                ? `${quantity}-vial bundle total`
+                                ? `Total for ${quantity} ${isKit ? (quantity === 1 ? "kit" : "kits") : (quantity === 1 ? "single" : "singles")}`
                                 : isKit
                                   ? `Total for ${quantity} ${
                                       quantity === 1 ? "kit" : "kits"
@@ -1757,6 +1768,15 @@ export default function ProductDetailPage() {
                                     }`}
                             </span>
 
+                            {isKit && bundleQuote && (
+                              <p style={{ color: "#c0c6d4", fontSize: 13, margin: "8px 0", lineHeight: 1.6 }}>
+                                Standard Kit Savings: 15% off
+                                <span style={{ display: "block", color: "#7df9ff", fontWeight: 800 }}>
+                                  Bundle &amp; Save: Additional {getBundleTier(selectedOption, quantity)?.discount ?? 0}% off
+                                </span>
+                                <span style={{ display: "block" }}>Save ${displaySavings.toFixed(2)} versus buying individual vials</span>
+                              </p>
+                            )}
                             {displaySavings > 0 &&
                               campaign?.campaignName && (
                                 <p
@@ -1770,7 +1790,7 @@ export default function ProductDetailPage() {
                                 </p>
                               )}
 
-                            {totalKitSaving > 0 && (
+                            {totalKitSaving > 0 && !bundleQuote && (
                               <p
                                 style={{
                                   color: "#c0c6d4",
@@ -1890,18 +1910,18 @@ export default function ProductDetailPage() {
                                       selectedOption
                                     ) ||
                                     tier.quantity >
-                                      getAvailableQuantity(
-                                        selectedOption
-                                      )
+                                      (selectedOption.purchase_type === "kit"
+                                        ? Math.floor(getAvailableQuantity(selectedOption) / 10)
+                                        : getAvailableQuantity(selectedOption))
                                   }
                                   onClick={() =>
                                     changeProductQuantity(
                                       tier.quantity
                                     )
                                   }
-                                  aria-label={`Select ${tier.quantity} vials for ${tier.discount}% bundle savings`}
+                                  aria-label={`Buy ${tier.quantity} ${selectedOption.purchase_type === "kit" ? "kits" : "units"} for ${tier.discount}% bundle savings`}
                                 >
-                                  <strong>{tier.quantity}+</strong>
+                                  <strong>Buy {tier.quantity}</strong>
                                   <span>{tier.discount}% off</span>
                                 </button>
                               );
@@ -1982,21 +2002,39 @@ export default function ProductDetailPage() {
 
             <h1 style={productTitle}>{product.name}</h1>
 
-            {product.short_description && (
-              <section style={simpleOverviewCard}>
-                <span style={simpleOverviewEyebrow}>
-                  Simple Overview
-                </span>
-
-                <h2 style={simpleOverviewTitle}>
-                  What researchers are studying
-                </h2>
-
-                <p style={shortDescriptionText}>
-                  {product.short_description}
+            <section style={simpleOverviewCard} aria-label="Product specifications and storage">
+              <h2 style={simpleOverviewTitle}>Product Specifications &amp; Storage</h2>
+              <div style={storageInfoText}>
+                <p>
+                  <strong>Form:</strong>{" "}
+                  {product.category === "research-sprays"
+                    ? "Prepared research solution"
+                    : "Refer to product label"}
                 </p>
-              </section>
-            )}
+                <p>
+                  <strong>Contents:</strong>{" "}
+                  {selectedOption
+                    ? `${selectedOption.dosage} per ${selectedOption.purchase_type === "kit" ? "vial (10-vial kit)" : "unit"}`
+                    : "Refer to selected product option"}
+                </p>
+                <p>
+                  <strong>Purity:</strong> Refer to the applicable batch Certificate of Analysis (COA), where available.
+                </p>
+                <p>
+                  <strong>Storage:</strong> Protect from light, moisture, excessive
+                  heat, and unnecessary temperature fluctuations. Follow verified
+                  product-specific storage conditions where available.
+                </p>
+                <p>Actual Appearance May Vary.</p>
+              </div>
+
+              <h3 style={storageSectionTitle}>Research Use Only</h3>
+              <p style={shortDescriptionText}>
+                For lawful laboratory research only. Not for human or veterinary
+                administration. Not intended for personal consumption or clinical
+                application.
+              </p>
+            </section>
 
             <div style={disclaimerBox}>
               For research purposes only. Not for human or veterinary use.
@@ -2410,6 +2448,19 @@ const simpleOverviewTitle = {
   margin: "0 0 12px",
   color: "#f0f2f4",
   fontSize: 23,
+};
+
+const storageInfoText = {
+  color: "#d2d6da",
+  fontSize: 16,
+  lineHeight: 1.55,
+};
+
+const storageSectionTitle = {
+  color: "#f0f2f4",
+  fontSize: 18,
+  fontWeight: 800,
+  margin: "20px 0 8px",
 };
 
 const shortDescriptionText = {

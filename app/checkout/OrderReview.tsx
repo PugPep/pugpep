@@ -561,6 +561,32 @@ export function OrderBreakdown({
           marginTop: 15,
         }}
       >
+        {pricing.campaign.items
+          .filter((line) => line.purchaseType === "kit" && line.bundleDiscountApplied && line.bundleDiscountAmount > 0)
+          .map((line) => (
+            <div
+              key={`kit-savings-${line.productOptionId}`}
+              style={{
+                display: "grid",
+                gap: 5,
+                padding: "12px 0",
+                borderBottom: "1px solid rgba(255,255,255,.1)",
+                color: "#ddd",
+                fontSize: 13,
+              }}
+            >
+              <strong style={{ color: "#fff" }}>
+                {line.productName} · {line.dosage} · {line.quantity} {line.quantity === 1 ? "kit" : "kits"}
+              </strong>
+              <span>Standard kit savings are already included in the kit price.</span>
+              <span style={{ color: "#00ff99", fontWeight: 700 }}>
+                Extra {line.bundleDiscountPercent}% Bundle &amp; Save: -{money(line.bundleDiscountAmount)}
+              </span>
+              <span style={{ color: "#aaa", fontSize: 12, lineHeight: 1.45 }}>
+                The extra discount is applied to the kit price, not added to the standard kit percentage.
+              </span>
+            </div>
+          ))}
         {pricing.snapshot.steps
           .filter((step) => {
             if (
@@ -576,6 +602,19 @@ export function OrderBreakdown({
               !pricing.tax.enabled &&
               step.category === "tax"
             ) {
+              return false;
+            }
+
+            // VIP membership tiers are not explained or promoted in checkout.
+            // Keep the underlying pricing unchanged; hide unrelated tier messages.
+            if (/\bvip\b/i.test(`${step.category} ${step.label} ${step.message}`)) {
+              return false;
+            }
+
+            // A concise, item-specific Bundle & Save explanation is rendered above.
+            // Avoid repeating the same adjustment in technical snapshot messages.
+            if (pricing.campaign.items.some((line) => line.purchaseType === "kit" && line.bundleDiscountApplied)
+              && /bundle/i.test(`${step.label} ${step.message}`)) {
               return false;
             }
 

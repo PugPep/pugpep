@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 export const contactLinks = [
   {
     label: "Join Discord",
-    href: "https://discord.gg/yas8DetFz",
+    href: "https://discord.gg/VA92KW3M57",
   },
   {
     label: "Telegram",
