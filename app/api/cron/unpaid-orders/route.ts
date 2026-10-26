@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     .limit(250);
   if (dueError) return NextResponse.json({ error: dueError.message }, { status: 500 });
 
-  async function process(order: Order, action: "reminder" | "cancel") {
+  async function processUnpaidAction(order: Order, action: "reminder" | "cancel") {
     const { data: claimed, error: claimError } = await db.rpc("pugpep_claim_unpaid_action", { p_order_id: order.id, p_action: action });
     if (claimError) throw new Error(`Claim failed for ${order.order_number}: ${claimError.message}`);
     if (!claimed) { summary.skipped++; return; }
@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
 
   for (const order of (due || []) as Order[]) {
     const action = new Date(order.created_at).getTime() <= now - DAY ? "cancel" : "reminder";
-    try { await process(order, action); }
+    try { await processUnpaidAction(order, action); }
     catch (e) { summary.errors.push(`${order.order_number}: ${e instanceof Error ? e.message : String(e)}`); }
   }
 
@@ -133,7 +133,7 @@ export async function GET(request: NextRequest) {
       .select("id,order_number,customer_name,customer_email,created_at,status,cancelled_at,cancellation_reason")
       .eq("id", row.order_id).single();
     if (error || !record || !["cancelled", "canceled"].includes(record.status.toLowerCase())) continue;
-    try { await process(record as Order, "cancel"); }
+    try { await processUnpaidAction(record as Order, "cancel"); }
     catch (e) { summary.errors.push(`${record.order_number}: ${e instanceof Error ? e.message : String(e)}`); }
   }
   return NextResponse.json(summary, { status: summary.errors.length ? 207 : 200 });
