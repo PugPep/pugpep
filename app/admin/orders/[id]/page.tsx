@@ -9,6 +9,10 @@ import { createClient } from "../../../../lib/supabaseClient";
 const EMAILJS_SERVICE_ID = "service_quxnkin";
 const EMAILJS_PUBLIC_KEY = "yc_0cE0Mcl3tfzc11";
 const SHIPPING_TEMPLATE_ID = "template_piq2u0f";
+// PugPep Order Processed EmailJS template.
+const PROCESSED_TEMPLATE_ID = "template_qdr0i7h";
+const trackingUrl = (number: string) =>
+  `https://www.17track.net/en?nums=${encodeURIComponent(number.trim())}`;
 
 
 type EditableOrderItem = {
@@ -290,7 +294,7 @@ export default function OrderDetailsPage() {
       setDraftItems((itemData || []).map(toEditableOrderItem));
     }
 
-    setShippingStatus(orderData.shipping_status || "not shipped");
+    setShippingStatus(orderData.shipping_status === "processing" ? "processed" : (orderData.shipping_status || "not shipped"));
     setTrackingNumber(orderData.tracking_number || "");
     setShippingCost(Number(orderData.estimated_shipping_cost || 0));
     setPackagingCost(Number(orderData.estimated_packaging_cost || 0));
@@ -452,15 +456,97 @@ export default function OrderDetailsPage() {
   }
 
   async function saveShippingInfo() {
+    if (!order || saving || sendingEmail) return;
+
+    const nextStatus = shippingStatus === "processing" ? "processed" : shippingStatus;
+    const cleanedTracking = trackingNumber.trim();
+    const previousStatus = String(order.shipping_status || "not shipped").trim().toLowerCase();
+    const previousTracking = String(order.tracking_number || "").trim();
+    const isProcessed = nextStatus === "processed";
+    const isShipped = nextStatus === "shipped";
+
+    // A tracking number is mandatory before an order may be processed or shipped.
+    if ((isProcessed || isShipped) && !cleanedTracking) {
+      alert("A tracking number is required before an order can be marked Processed or Shipped.");
+      return;
+    }
+
+    // Keep the existing shipped email/SMS path authoritative; do not bypass it via Save Delivery.
+    if (isShipped && previousStatus !== "shipped") {
+      alert('Use "Notify & Mark Shipped" to mark this order shipped and send the shipping notification.');
+      return;
+    }
+
+    // Verify payment before allowing a customer-facing Processed notification.
+    // Confirm the exact paid status names used by your Supabase orders table.
+    const paymentStatus = String(order.status || "").trim().toLowerCase();
+    const paymentConfirmed = ["paid", "payment received", "payment_received", "completed"].includes(paymentStatus);
+    if (isProcessed && !paymentConfirmed) {
+      alert(`Payment must be confirmed before an order can be marked Processed. Current payment status: ${order.status || "unknown"}.`);
+      return;
+    }
+
+    const shouldNotifyProcessed = isProcessed && previousStatus !== "processed";
+    if (shouldNotifyProcessed && !String(order.customer_email || "").trim()) {
+      alert("A customer email address is required to send the Processed notification.");
+      return;
+    }
+
+    if (nextStatus === previousStatus && cleanedTracking === previousTracking) {
+      alert("No delivery changes to save.");
+      return;
+    }
+
     setSaving(true);
-    const { error } = await supabase
-      .from("orders")
-      .update({ shipping_status: shippingStatus, tracking_number: trackingNumber })
-      .eq("id", id);
-    setSaving(false);
-    if (error) return alert(error.message);
-    alert("Shipping information saved.");
-    await loadOrder();
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ shipping_status: nextStatus, tracking_number: cleanedTracking })
+        .eq("id", id);
+      if (error) throw error;
+      setShippingStatus(nextStatus);
+      setTrackingNumber(cleanedTracking);
+
+      if (shouldNotifyProcessed) {
+        try {
+          await emailjs.send(
+            EMAILJS_SERVICE_ID,
+            PROCESSED_TEMPLATE_ID,
+            {
+              name: order.customer_name,
+              email: order.customer_email,
+              order_number: order.order_number,
+              shipping_status: "processed",
+              tracking_number: cleanedTracking,
+              tracking_url: trackingUrl(cleanedTracking),
+              tracking_link: trackingUrl(cleanedTracking),
+              shipping_address: `${order.shipping_address || ""}, ${order.city || ""}, ${order.state || ""} ${order.zip || ""}`,
+              order_total: Number(order.total || 0).toFixed(2),
+              // The template should say payment received ONLY if payment was verified independently.
+              payment_message: "Your order has moved to Processed.",
+              items: items.map((item) => ({
+                name: item.product_name,
+                dosage: item.dosage,
+                purchase_type: item.purchase_type,
+                price: Number(item.line_revenue ?? item.price ?? 0).toFixed(2),
+              })),
+            },
+            EMAILJS_PUBLIC_KEY
+          );
+          alert("Order marked Processed. Customer tracking email sent.");
+        } catch (emailError) {
+          console.error("Processed email failed:", emailError);
+          alert(`Order was saved as Processed, but the customer email failed: ${getErrorMessage(emailError)}. Please verify the EmailJS configuration before retrying notification.`);
+        }
+      } else {
+        alert("Shipping information saved.");
+      }
+      await loadOrder();
+    } catch (error) {
+      alert(`Unable to save shipping information: ${getErrorMessage(error)}`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveOperatingCosts() {
@@ -840,6 +926,9 @@ export default function OrderDetailsPage() {
 
             tracking_number:
               cleanedTracking,
+
+            tracking_url: trackingUrl(cleanedTracking),
+            tracking_link: trackingUrl(cleanedTracking),
 
             shipping_address:
               `${order.shipping_address}, ${order.city}, ${order.state} ${order.zip}`,
@@ -2492,7 +2581,7 @@ export default function OrderDetailsPage() {
                 style={input}
               >
                 <option value="not shipped">not shipped</option>
-                <option value="processing">processing</option>
+                <option value="processed">processed</option>
                 <option value="shipped">shipped</option>
                 <option value="delivered">delivered</option>
               </select>
@@ -2510,7 +2599,7 @@ export default function OrderDetailsPage() {
 
               {!trackingNumber && (
                 <p style={warningText}>
-                  Scan or enter a tracking number before notifying the customer.
+                  Tracking is required for Processed and Shipped statuses.
                 </p>
               )}
 

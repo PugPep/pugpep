@@ -1,3 +1,4 @@
+/** PUGPEP ADMIN OPERATIONS CENTER | app/admin/page.tsx | /admin */
 "use client";
 
 
@@ -13,6 +14,9 @@ const EMAILJS_SERVICE_ID =
 
 const SHIPPING_EMAIL_TEMPLATE_ID =
   "template_piq2u0f";
+
+const PROCESSED_EMAIL_TEMPLATE_ID =
+  "template_qdr0i7h";
 
 const EMAILJS_PUBLIC_KEY =
   "yc_0cE0Mcl3tfzc11";
@@ -778,19 +782,27 @@ export default function AdminPage() {
     }
 
     const cleanedTracking = tracking.trim();
-    const finalStatus = status;
+    const finalStatus = status.trim().toLowerCase();
+    const previousStatus = String(currentOrder.shipping_status || "not shipped")
+      .trim().toLowerCase();
+    const newlyProcessed = finalStatus === "processed" && previousStatus !== "processed";
 
     if (
-      (
-        finalStatus === "shipped" ||
-        finalStatus === "out for delivery" ||
-        finalStatus === "delivered"
-      ) &&
+      ["processed", "shipped", "out for delivery", "delivered"].includes(finalStatus) &&
       !cleanedTracking
     ) {
-      setNotice(
-        "Enter or scan a tracking number before using Shipped, Out for Delivery, or Delivered."
-      );
+      setNotice("A tracking number is required for Processed, Shipped, Out for Delivery, and Delivered.");
+      return;
+    }
+
+    // The processed notification says payment has been confirmed.
+    if (newlyProcessed && String(currentOrder.status || "").trim().toLowerCase() !== "paid") {
+      setNotice("Mark this order Paid before moving it to Processed.");
+      return;
+    }
+
+    if (currentOrder.closed_at || currentOrder.deleted_at) {
+      setNotice("Reopen or restore this order before updating its delivery status.");
       return;
     }
 
@@ -820,6 +832,7 @@ export default function AdminPage() {
           data: { session },
         } = await supabase.auth.getSession();
 
+        try {
         const registrationResponse = await fetch(
           "/api/tracking/register",
           {
@@ -850,7 +863,12 @@ export default function AdminPage() {
           );
         }
 
-        if (notifyCustomer) {
+        } catch (trackingError) {
+          console.error("Carrier tracking registration failed:", trackingError);
+          warnings.push("Carrier monitoring could not start.");
+        }
+
+        if (newlyProcessed || (notifyCustomer && finalStatus === "shipped")) {
           /*
            * Send shipping email through the same EmailJS service
            * already used by PugPep order confirmations.
@@ -986,9 +1004,13 @@ export default function AdminPage() {
                 0
               );
 
+            // 17TRACK provides a carrier-neutral tracking lookup.
+            const trackingUrl =
+              `https://t.17track.net/en#nums=${encodeURIComponent(cleanedTracking)}`;
+
             await emailjs.send(
               EMAILJS_SERVICE_ID,
-              SHIPPING_EMAIL_TEMPLATE_ID,
+              newlyProcessed ? PROCESSED_EMAIL_TEMPLATE_ID : SHIPPING_EMAIL_TEMPLATE_ID,
               {
                 /*
                  * Recipient / greeting variables
@@ -1013,6 +1035,8 @@ export default function AdminPage() {
                   finalStatus,
                 tracking_number:
                   cleanedTracking,
+                tracking_url: trackingUrl,
+                tracking_link: trackingUrl,
                 shipping_address:
                   shippingAddress ||
                   "Address unavailable",
@@ -1040,10 +1064,7 @@ export default function AdminPage() {
                         item.lot_number,
                       quantity:
                         item.quantity,
-                      price:
-                        `$${item.total.toFixed(
-                          2
-                        )}`,
+                      price: item.total.toFixed(2),
                     })
                   ),
 
@@ -1072,7 +1093,7 @@ export default function AdminPage() {
            * Send the shipping SMS when a customer phone number exists.
            * This remains ready for your SMS provider setup.
            */
-          if (currentOrder.customer_phone) {
+          if (notifyCustomer && finalStatus === "shipped" && currentOrder.customer_phone) {
             try {
               const smsResponse = await fetch(
                 "/api/send-shipping-sms",
@@ -1118,7 +1139,7 @@ export default function AdminPage() {
                 "Shipping SMS could not be sent."
               );
             }
-          } else {
+          } else if (notifyCustomer && finalStatus === "shipped") {
             warnings.push(
               "No customer phone number is saved, so no shipping SMS was sent."
             );
@@ -1132,7 +1153,9 @@ export default function AdminPage() {
           : "";
 
       setNotice(
-        notifyCustomer
+        newlyProcessed
+          ? `Order ${currentOrder.order_number} marked Processed. Tracking ${cleanedTracking} was saved and the Processed email was attempted.${warningText}`
+          : notifyCustomer && finalStatus === "shipped"
           ? `Order ${currentOrder.order_number} marked shipped. Tracking ${cleanedTracking} was saved and customer notifications were attempted.${warningText}`
           : cleanedTracking
           ? `Tracking ${cleanedTracking} saved and delivery status set to ${finalStatus}.${warningText}`
@@ -2212,6 +2235,10 @@ export default function AdminPage() {
 
                               <option value="ready to ship">
                                 Ready to Ship
+                              </option>
+
+                              <option value="processed">
+                                Processed — Tracking Required · Sends Email
                               </option>
 
                               <option value="shipped">
