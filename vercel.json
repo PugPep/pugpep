@@ -1,0 +1,9 @@
+
+{
+  "crons": [
+    {
+      "path": "/api/cron/unpaid-orders",
+      "schedule": "*/15 * * * *"
+    }
+  ]
+}
