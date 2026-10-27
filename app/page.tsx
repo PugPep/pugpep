@@ -13,6 +13,10 @@ import {
   type StorefrontSale,
 } from "../lib/storefrontCampaigns";
 
+// TEMPORARILY DISABLED FOR PAYMENT PROCESSOR REVIEW.
+// Change to true to restore the original homepage hero video.
+const ENABLE_HERO_VIDEO = false;
+
 const STOREFRONT_SALE_CACHE_KEY = "pugpep_storefront_sales_v1";
 const STOREFRONT_SALE_CACHE_TTL_MS = 5 * 60 * 1000;
 const RESEARCH_ACKNOWLEDGMENT_KEY = "pugpep_research_ack_v2";
@@ -1644,8 +1648,14 @@ export default function HomePage() {
         </div>
       )}
 
-      <section style={heroVideoSection}>
-        {isMobile !== null && (
+      <section style={{
+        ...heroVideoSection,
+        // Preserve space for the research-use notice while the video is hidden.
+        ...(ENABLE_HERO_VIDEO ? {} : { minHeight: 180 }),
+      }}>
+        {/* TEMPORARILY DISABLED FOR PAYMENT PROCESSOR REVIEW.
+            Set ENABLE_HERO_VIDEO to true above to restore the original video. */}
+        {ENABLE_HERO_VIDEO && isMobile !== null && (
           <video
             key={isMobile ? "mobile-video" : "desktop-video"}
             autoPlay
