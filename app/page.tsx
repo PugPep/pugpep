@@ -15,7 +15,7 @@ import {
 
 // TEMPORARILY DISABLED FOR PAYMENT PROCESSOR REVIEW.
 // Change to true to restore the original homepage hero video.
-const ENABLE_HERO_VIDEO = false;
+const ENABLE_HERO_VIDEO = true;
 
 const STOREFRONT_SALE_CACHE_KEY = "pugpep_storefront_sales_v1";
 const STOREFRONT_SALE_CACHE_TTL_MS = 5 * 60 * 1000;
