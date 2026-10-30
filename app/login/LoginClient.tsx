@@ -221,7 +221,7 @@ export default function LoginClient() {
     <SplitAuthShell
       eyebrow="PUGPEP ACCOUNT ACCESS"
       title={mode === "login" ? "Login or Register" : "Create Your Account"}
-      subtitle="Welcome to PugPep. Access your laboratory research account or create a new one."
+      subtitle="Access your PugPep research account and continue your work."
       footer={footer}
     >
       <div style={toggleWrap}>
@@ -446,6 +446,27 @@ export default function LoginClient() {
         </form>
       )}
 
+      {mode === "login" && (
+        <div className="pp-login-signup-cta">
+          <div className="pp-login-divider"><span>OR</span></div>
+          <p>New to PugPep?</p>
+          <button type="button" className="pp-login-create-button" onClick={() => { setMode("signup"); resetMessage(); }}>
+            CREATE A NEW ACCOUNT <span aria-hidden="true">→</span>
+          </button>
+        </div>
+      )}
+
+
+      <style jsx global>{`
+        .pp-login-signup-cta { margin-top: 24px; }
+        .pp-login-divider { display: flex; align-items: center; gap: 16px; color: #a3b2c9; font-size: 12px; }
+        .pp-login-divider::before, .pp-login-divider::after { content: ""; height: 1px; flex: 1; background: rgba(186,205,229,.23); }
+        .pp-login-signup-cta p { color: #d0dcee; font-size: 14px; margin: 20px 0 12px; }
+        .pp-login-create-button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 15px 18px; border: 1px solid rgba(195,218,250,.7); border-radius: 14px; color: #f5faff; background: transparent; font-size: 14px; letter-spacing: .075em; font-weight: 850; cursor: pointer; }
+        .pp-login-create-button:hover { border-color: #20d4f3; background: rgba(32,212,243,.08); }
+        .pp-login-create-button:focus-visible { outline: 3px solid #18d5f9; outline-offset: 3px; }
+      `}</style>
+
       {message ? (
         <div
           style={{
@@ -462,10 +483,11 @@ export default function LoginClient() {
 
 
 /**
- * Split login layout is intentionally self-contained. The legacy AuthShell
- * is not modified, so password-reset and other auth pages remain unchanged.
- * Optional image: add /public/login-lab.jpg to show your chosen lab photo.
- * Without it, the layered gradient remains a complete, readable design.
+ * Standalone login layout matching the supplied visual concept.
+ * Save pugpep-login-visual.png in the project's /public directory.
+ * The photograph/branding is a single decorative image on the LEFT;
+ * all text, inputs, and buttons on the RIGHT are real HTML controls.
+ * No changes to AuthShell.tsx or your Supabase authentication are needed.
  */
 function SplitAuthShell({ eyebrow, title, subtitle, footer, children }: {
   eyebrow: string;
@@ -477,18 +499,12 @@ function SplitAuthShell({ eyebrow, title, subtitle, footer, children }: {
   return (
     <main className="pp-login-page">
       <div className="pp-login-layout">
-        <section className="pp-login-visual" aria-label="Welcome to PugPep">
-          <div className="pp-login-photo" aria-hidden="true" />
-          <div className="pp-login-visual-content">
-            <div className="pp-login-brand">PUG<span>PEP</span></div>
-            <div className="pp-login-visual-bottom">
-              <span className="pp-login-kicker">RESEARCH • QUALITY • DISCOVERY</span>
-              <h2>Welcome to the future of biotech.</h2>
-              <p>A dedicated space for independent laboratory research.</p>
-              <div className="pp-login-rule" />
-              <span className="pp-login-small">FOR RESEARCH USE ONLY</span>
-            </div>
-          </div>
+        <section className="pp-login-visual" aria-label="PugPep — Welcome to the Future of Biotech">
+          <img
+            className="pp-login-visual-image"
+            src="/pugpep-login-visual.png"
+            alt="PugPep's laboratory pug mascot and Welcome to the Future of Biotech branding"
+          />
         </section>
         <section className="pp-login-form-panel">
           <div className="pp-login-form-inner">
@@ -501,36 +517,30 @@ function SplitAuthShell({ eyebrow, title, subtitle, footer, children }: {
         </section>
       </div>
       <style jsx>{`
-        .pp-login-page { min-height: 100vh; display: grid; place-items: center; padding: 90px 24px 42px; background: radial-gradient(ellipse at 5% 12%, #133347 0, transparent 40%), radial-gradient(ellipse at 90% 90%, #152b38 0, transparent 40%), #080e16; color: #f7fbff; box-sizing: border-box; }
-        .pp-login-layout { display: grid; grid-template-columns: minmax(0, 1.04fr) minmax(0, 1fr); width: min(1100px, 100%); min-height: 630px; border: 1px solid rgba(195,226,240,.18); border-radius: 24px; overflow: hidden; box-shadow: 0 30px 85px rgba(0,0,0,.48); background: #0e1722; }
-        .pp-login-visual { position: relative; min-height: 630px; overflow: hidden; background: linear-gradient(145deg, #123b4f, #0c2736 55%, #133445); isolation: isolate; }
-        .pp-login-photo { position: absolute; inset: 0; background-image: linear-gradient(180deg, rgba(2,13,22,.18) 0%, rgba(2,14,23,.2) 34%, rgba(2,14,23,.92) 100%), url('/login-lab.jpg'); background-position: center; background-size: cover; background-repeat: no-repeat; z-index: -1; }
-        .pp-login-visual::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(130deg, rgba(19,179,209,.2), transparent 52%, rgba(191,64,140,.1)); z-index: -1; }
-        .pp-login-visual-content { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; padding: clamp(28px, 4vw, 52px); }
-        .pp-login-brand { width: fit-content; font-size: clamp(28px, 3vw, 39px); font-weight: 950; letter-spacing: -.055em; color: #76e0f3; text-shadow: 0 2px 22px rgba(0,0,0,.3); }
-        .pp-login-brand span { color: #f19ac7; }
-        .pp-login-visual-bottom h2 { font-size: clamp(29px, 3vw, 42px); letter-spacing: -.035em; line-height: 1.14; margin: 14px 0; max-width: 420px; }
-        .pp-login-visual-bottom p { font-size: 16px; line-height: 1.55; color: #e0edf3; max-width: 360px; }
-        .pp-login-kicker, .pp-login-small { font-size: 11px; letter-spacing: .17em; font-weight: 800; color: #c1e8f0; }
-        .pp-login-rule { height: 1px; background: rgba(255,255,255,.25); margin: 27px 0 16px; max-width: 240px; }
-        .pp-login-form-panel { min-width: 0; background: linear-gradient(150deg, #111d2b, #0b111a 74%); display: flex; align-items: center; justify-content: center; padding: clamp(26px, 4vw, 52px); box-sizing: border-box; }
-        .pp-login-form-inner { width: 100%; max-width: 450px; }
-        .pp-login-eyebrow { color: #8bdce9; font-size: 11px; font-weight: 850; letter-spacing: .16em; margin: 0 0 12px; }
-        .pp-login-heading { font-size: clamp(30px, 3vw, 41px); line-height: 1.12; letter-spacing: -.025em; margin: 0 0 13px; }
-        .pp-login-subtitle { font-size: 14px; line-height: 1.65; margin: 0 0 26px; color: #b5c4d1; }
-        .pp-login-footer { margin-top: 21px; }
-        @media (max-width: 780px) {
-          .pp-login-page { padding: 80px 14px 28px; align-items: start; }
-          .pp-login-layout { grid-template-columns: minmax(0,1fr); min-height: auto; border-radius: 18px; }
-          .pp-login-visual { min-height: 220px; }
-          .pp-login-visual-content { padding: 24px; }
-          .pp-login-visual-bottom h2 { font-size: 26px; margin: 8px 0 3px; }
-          .pp-login-visual-bottom p { font-size: 13px; margin: 0; }
-          .pp-login-rule, .pp-login-small { display: none; }
-          .pp-login-brand { font-size: 27px; margin-bottom: 26px; }
-          .pp-login-form-panel { padding: 28px 22px 32px; }
+        .pp-login-page { min-height: 100vh; display: grid; place-items: center; padding: 90px 22px 40px; box-sizing: border-box; color: #f6faff; background: radial-gradient(ellipse at 0% 30%, rgba(0,132,255,.14), transparent 50%), radial-gradient(ellipse at 100% 60%, rgba(232,34,190,.14), transparent 48%), #080d1b; }
+        .pp-login-layout { display: grid; grid-template-columns: minmax(0, 1.04fr) minmax(0, 1fr); width: min(1280px,100%); min-height: 740px; background: #09162b; border: 1px solid rgba(0,204,255,.65); border-right-color: rgba(235,38,208,.55); border-radius: 26px; overflow: hidden; box-shadow: 0 28px 100px rgba(0,0,0,.62), 0 0 38px rgba(0,180,255,.13); }
+        .pp-login-visual { position: relative; min-height: 740px; overflow: hidden; background: #123456; }
+        .pp-login-visual-image { display: block; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center center; }
+        .pp-login-visual::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 88%, rgba(4,12,29,.17)); pointer-events: none; }
+        .pp-login-form-panel { min-width: 0; display: flex; justify-content: center; align-items: center; padding: clamp(27px, 4vw, 64px); box-sizing: border-box; background: radial-gradient(ellipse at 100% 100%,rgba(195,31,176,.13),transparent 57%), linear-gradient(160deg,#0c2242 0%,#0a1a33 45%,#090d21 100%); }
+        .pp-login-form-inner { width: 100%; max-width: 440px; }
+        .pp-login-eyebrow { font-size: 11px; color: #20ddf6; font-weight: 900; letter-spacing: .24em; margin: 0 0 17px; }
+        .pp-login-heading { font-size: clamp(30px, 3vw, 39px); line-height: 1.1; margin: 0 0 12px; letter-spacing: -.03em; color: white; }
+        .pp-login-subtitle { font-size: 15px; line-height: 1.6; color: #c6d5e8; margin: 0 0 29px; }
+        .pp-login-footer { margin-top: 28px; }
+        @media (max-width: 820px) {
+          .pp-login-page { padding: 77px 12px 25px; align-items: start; }
+          .pp-login-layout { grid-template-columns: minmax(0,1fr); min-height: 0; border-radius: 18px; }
+          .pp-login-visual { min-height: 0; height: clamp(260px, 55vw, 460px); }
+          .pp-login-visual-image { object-position: center 15%; }
+          .pp-login-form-panel { padding: 32px 22px 34px; }
         }
-        @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+        @media (max-width: 480px) {
+          .pp-login-visual { height: 280px; }
+          .pp-login-visual-image { object-position: center top; }
+          .pp-login-form-panel { padding: 26px 18px 30px; }
+          .pp-login-heading { font-size: 30px; }
+        }
       `}</style>
     </main>
   );
@@ -559,8 +569,8 @@ const input = {
   width: "100%",
   boxSizing: "border-box" as const,
   borderRadius: 14,
-  border: "1px solid rgba(255,255,255,.14)",
-  background: "rgba(8, 14, 24, .54)",
+  border: "1px solid rgba(187,214,244,.32)",
+  background: "rgba(10, 27, 49, .82)",
   color: "#fff",
   padding: "14px 14px",
   outline: "none",
@@ -623,7 +633,7 @@ const primaryButton = {
   borderRadius: 16,
   padding: "14px 16px",
   background:
-    "linear-gradient(135deg, rgba(0,217,255,.94), rgba(0,132,255,.88))",
+    "linear-gradient(100deg, #09cbed, #078ce8 48%, #ec1ad2)",
   color: "#04111b",
   fontWeight: 1000,
   letterSpacing: ".08em",
@@ -636,8 +646,8 @@ const primaryButtonPink = {
   borderRadius: 16,
   padding: "14px 16px",
   background:
-    "linear-gradient(135deg, rgba(255,47,208,.96), rgba(160,70,255,.90))",
-  color: "#130717",
+    "linear-gradient(100deg, #09cbed, #078ce8 48%, #ec1ad2)",
+  color: "#071322",
   fontWeight: 1000,
   letterSpacing: ".08em",
   textTransform: "uppercase" as const,
