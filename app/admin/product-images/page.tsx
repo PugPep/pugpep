@@ -2256,17 +2256,37 @@ export default function ProductImagesAdminPage() {
     };
   }
 
-  // For the Research Sprays master template, maintain the approved two-line
-  // centered label for every spray while retaining the product-specific name.
+  // The selected storefront category determines the label's line structure.
+  // Return plain, printable label text. Each generated product keeps its own name.
   function labelForCategoryPreview(product: Product): string {
-    const original = splitProductLabel(product.name).name;
-    if (product.category !== "research-sprays") return original;
-
-    // Avoid stacking "Spray" twice; preserve meaningful product-name text.
-    const productName = original
-      .replace(/(?:\s*[-–—:]?\s*)spray(?:s)?\s*$/i, "")
+    const original = splitProductLabel(product.name).name
+      .replace(/[\u200B-\u200D\uFEFF]/g, "")
       .trim();
-    return `${productName || original}\nSpray`;
+
+    if (product.category === "research-sprays") {
+      const name = original
+        .replace(/(?:\s*[-–—:]?\s*)spray(?:s)?\s*$/i, "")
+        .trim();
+      return `${name || original}\nSpray`;
+    }
+
+    if (product.category === "laboratory-supplies") {
+      // The existing lab-materials products include vials such as solvent
+      // water H/P. Keep the qualifier on its own centered line so a long
+      // name does not escape the small printed label area.
+      const vialMatch = original.match(/^(.*?)(?:\s*\(([HP])\))$/i);
+      if (vialMatch) {
+        return `${vialMatch[1].trim()}\n(${vialMatch[2].toUpperCase()})`;
+      }
+      // A second line is preferable to forcing very long lab labels into one.
+      if (original.length > 18 && original.includes(" ")) {
+        const words = original.split(/\s+/);
+        const middle = Math.ceil(words.length / 2);
+        return `${words.slice(0, middle).join(" ")}\n${words.slice(middle).join(" ")}`;
+      }
+    }
+
+    return original;
   }
 
   function getLongestLabelLine(
@@ -2792,11 +2812,11 @@ export default function ProductImagesAdminPage() {
         // The selected category's preview owns the line-break convention.
         // Research Sprays always use "PRODUCT NAME\nSpray", centered by
         // the renderer, even if an older approved item was single-line.
-        const labelText =
-          product.category === "research-sprays"
-            ? labelForCategoryPreview(product)
-            : previousSettings?.layout.labelText ??
-              labelForCategoryPreview(product);
+        // Always derive a fresh name from the current product. A saved
+        // editor override for a different product or an old family must not
+        // replace a Laboratory Supplies vial name during category previews.
+        // User-specific lettering may still be changed in its own editor.
+        const labelText = labelForCategoryPreview(product);
 
         const productLayout: ProductLayout = {
           ...batchLayout,

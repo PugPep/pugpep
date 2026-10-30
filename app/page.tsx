@@ -1669,7 +1669,16 @@ export default function HomePage() {
             <img
               src="/pugpep-hero-desktop.png"
               alt="PugPep — The Future Is Biotech"
-              style={heroBannerImage}
+              style={
+                isMobile
+                  ? {
+                      ...heroBannerImage,
+                      height: "auto",
+                      objectFit: "contain" as const,
+                      objectPosition: "center top" as const,
+                    }
+                  : heroBannerImage
+              }
               fetchPriority="high"
             />
           </picture>
