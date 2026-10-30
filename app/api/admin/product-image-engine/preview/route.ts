@@ -186,6 +186,33 @@ export async function POST(
             unknown
           >
         : {};
+
+    // Read the optional text color separately from the product's palette.
+    // Keep the original research-text color when no color was selected.
+    const requestedResearchColor =
+      layout.researchTextColor ??
+      body.researchTextColor ??
+      layout.research_text_color ??
+      body.research_text_color;
+    const researchTextColor =
+      normalizeHexColor(
+        requestedResearchColor
+      );
+    if (
+      requestedResearchColor != null &&
+      !researchTextColor
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Research Use Only color must be a 6-digit hex color such as #000000.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
     if (
       !productId ||
       !templateId
@@ -392,6 +419,11 @@ export async function POST(
           template.research_font_size ??
             22
         ),
+      // The renderer reads this field to color FOR RESEARCH USE ONLY.
+      research_text_color:
+        researchTextColor ??
+        template.research_text_color ??
+        "#f5f7fa",
     };
     const image =
       await renderProductImage({

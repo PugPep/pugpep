@@ -252,16 +252,14 @@ export async function POST(
           color
           `
         )
-        .in(
-          "category",
-          categories
-        )
         .order(
           "name",
           {
             ascending: true,
           }
         );
+    // Explicit IDs must not be excluded by legacy category filters.
+    // Keep family-based filtering for requests without selected IDs.
     if (
       productIds.length > 0
     ) {
@@ -269,6 +267,12 @@ export async function POST(
         productQuery.in(
           "id",
           productIds
+        );
+    } else {
+      productQuery =
+        productQuery.in(
+          "category",
+          categories
         );
     }
     const {
@@ -292,6 +296,14 @@ export async function POST(
           status: 500,
         }
       );
+    }
+    // Template category is authoritative; never publish an image outside it.
+    const templateCategory = String(template.template_category || "");
+    if (!templateCategory) {
+      return NextResponse.json({ error: "This template has no storefront category. Assign it before publishing." }, { status: 409 });
+    }
+    if (products && products.some((product) => product.category !== templateCategory)) {
+      return NextResponse.json({ error: `Some selected products do not belong to ${templateCategory}. Nothing was published.` }, { status: 400 });
     }
     if (
       !products ||
@@ -330,6 +342,10 @@ export async function POST(
     const renderTemplate = {
       ...template,
       show_research_text: layout.showResearchText !== false,
+      research_text_color:
+        normalizeHexColor(layout.researchTextColor) ||
+        normalizeHexColor(template.research_text_color) ||
+        "#f5f7fa",
       name_y:
         safeNumber(
           layout.nameY,

@@ -43,11 +43,17 @@ export async function GET(
       new URL(
         request.url
       );
-    const family =
-      url.searchParams.get(
-        "family"
-      ) ||
-      "peptides";
+    const requestedCategory = url.searchParams.get("template_category") || "";
+    const allowedTemplateCategories = [
+      "individual-peptides", "peptide-blends", "biochemical-compounds",
+      "research-sprays", "laboratory-supplies",
+    ];
+    if (requestedCategory && !allowedTemplateCategories.includes(requestedCategory)) {
+      return NextResponse.json({ error: "Invalid template category." }, { status: 400 });
+    }
+    const family = requestedCategory === "research-sprays" ? "sprays"
+      : requestedCategory === "laboratory-supplies" ? "lab-materials"
+      : url.searchParams.get("family") || "peptides";
     const productFamily =
       url.searchParams.get(
         "product_family"
@@ -89,10 +95,10 @@ export async function GET(
           "product_image_templates"
         )
         .select("*")
-        .eq(
-          "family",
-          family
-        );
+        .eq("family", family);
+    if (requestedCategory) {
+      templateQuery = templateQuery.eq("template_category", requestedCategory);
+    }
     if (
       productFamily
     ) {
@@ -214,6 +220,12 @@ export async function POST(
           "family"
         ) || ""
       );
+    const templateCategory = String(form.get("template_category") || "").trim();
+    const allowedCategories = ["individual-peptides", "peptide-blends", "biochemical-compounds", "research-sprays", "laboratory-supplies"];
+    const expectedFamily = templateCategory === "research-sprays" ? "sprays" : templateCategory === "laboratory-supplies" ? "lab-materials" : "peptides";
+    if (!allowedCategories.includes(templateCategory) || family !== expectedFamily) {
+      return NextResponse.json({ error: "Choose a valid storefront category that matches the template type." }, { status: 400 });
+    }
     const productFamily =
       String(
         form.get(
@@ -456,7 +468,8 @@ export async function POST(
         .eq(
           "family",
           family
-        );
+        )
+        .eq("template_category", templateCategory);
     deactivateQuery =
       (family === "lab-materials" || !productFamily)
         ? deactivateQuery.is(
@@ -501,6 +514,7 @@ export async function POST(
         )
         .insert({
           family,
+          template_category: templateCategory,
           product_family:
             family === "lab-materials"
               ? null

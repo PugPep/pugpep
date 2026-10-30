@@ -15,7 +15,7 @@ import {
 
 // TEMPORARILY DISABLED FOR PAYMENT PROCESSOR REVIEW.
 // Change to true to restore the original homepage hero video.
-const ENABLE_HERO_VIDEO = true;
+const ENABLE_HERO_VIDEO = false;
 
 const STOREFRONT_SALE_CACHE_KEY = "pugpep_storefront_sales_v1";
 const STOREFRONT_SALE_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -1648,26 +1648,34 @@ export default function HomePage() {
         </div>
       )}
 
-      <section style={{
-        ...heroVideoSection,
-        // Preserve space for the research-use notice while the video is hidden.
-        ...(ENABLE_HERO_VIDEO ? {} : { minHeight: 180 }),
-      }}>
-        {/* TEMPORARILY DISABLED FOR PAYMENT PROCESSOR REVIEW.
-            Set ENABLE_HERO_VIDEO to true above to restore the original video. */}
-        {ENABLE_HERO_VIDEO && isMobile !== null && (
-          <video
-            key={isMobile ? "mobile-video" : "desktop-video"}
-            autoPlay
-            muted
-            loop
-            playsInline
-            style={heroVideo}
-            src={isMobile ? "/hero-mobile.mp4" : "/hero-desktop.mp4"}
-          />
+      <section style={heroVideoSection}>
+        {/* Keep the original desktop/mobile hero videos preserved but disabled.
+            After payment approval, set ENABLE_HERO_VIDEO = true to restore them. */}
+        {ENABLE_HERO_VIDEO ? (
+          isMobile !== null && (
+            <video
+              key={isMobile ? "mobile-video" : "desktop-video"}
+              autoPlay
+              muted
+              loop
+              playsInline
+              style={heroVideo}
+              src={isMobile ? "/hero-mobile.mp4" : "/hero-desktop.mp4"}
+            />
+          )
+        ) : (
+          <picture>
+            <source media="(max-width: 768px)" srcSet="/pugpep-hero-mobile.png" />
+            <img
+              src="/pugpep-hero-desktop.png"
+              alt="PugPep — The Future Is Biotech"
+              style={heroBannerImage}
+              fetchPriority="high"
+            />
+          </picture>
         )}
 
-        <div style={heroOverlay}>
+        <div style={heroNoticeArea}>
           <div style={researchBadge}>
             FOR RESEARCH PURPOSES ONLY
             <br />
@@ -3314,10 +3322,10 @@ const brandQualityVisual = {
   overflow: "hidden",
   minHeight: 160,
   height: "100%",
-  border: "1px solid rgba(0,217,255,.30)",
+  border: "none",
   borderRadius: 14,
   background: "#030304",
-  boxShadow: "0 0 30px rgba(0,217,255,.06)",
+  boxShadow: "none",
 };
 
 const brandQualityImage = {
@@ -3325,9 +3333,12 @@ const brandQualityImage = {
   height: "100%",
   minHeight: 160,
   display: "block",
-  objectFit: "contain" as const,
+  objectFit: "cover" as const,
   objectPosition: "center",
-  padding: 8,
+  margin: 0,
+  padding: 0,
+  borderRadius: 14,
+  overflow: "hidden" as const,
   background: "#030304",
 };
 
@@ -3681,11 +3692,27 @@ const heroVideo = {
   display: "block" as const,
 };
 
-const heroOverlay = {
-  position: "absolute" as const,
-  bottom: 25,
+// Compact, content-aligned homepage hero banner.
+// The original artwork is tall; crop its edges to a banner shape rather
+// than shrinking the banner's width or stretching the image.
+const heroBannerImage = {
+  width: "calc(100% - 32px)",
+  maxWidth: 1320,
+  height: "clamp(320px, 29vw, 380px)",
+  objectFit: "cover" as const,
+  objectPosition: "center" as const,
+  margin: "0 auto",
+  display: "block" as const,
+  borderRadius: 16,
+  overflow: "hidden" as const,
+};
+
+// Keep the research notice readable without covering the new banner lettering.
+const heroNoticeArea = {
   width: "100%",
   display: "flex",
   justifyContent: "center",
-  pointerEvents: "none" as const,
+  padding: "12px 12px 18px",
+  background: "#000",
+  textAlign: "center" as const,
 };
