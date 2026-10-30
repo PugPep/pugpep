@@ -1257,7 +1257,8 @@ export default function HomePage() {
             </div>
             <div className="pugpep-purchase-controls">
             {selectedOption && <div className="pugpep-purchase-type">
-              <span>{kitSelected ? "Kit" : "Single"}</span>
+              {!selectedStrength?.kit && <span>{kitSelected ? "Kit" : "Single"}</span>}
+              {!kitSelected && selectedStrength?.kit && <span>Single</span>}
               {selectedStrength?.kit && <label>
                 <input type="checkbox" checked={kitSelected}
                   disabled={pending || product.is_coming_soon || !selectedStrength.single ||
@@ -1266,7 +1267,7 @@ export default function HomePage() {
                     setCardKitSelections((current) => ({ ...current, [product.slug]: event.target.checked }));
                     resetCardMessage(product.slug);
                   }} />
-                Kit (10){!kitSelected && kitSalePercent > 0 && <span className="pugpep-kit-sale-hint"> · {kitSalePercent}% kit savings</span>}
+                Kit{!kitSelected && kitSalePercent > 0 && <span className="pugpep-kit-sale-hint"> · {kitSalePercent}% kit savings</span>}
               </label>}
             </div>}
           <button type="button" className="pugpep-card-cart-button"
@@ -1327,8 +1328,9 @@ export default function HomePage() {
         .pugpep-product-grid { display:grid; align-items:stretch; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; }
         .pugpep-product-card { min-width:0; border:1px solid #30323a; border-radius:16px; overflow:hidden; background:#14151c; display:flex; flex-direction:column; box-shadow:0 10px 24px rgba(0,0,0,.16); transition:border-color .18s ease; }
         .pugpep-product-card:hover { border-color:#7df9ff; }
-        .pugpep-product-image-link { position:relative; display:block; aspect-ratio:1 / 1; background:#fff; overflow:hidden; }
-        .pugpep-product-image-link img { display:block; width:100%; height:100%; object-fit:contain; }
+        .pugpep-product-image-link { position:relative; display:block; width:100%; aspect-ratio:4 / 5; background:#14151c; overflow:hidden; }
+        /* Portrait product photography fills the card without side letterboxing. */
+        .pugpep-product-image-link img { display:block; width:100%; height:100%; object-fit:cover; object-position:center center; }
         .pugpep-product-badges { position:absolute; top:10px; left:10px; right:10px; display:flex; flex-wrap:wrap; justify-content:space-between; gap:5px; pointer-events:none; }
         .pugpep-status-badge, .pugpep-offer-badge { border-radius:7px; padding:6px 8px; font-size:10px; font-weight:850; background:#181a22; color:#fff; box-shadow:0 2px 8px #0002; }
         .pugpep-offer-badge { background:#d3ff69; color:#182000; margin-left:auto; }
