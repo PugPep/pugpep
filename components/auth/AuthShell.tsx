@@ -10,7 +10,7 @@ type AuthShellProps = {
   footer?: ReactNode;
 };
 
-const LOGO_PATH = "/pugpep-logo.png";
+const LOGO_PATH = "/login-image.png";
 
 export default function AuthShell({
   eyebrow = "PUGPEP ACCESS",
