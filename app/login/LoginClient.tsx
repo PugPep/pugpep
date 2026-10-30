@@ -1,9 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { createClient } from "../../lib/supabaseClient";
-import AuthShell from "../../components/auth/AuthShell";
 
 type Mode = "login" | "signup";
 
@@ -219,10 +218,10 @@ export default function LoginClient() {
   );
 
   return (
-    <AuthShell
+    <SplitAuthShell
       eyebrow="PUGPEP ACCOUNT ACCESS"
       title={mode === "login" ? "Login or Register" : "Create Your Account"}
-      subtitle="Vibrant neon styling, faster access, and a shared glass-card layout to match the PUGPEP brand."
+      subtitle="Welcome to PugPep. Access your laboratory research account or create a new one."
       footer={footer}
     >
       <div style={toggleWrap}>
@@ -457,7 +456,83 @@ export default function LoginClient() {
           {message}
         </div>
       ) : null}
-    </AuthShell>
+    </SplitAuthShell>
+  );
+}
+
+
+/**
+ * Split login layout is intentionally self-contained. The legacy AuthShell
+ * is not modified, so password-reset and other auth pages remain unchanged.
+ * Optional image: add /public/login-lab.jpg to show your chosen lab photo.
+ * Without it, the layered gradient remains a complete, readable design.
+ */
+function SplitAuthShell({ eyebrow, title, subtitle, footer, children }: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  footer: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <main className="pp-login-page">
+      <div className="pp-login-layout">
+        <section className="pp-login-visual" aria-label="Welcome to PugPep">
+          <div className="pp-login-photo" aria-hidden="true" />
+          <div className="pp-login-visual-content">
+            <div className="pp-login-brand">PUG<span>PEP</span></div>
+            <div className="pp-login-visual-bottom">
+              <span className="pp-login-kicker">RESEARCH • QUALITY • DISCOVERY</span>
+              <h2>Welcome to the future of biotech.</h2>
+              <p>A dedicated space for independent laboratory research.</p>
+              <div className="pp-login-rule" />
+              <span className="pp-login-small">FOR RESEARCH USE ONLY</span>
+            </div>
+          </div>
+        </section>
+        <section className="pp-login-form-panel">
+          <div className="pp-login-form-inner">
+            <p className="pp-login-eyebrow">{eyebrow}</p>
+            <h1 className="pp-login-heading">{title}</h1>
+            <p className="pp-login-subtitle">{subtitle}</p>
+            {children}
+            <div className="pp-login-footer">{footer}</div>
+          </div>
+        </section>
+      </div>
+      <style jsx>{`
+        .pp-login-page { min-height: 100vh; display: grid; place-items: center; padding: 90px 24px 42px; background: radial-gradient(ellipse at 5% 12%, #133347 0, transparent 40%), radial-gradient(ellipse at 90% 90%, #152b38 0, transparent 40%), #080e16; color: #f7fbff; box-sizing: border-box; }
+        .pp-login-layout { display: grid; grid-template-columns: minmax(0, 1.04fr) minmax(0, 1fr); width: min(1100px, 100%); min-height: 630px; border: 1px solid rgba(195,226,240,.18); border-radius: 24px; overflow: hidden; box-shadow: 0 30px 85px rgba(0,0,0,.48); background: #0e1722; }
+        .pp-login-visual { position: relative; min-height: 630px; overflow: hidden; background: linear-gradient(145deg, #123b4f, #0c2736 55%, #133445); isolation: isolate; }
+        .pp-login-photo { position: absolute; inset: 0; background-image: linear-gradient(180deg, rgba(2,13,22,.18) 0%, rgba(2,14,23,.2) 34%, rgba(2,14,23,.92) 100%), url('/login-lab.jpg'); background-position: center; background-size: cover; background-repeat: no-repeat; z-index: -1; }
+        .pp-login-visual::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(130deg, rgba(19,179,209,.2), transparent 52%, rgba(191,64,140,.1)); z-index: -1; }
+        .pp-login-visual-content { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; padding: clamp(28px, 4vw, 52px); }
+        .pp-login-brand { width: fit-content; font-size: clamp(28px, 3vw, 39px); font-weight: 950; letter-spacing: -.055em; color: #76e0f3; text-shadow: 0 2px 22px rgba(0,0,0,.3); }
+        .pp-login-brand span { color: #f19ac7; }
+        .pp-login-visual-bottom h2 { font-size: clamp(29px, 3vw, 42px); letter-spacing: -.035em; line-height: 1.14; margin: 14px 0; max-width: 420px; }
+        .pp-login-visual-bottom p { font-size: 16px; line-height: 1.55; color: #e0edf3; max-width: 360px; }
+        .pp-login-kicker, .pp-login-small { font-size: 11px; letter-spacing: .17em; font-weight: 800; color: #c1e8f0; }
+        .pp-login-rule { height: 1px; background: rgba(255,255,255,.25); margin: 27px 0 16px; max-width: 240px; }
+        .pp-login-form-panel { min-width: 0; background: linear-gradient(150deg, #111d2b, #0b111a 74%); display: flex; align-items: center; justify-content: center; padding: clamp(26px, 4vw, 52px); box-sizing: border-box; }
+        .pp-login-form-inner { width: 100%; max-width: 450px; }
+        .pp-login-eyebrow { color: #8bdce9; font-size: 11px; font-weight: 850; letter-spacing: .16em; margin: 0 0 12px; }
+        .pp-login-heading { font-size: clamp(30px, 3vw, 41px); line-height: 1.12; letter-spacing: -.025em; margin: 0 0 13px; }
+        .pp-login-subtitle { font-size: 14px; line-height: 1.65; margin: 0 0 26px; color: #b5c4d1; }
+        .pp-login-footer { margin-top: 21px; }
+        @media (max-width: 780px) {
+          .pp-login-page { padding: 80px 14px 28px; align-items: start; }
+          .pp-login-layout { grid-template-columns: minmax(0,1fr); min-height: auto; border-radius: 18px; }
+          .pp-login-visual { min-height: 220px; }
+          .pp-login-visual-content { padding: 24px; }
+          .pp-login-visual-bottom h2 { font-size: 26px; margin: 8px 0 3px; }
+          .pp-login-visual-bottom p { font-size: 13px; margin: 0; }
+          .pp-login-rule, .pp-login-small { display: none; }
+          .pp-login-brand { font-size: 27px; margin-bottom: 26px; }
+          .pp-login-form-panel { padding: 28px 22px 32px; }
+        }
+        @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+      `}</style>
+    </main>
   );
 }
 
