@@ -870,15 +870,7 @@ export default function RootLayout({
 
           </header>
 
-          <FloatingCart
-
-            headerOpen={
-
-              desktopHeaderOpen
-
-            }
-
-          />
+          <FloatingCart />
 
           {children}
 
@@ -892,7 +884,7 @@ export default function RootLayout({
 
 }
 
-function FloatingCart({ headerOpen }: { headerOpen: boolean }) {
+function FloatingCart() {
   const { cart, total, updateQuantity, removeFromCart, setPurchaseType } = useCart();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -1010,14 +1002,6 @@ function FloatingCart({ headerOpen }: { headerOpen: boolean }) {
       .pugpep-cart-step { width:28px; height:30px; border:1px solid #454956; background:#242733; color:#fff; border-radius:6px; cursor:pointer; font-size:16px; }
       .pugpep-cart-step:disabled { opacity:.4; cursor:default; }
     `}</style>
-    {!headerOpen && <button ref={triggerRef} type="button" className="pugpep-cart-trigger" aria-expanded={open} aria-controls="pugpep-cart-panel"
-      aria-label={`Open cart: ${count} items, $${total.toFixed(2)}`}
-      onClick={() => { returnFocusRef.current = triggerRef.current; setOpen(true); }}
-      style={{ position:"fixed", right:24, top:18, zIndex:100001, padding:"8px 12px", borderRadius:10,
-        border:0, background:"linear-gradient(90deg, #00b7ff, #ff2fd0)", color:"#fff", fontWeight:"bold", cursor:"pointer",
-        whiteSpace:"nowrap", boxShadow:"0 5px 20px #0006" }}>
-      🛒 {count} | ${total.toFixed(2)}
-    </button>}
     {open && <div style={{ position:"fixed", inset:0, zIndex:100010, background:"rgba(0,0,0,.65)" }}
       onClick={(event) => { if (event.target === event.currentTarget) closeCart(); }}>
       <section id="pugpep-cart-panel" ref={panelRef} tabIndex={-1} className="pugpep-cart-panel" role="dialog" aria-modal="true" aria-labelledby="pugpep-cart-title"
