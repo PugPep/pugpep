@@ -2027,6 +2027,45 @@ export default function HomePage() {
             transform-origin: center center !important;
           }
         }
+
+        /* Desktop product shelves: equal-height cards even when bundle tiers
+           or a COA are unavailable. Mobile keeps its existing compact layout. */
+        @media (min-width: 721px) {
+          .pugpep-product-row,
+          .pugpep-product-grid { align-items: stretch !important; }
+          .pugpep-product-card { height: 100%; align-self: stretch; }
+          .pugpep-product-info { flex: 1 1 auto; display:flex; flex-direction:column; }
+          .pugpep-product-card .pugpep-card-bundles {
+            margin-top: auto !important;
+            padding-top: 10px;
+            min-height: 71px;
+            box-sizing: border-box;
+            align-content: end;
+          }
+          /* Preserve the same bottom-of-card footprint when a product has no bundle. */
+          .pugpep-product-card .pugpep-card-bundles-empty {
+            display: block !important;
+            visibility: hidden;
+            pointer-events: none;
+          }
+          /* Larger labels inside existing buttons: heights/padding stay unchanged. */
+          .pugpep-product-card .pugpep-card-secondary-actions .pugpep-cart-mobile,
+          .pugpep-product-card .pugpep-card-secondary-actions .pugpep-coa-mobile {
+            font-size: 15px !important;
+            line-height: 1.15;
+          }
+          .pugpep-product-card .pugpep-card-bundle-options button {
+            font-size: 14px !important;
+            line-height: 1.15;
+          }
+          /* Narrow four-column cards need compact numbers to avoid clipped text. */
+          @container (max-width: 420px) {
+            .pugpep-product-card .pugpep-card-bundle-options button {
+              font-size: 13px !important;
+              padding-inline: 1px !important;
+            }
+          }
+        }
       `}</style>
 
       {!ageVerified && (
