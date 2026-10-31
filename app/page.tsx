@@ -2066,6 +2066,94 @@ export default function HomePage() {
             }
           }
         }
+
+        /* Readable product actions: enlarge typography without increasing control heights. */
+        .pugpep-product-card .pugpep-card-secondary-actions .pugpep-cart-mobile,
+        .pugpep-product-card .pugpep-card-secondary-actions .pugpep-coa-mobile {
+          font-size: 16px !important;
+          line-height: 1.05 !important;
+          font-weight: 800 !important;
+        }
+        .pugpep-product-card .pugpep-card-bundle-options button {
+          font-size: 15px !important;
+          line-height: 1.05 !important;
+          font-weight: 800 !important;
+        }
+        .pugpep-product-card .pugpep-kit-selection-hint {
+          font-size: 14px !important;
+          line-height: 1.15 !important;
+          font-weight: 800 !important;
+        }
+        /* Primary purchasing action; the other buttons remain quiet and outlined. */
+        .pugpep-product-card .pugpep-add-button:not(:disabled) {
+          background: #53dce9 !important;
+          border-color: #53dce9 !important;
+          color: #07161b !important;
+          font-weight: 800 !important;
+        }
+        .pugpep-product-card .pugpep-add-button:not(:disabled):hover {
+          background: #88eef5 !important;
+          border-color: #88eef5 !important;
+        }
+        @media (max-width: 720px) {
+          .pugpep-product-card .pugpep-card-secondary-actions .pugpep-cart-mobile,
+          .pugpep-product-card .pugpep-card-secondary-actions .pugpep-coa-mobile {
+            font-size: 13px !important;
+            line-height: 1.05 !important;
+          }
+          .pugpep-product-card .pugpep-card-bundle-options button {
+            font-size: 12px !important;
+            line-height: 1.05 !important;
+            letter-spacing: -0.15px;
+          }
+          .pugpep-product-card .pugpep-kit-selection-hint { font-size: 12px !important; }
+        }
+        @media (max-width: 370px) {
+          .pugpep-product-card .pugpep-card-bundle-options button { font-size: 11px !important; }
+          .pugpep-product-card .pugpep-card-secondary-actions .pugpep-cart-mobile,
+          .pugpep-product-card .pugpep-card-secondary-actions .pugpep-coa-mobile { font-size: 12px !important; }
+          .pugpep-product-card .pugpep-kit-selection-hint { font-size: 11px !important; }
+        }
+
+        /* Increase Kit selector visibility without expanding card rows. */
+        .pugpep-product-card .pugpep-kit-bubble {
+          font-size: 16px !important;
+          font-weight: 800 !important;
+          gap: 7px !important;
+          padding-inline: 2px !important;
+        }
+        .pugpep-product-card .pugpep-kit-circle {
+          flex: 0 0 21px !important;
+          width: 21px !important;
+          height: 21px !important;
+          border-width: 2px !important;
+        }
+        .pugpep-product-card .pugpep-kit-bubble[aria-pressed="true"] .pugpep-kit-circle::after {
+          width: 9px !important;
+          height: 9px !important;
+          top: 4px !important;
+          left: 4px !important;
+        }
+        /* Desktop quantity value, not the control dimensions. */
+        @media (min-width: 721px) {
+          .pugpep-product-card .pugpep-card-quantity input {
+            font-size: 20px !important;
+            font-weight: 800 !important;
+          }
+          .pugpep-product-card .pugpep-card-quantity button {
+            font-size: 22px !important;
+            font-weight: 800 !important;
+          }
+        }
+        @media (max-width: 720px) {
+          .pugpep-product-card .pugpep-kit-bubble { font-size: 14px !important; gap: 5px !important; }
+          .pugpep-product-card .pugpep-kit-circle {
+            flex-basis: 19px !important; width: 19px !important; height: 19px !important;
+          }
+          .pugpep-product-card .pugpep-kit-bubble[aria-pressed="true"] .pugpep-kit-circle::after {
+            width: 7px !important; height: 7px !important; top: 4px !important; left: 4px !important;
+          }
+        }
       `}</style>
 
       {!ageVerified && (
