@@ -51,6 +51,8 @@ export default function RootLayout({
 
   ] = useState(false);
 
+  const [mobileHeaderHidden, setMobileHeaderHidden] = useState(false);
+
   const [
 
     desktopHeaderOpen,
@@ -171,6 +173,26 @@ export default function RootLayout({
 
   }, []);
 
+  useEffect(() => {
+    let previousY = window.scrollY;
+    const onScroll = () => {
+      const currentY = window.scrollY;
+      if (window.innerWidth > 800) {
+        setMobileHeaderHidden(false);
+        previousY = currentY;
+        return;
+      }
+      if (currentY < 70 || menuOpen) {
+        setMobileHeaderHidden(false);
+      } else if (Math.abs(currentY - previousY) > 5) {
+        setMobileHeaderHidden(currentY > previousY);
+      }
+      previousY = currentY;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [menuOpen]);
+
   return (
 
     <html lang="en">
@@ -196,10 +218,12 @@ export default function RootLayout({
           }
 
           .tickerTrack > span:nth-child(odd) {
-            color: #168EDB;
+            color: #66dcff;
+            text-shadow: 0 0 2px rgba(0,217,255,.32);
           }
           .tickerTrack > span:nth-child(even) {
-            color: #D83B90;
+            color: #ff78cf;
+            text-shadow: 0 0 2px rgba(255,85,197,.25);
           }
 
           .siteHeaderShell {
@@ -265,13 +289,12 @@ export default function RootLayout({
             }
 
             .siteHeaderShell {
-
               position: sticky !important;
-
-              transform: none !important;
-
-              transition: none !important;
-
+              transform: translateY(0) !important;
+              transition: transform 260ms ease !important;
+            }
+            .siteHeaderShell.mobileHidden {
+              transform: translateY(-100%) !important;
             }
 
             .desktopNav {
@@ -361,6 +384,29 @@ export default function RootLayout({
               flex-shrink: 0 !important;
             }
 
+            /* Keep Account Access, cart and hamburger controls aligned.
+               Target the visible interactive surfaces rather than changing
+               their widths or the spacing between controls. */
+            .mobileHeaderActions button,
+            .mobileHeaderActions a {
+              box-sizing: border-box !important;
+              height: 44px !important;
+              min-height: 44px !important;
+              max-height: 44px !important;
+              display: inline-flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+              vertical-align: middle !important;
+              padding-top: 0 !important;
+              padding-bottom: 0 !important;
+            }
+
+            .mobileHeaderActions .mobileMenuButton {
+              width: 44px !important;
+              min-width: 44px !important;
+              padding: 0 !important;
+            }
+
             .tickerTrack {
 
               animation-duration: 28s !important;
@@ -417,15 +463,7 @@ export default function RootLayout({
 
           <header
 
-            className={`siteHeaderShell${
-
-              desktopHeaderOpen
-
-                ? " open"
-
-                : ""
-
-            }`}
+            className={`siteHeaderShell${desktopHeaderOpen ? " open" : ""}${mobileHeaderHidden && !menuOpen ? " mobileHidden" : ""}`}
 
             style={headerShell}
 
@@ -1441,9 +1479,9 @@ const topTicker = {
 
   background:
 
-    "#ffffff",
+    "#080d16",
 
-  color: "#000000",
+  color: "#ffffff",
 
   fontWeight: 900,
 

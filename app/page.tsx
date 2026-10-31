@@ -1190,7 +1190,7 @@ export default function HomePage() {
     // Do not call an entire product 15% off just because its regular kit saves 15%.
     const offerPercent = catalogActivePromotion(selectedOption)
       ? catalogSalePercent(selectedOption, selectedStrength?.single) : 0;
-    const offerBadge = `${offerPercent}% OFF`;
+    const offerBadge = `${Math.round(offerPercent)}% OFF`;
     const bundleTiers = product.is_coming_soon ? [] : catalogBundleTiers(selectedOption, quantity);
     const activeBundleTier = [...bundleTiers].reverse().find((tier) => quantity >= tier.quantity);
     const quantityQuote = catalogQuantityQuote(selectedOption, quantity, selectedStrength?.single);
@@ -1263,7 +1263,7 @@ export default function HomePage() {
               {!product.is_coming_soon && quantityQuote && <div className="pugpep-card-price-caption">
                 Total for {quantity} {kitSelected ? (quantity === 1 ? "kit (10 vials)" : `kits (${quantity * 10} vials)`)
                   : (quantity === 1 ? "single" : "singles")}
-                {quantityQuote.savings > 0 && !quantityQuote.compareWithSingles && <span className="pugpep-card-sale-percent"> · {quantityQuote.percent}% OFF</span>}
+                {quantityQuote.savings > 0 && !quantityQuote.compareWithSingles && <span className="pugpep-card-sale-percent"> · {Math.round(quantityQuote.percent)}% OFF</span>}
               </div>}
               {/* Keep Kit savings in the main price summary; avoid extra rows
                   that make the product card jump when Kit is selected. */}
@@ -1377,7 +1377,17 @@ export default function HomePage() {
         .pugpep-product-price > .pugpep-card-sale-percent { color:#b5ff85; font-size:12px; font-weight:800; white-space:nowrap; }
         .pugpep-card-bundles { margin-top:10px; display:grid; gap:6px; }
         .pugpep-card-bundle-title { font-size:13px; font-weight:800; color:#c6edee; }
-        .pugpep-card-bundle-options { display:flex; flex-wrap:nowrap; gap:5px; width:100%; }
+        /* Keep all three bundle tiers inside each product card at every viewport. */
+        .pugpep-product-info { container-type:inline-size; }
+        .pugpep-card-bundle-options { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; width:100%; min-width:0; box-sizing:border-box; }
+        .pugpep-card-bundle-options > button { min-width:0; max-width:100%; overflow:hidden; }
+        /* Compact labels are based on CARD width, not just the screen width. */
+        @container (max-width: 420px) {
+          .pugpep-card-bundle-options { gap:3px !important; }
+          .pugpep-card-bundle-options > button { padding:5px 1px !important; font-size:clamp(9px,2.2vw,11px) !important; }
+          .pugpep-bundle-desktop-label { display:none !important; }
+          .pugpep-bundle-mobile-label { display:inline !important; }
+        }
         .pugpep-card-bundle-options button { flex:1 1 0; min-width:0; box-sizing:border-box; white-space:nowrap; padding:7px 4px; min-height:34px; font:inherit; font-size:12px; font-weight:700; border:1px solid #454956; border-radius:6px; background:#1d212b; color:#dce5f0; cursor:pointer; }
         .pugpep-card-bundle-options button[aria-pressed="true"] { color:#062027; background:#7df9ff; border-color:#7df9ff; }
         .pugpep-card-bundle-options button:disabled { opacity:.5; cursor:default; }
@@ -1393,9 +1403,9 @@ export default function HomePage() {
         .pugpep-purchase-type label { flex-wrap:nowrap; }
         .pugpep-purchase-type input { accent-color:#7df9ff; margin:0; width:16px; height:16px; flex-shrink:0; }
         .pugpep-card-buy-row { display:flex; align-items:stretch; gap:7px; }
-        .pugpep-card-quantity { display:flex; flex:0 0 auto; align-items:center; border:1px solid #414550; border-radius:8px; overflow:hidden; }
-        .pugpep-card-quantity button { width:24px; min-height:38px; border:0; background:#20232c; color:#fff; padding:0; cursor:pointer; font-size:16px; }
-        .pugpep-card-quantity input { width:32px; min-width:0; background:#15171e; border:0; color:#fff; text-align:center; padding:0; font-size:14px; appearance:textfield; -moz-appearance:textfield; }
+        .pugpep-card-quantity { display:flex; flex:0 0 auto; align-items:center; border:0; border-radius:0; background:transparent; overflow:hidden; }
+        .pugpep-card-quantity button { width:24px; min-height:38px; border:0; background:transparent; color:#fff; padding:0; cursor:pointer; font-size:16px; }
+        .pugpep-card-quantity input { width:32px; min-width:0; background:transparent; border:0; color:#fff; text-align:center; padding:0; font-size:14px; appearance:textfield; -moz-appearance:textfield; }
         .pugpep-card-quantity input::-webkit-inner-spin-button, .pugpep-card-quantity input::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
         .pugpep-add-button { flex:1; min-width:0; min-height:40px; border:1px solid #7df9ff; border-radius:8px; background:#7df9ff; color:#052027; padding:8px 7px; cursor:pointer; font:inherit; font-size:15px; white-space:nowrap; line-height:1.15; font-weight:800; }
         .pugpep-add-button:disabled, .pugpep-card-quantity button:disabled { opacity:.5; cursor:default; }
@@ -1438,6 +1448,42 @@ export default function HomePage() {
         }
         .pugpep-shelf-tools button { color:#fff; border-color:#fff; }
         .pugpep-shelf-tools button:hover:not(:disabled) { background:#292b32; }
+        /* Mobile catalog filters: exact two-row, four-column grid. */
+        @media (max-width: 720px) {
+          .pugpep-catalog-controls {
+            flex-wrap: wrap !important;
+            overflow-x: visible !important;
+            min-width: 0 !important;
+            width: 100%;
+            align-items: flex-start !important;
+          }
+          .pugpep-catalog-filter-list {
+            display: grid !important;
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            grid-template-rows: repeat(2, minmax(42px, auto));
+            gap: 6px !important;
+            min-width: 0 !important;
+            width: 100%;
+          }
+          .pugpep-catalog-filter-button {
+            box-sizing: border-box !important;
+            width: 100% !important;
+            min-width: 0 !important;
+            max-width: 100% !important;
+            min-height: 42px !important;
+            height: 100% !important;
+            padding: 5px 3px !important;
+            font-size: clamp(9px, 2.45vw, 11px) !important;
+            line-height: 1.12 !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere;
+            text-align: center;
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+            flex: none !important;
+          }
+        }
         @media(max-width:1100px) { .pugpep-product-row { grid-auto-columns:max(270px,calc((100% - 44px) / 3.2)); } .pugpep-product-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
         @media(max-width:900px) { .pugpep-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
         @media(max-width:720px) { .pugpep-product-row { grid-auto-columns:max(270px,calc((100% - 20px) / 2.15)); gap:12px; } .pugpep-product-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; } .pugpep-product-info { padding:12px; } .pugpep-product-name { font-size:17px; } }
@@ -1950,6 +1996,16 @@ export default function HomePage() {
         /* Desktop-only: the two source images have a pale strip at their
            left edge. Conceal the outer 1.5% inside the existing rounded
            clips without moving, reflowing, or cropping any mobile image. */
+        /* Keep the sort menu beside the catalog title, not below the filters. */
+        @media (max-width: 600px) {
+          #catalog h2 { min-width: 0; font-size: clamp(19px, 5.2vw, 26px) !important; }
+          #catalog .pugpep-catalog-sort {
+            min-height: 36px;
+            max-width: 112px;
+            padding: 0 7px;
+            font-size: 12px;
+          }
+        }
         @media (min-width: 769px) {
           .pugpep-proof-visual,
           .shop-by-focus-grid .category-card:nth-child(2) {
@@ -2096,6 +2152,9 @@ export default function HomePage() {
       </section>
 
       <style jsx global>{`
+        @media (max-width: 600px) {
+          .pugpep-footer-legal { font-size: 12px !important; }
+        }
         .pugpep-combined-notice-banner {
           box-sizing: border-box;
           width: 100%;
@@ -2107,19 +2166,17 @@ export default function HomePage() {
         }
         .pugpep-combined-notice-banner > img {
           display: block;
-          width: 100%;
+          width: 60%;
           max-width: 1320px;
           height: auto;
           object-fit: contain;
         }
-        @media (max-width: 600px) {
+        @media (max-width: 768px) {
           .pugpep-combined-notice-banner {
             padding: 2px 4px;
           }
           .pugpep-combined-notice-banner > img {
-            display: block;
             width: 100%;
-            height: auto;
             max-width: none;
           }
         }
@@ -2266,24 +2323,27 @@ export default function HomePage() {
 
       <section id="catalog" style={catalogShell}>
         <div style={catalogHeader}>
-          <div>
-            <h2 style={catalogTitle}>Browse the Full Catalog</h2>
-          </div>
-
-          <div style={catalogStats}>
-            <span>{products.length} Products</span>
-            <span>{saleCount} On Sale</span>
-            <span>{visibleProducts.length} Showing</span>
-          </div>
+          <h2 style={catalogTitle}>Browse the Full Catalog</h2>
+          <select
+            className="pugpep-catalog-sort"
+            value={sort}
+            onChange={(event) => setSort(event.target.value)}
+            style={sortSelect}
+            aria-label="Sort products"
+          >
+            <option value="featured">Featured</option>
+            <option value="az">A–Z</option>
+            <option value="za">Z–A</option>
+          </select>
         </div>
 
         <div style={searchSection}>
-          <div style={catalogControls}>
-            <div style={filterButtons}>
+          <div className="pugpep-catalog-controls" style={catalogControls}>
+            <div className="pugpep-catalog-filter-list" style={filterButtons}>
               {[
-                { value: "all", label: "ALL PRODUCTS" },
-                { value: "new", label: "NEW PRODUCTS" },
-                { value: "sale", label: "SALE" },
+                { value: "all", label: "All Products" },
+                { value: "new", label: "New Products" },
+                { value: "sale", label: "Sale" },
                 ...productFamilies.slice(1),
               ].map((item) => (
                 <button
@@ -2292,6 +2352,7 @@ export default function HomePage() {
                   onClick={() => {
                     setFilter(item.value);
                   }}
+                  className="pugpep-catalog-filter-button"
                   style={{
                     ...filterButton,
                     border: filter === item.value
@@ -2306,16 +2367,6 @@ export default function HomePage() {
               ))}
             </div>
 
-            <select
-              value={sort}
-              onChange={(event) => setSort(event.target.value)}
-              style={sortSelect}
-              aria-label="Sort products"
-            >
-              <option value="featured">Featured</option>
-              <option value="az">A–Z</option>
-              <option value="za">Z–A</option>
-            </select>
           </div>
 
           <div style={catalogSearchWrap}>
@@ -2425,36 +2476,34 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div style={footerColumn}>
+          <div style={{ ...footerColumn, gridColumn: "1 / -1" }}>
             <p style={footerColumnTitle}>
               LEGAL &amp; POLICIES
             </p>
 
-            <Link href="/terms" style={footerLink}>
-              Terms &amp; Conditions
-            </Link>
-
-            <Link href="/privacy" style={footerLink}>
-              Privacy Policy
-            </Link>
-
-            <Link href="/refund-policy" style={footerLink}>
-              Refund &amp; Return Policy
-            </Link>
-
-            <Link href="/shipping-policy" style={footerLink}>
-              Shipping &amp; Delivery Policy
-            </Link>
-
-            <Link href="/sms-terms" style={footerLink}>
-              SMS Terms
-            </Link>
+            <div style={footerLegalLinks}>
+              <Link href="/terms" style={footerLink}>
+                Terms &amp; Conditions
+              </Link>
+              <Link href="/privacy" style={footerLink}>
+                Privacy Policy
+              </Link>
+              <Link href="/refund-policy" style={footerLink}>
+                Refund &amp; Return Policy
+              </Link>
+              <Link href="/shipping-policy" style={footerLink}>
+                Shipping &amp; Delivery Policy
+              </Link>
+              <Link href="/sms-terms" style={footerLink}>
+                SMS Terms
+              </Link>
+            </div>
           </div>
         </div>
 
         <div style={footerDivider} />
 
-        <p style={footerResearchNotice}>
+        <p className="pugpep-footer-legal" style={footerResearchNotice}>
           <strong style={{ color: "#ffffff" }}>
             RESEARCH USE ONLY:
           </strong>{" "}
@@ -2462,7 +2511,7 @@ export default function HomePage() {
           Not for human or veterinary use.
         </p>
 
-        <p style={footerText}>
+        <p className="pugpep-footer-legal" style={footerText}>
           Information provided on this website is for research and
           informational purposes only and does not constitute medical advice,
           dosing guidance, treatment recommendations, or claims of therapeutic
@@ -2470,7 +2519,7 @@ export default function HomePage() {
           or prevent disease.
         </p>
 
-        <p style={footerText}>
+        <p className="pugpep-footer-legal" style={footerText}>
           PUGPEP is a chemical supplier. PUGPEP is not a compounding pharmacy
           or chemical compounding facility as defined under 503A of the Federal
           Food, Drug, and Cosmetic Act. PUGPEP is not an outsourcing facility
@@ -3260,10 +3309,10 @@ const catalogShell = {
 
 const catalogHeader = {
   display: "flex",
-  alignItems: "flex-end",
+  alignItems: "center",
   justifyContent: "space-between",
   gap: 8,
-  flexWrap: "wrap" as const,
+  flexWrap: "nowrap" as const,
 };
 
 const catalogEyebrow = {
@@ -3359,13 +3408,15 @@ const filterButton = {
   whiteSpace: "nowrap" as const,
   borderRadius: 999,
   cursor: "pointer",
-  fontWeight: 900,
+  fontWeight: 700,
   fontSize: 12,
   lineHeight: 1.15,
+  textTransform: "none" as const,
 };
 
 const sortSelect = {
-  minHeight: 32,
+  minHeight: 36,
+  flexShrink: 0,
   padding: "0 9px",
   border: "1px solid rgba(0,217,255,.24)",
   borderRadius: 9,
@@ -4014,8 +4065,7 @@ const footerGrid = {
   maxWidth: 1180,
   margin: "0 auto",
   display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(210px, 1fr))",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
   gap: 18,
 };
 
@@ -4023,6 +4073,14 @@ const footerColumn = {
   display: "grid",
   alignContent: "start",
   gap: 8,
+};
+
+const footerLegalLinks = {
+  display: "flex",
+  flexWrap: "wrap" as const,
+  alignItems: "center",
+  columnGap: "clamp(16px, 3vw, 34px)",
+  rowGap: 10,
 };
 
 const footerColumnTitle = {
@@ -4060,20 +4118,22 @@ const footerDivider = {
 
 const footerResearchNotice = {
   maxWidth: 1100,
-  margin: "0 auto 18px",
+  margin: "0 auto 10px",
   color: "#ffffff",
-  lineHeight: 1.7,
-  fontSize: 17,
-  textAlign: "center" as const,
+  lineHeight: 1.5,
+  fontSize: 13,
+  fontWeight: 400,
+  textAlign: "left" as const,
 };
 
 const footerText = {
   maxWidth: 1100,
-  margin: "0 auto 16px",
-  color: "#f0f0f0",
-  lineHeight: 1.7,
-  fontSize: 15,
-  textAlign: "center" as const,
+  margin: "0 auto 10px",
+  color: "#c9cdd3",
+  lineHeight: 1.5,
+  fontSize: 13,
+  fontWeight: 400,
+  textAlign: "left" as const,
 };
 
 const footerCopyright = {
