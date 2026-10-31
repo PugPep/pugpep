@@ -3256,11 +3256,11 @@ const deliveryPanel = {
 };
 
 const deliveryPanelHeader = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
+  display: "flex" as const,
+  alignItems: "center" as const,
+  justifyContent: "space-between" as const,
   gap: 8,
-  flexWrap: "nowrap",
+  flexWrap: "nowrap" as const,
   minWidth: 0,
 };
 
