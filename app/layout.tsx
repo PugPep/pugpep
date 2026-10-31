@@ -280,6 +280,22 @@ export default function RootLayout({
 
           }
 
+          /* Desktop: compact, matching header action heights and readable navigation. */
+          @media (min-width: 801px) {
+            .mobileHeaderActions a,
+            .mobileHeaderActions button {
+              box-sizing: border-box !important;
+              height: 38px !important;
+              min-height: 38px !important;
+              max-height: 38px !important;
+              padding-top: 0 !important;
+              padding-bottom: 0 !important;
+              display: inline-flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+            }
+          }
+
           @media (max-width: 800px) {
 
             .topActivationStrip {
@@ -437,51 +453,8 @@ export default function RootLayout({
 
           <PromoCapture />
 
-          <div
-
-            className="topActivationStrip"
-
-            style={activationStrip}
-
-            onMouseEnter={
-
-              openDesktopHeader
-
-            }
-
-            aria-hidden="true"
-
-          >
-
-            <span
-
-              style={activationGlow}
-
-            />
-
-          </div>
-
-          <header
-
-            className={`siteHeaderShell${desktopHeaderOpen ? " open" : ""}${mobileHeaderHidden && !menuOpen ? " mobileHidden" : ""}`}
-
-            style={headerShell}
-
-            onMouseEnter={
-
-              openDesktopHeader
-
-            }
-
-            onMouseLeave={
-
-              scheduleDesktopHeaderClose
-
-            }
-
-          >
-
-            <div style={topTicker}>
+          {/* Persistent announcement strip: independent of the auto-hiding navigation. */}
+          <div className="persistentAnnouncement" style={topTicker}>
 
               <div
 
@@ -553,7 +526,51 @@ export default function RootLayout({
 
               </div>
 
-            </div>
+          </div>
+
+          <div
+
+            className="topActivationStrip"
+
+            style={activationStrip}
+
+            onMouseEnter={
+
+              openDesktopHeader
+
+            }
+
+            aria-hidden="true"
+
+          >
+
+            <span
+
+              style={activationGlow}
+
+            />
+
+          </div>
+
+          <header
+
+            className={`siteHeaderShell${desktopHeaderOpen ? " open" : ""}${mobileHeaderHidden && !menuOpen ? " mobileHidden" : ""}`}
+
+            style={headerShell}
+
+            onMouseEnter={
+
+              openDesktopHeader
+
+            }
+
+            onMouseLeave={
+
+              scheduleDesktopHeaderClose
+
+            }
+
+          >
 
             <nav
 
@@ -1199,7 +1216,7 @@ const activationStrip = {
 
   zIndex: 100000,
 
-  top: 0,
+  top: 28,
 
   left: 0,
 
@@ -1253,7 +1270,7 @@ const headerShell = {
 
   zIndex: 99999,
 
-  top: 0,
+  top: 28,
 
   left: 0,
 
@@ -1349,9 +1366,9 @@ const navLink = {
 
   fontWeight: 900,
 
-  fontSize: 15,
+  fontSize: 17,
 
-  letterSpacing: 1,
+  letterSpacing: 0.6,
 
 };
 
@@ -1469,6 +1486,12 @@ const mobileNavLink = {
 
 const topTicker = {
 
+  position: "fixed" as const,
+  zIndex: 100001,
+  top: 0,
+  left: 0,
+  height: 28,
+  boxSizing: "border-box" as const,
   width: "100%",
 
   overflow: "hidden",
@@ -1485,8 +1508,9 @@ const topTicker = {
 
   fontWeight: 900,
 
-  fontSize: 13,
+  fontSize: 12,
 
+  lineHeight: "18px",
   letterSpacing: 1,
 
   whiteSpace:
@@ -1501,7 +1525,7 @@ const tickerTrack = {
 
   gap: 50,
 
-  padding: "8px 0",
+  padding: "5px 0",
 
   animation:
 

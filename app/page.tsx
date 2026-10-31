@@ -2173,7 +2173,8 @@ export default function HomePage() {
         }
         @media (max-width: 768px) {
           .pugpep-combined-notice-banner {
-            padding: 2px 4px;
+            /* Match the hero image's calc(100% - 32px) mobile width. */
+            padding: 2px 16px;
           }
           .pugpep-combined-notice-banner > img {
             width: 100%;
