@@ -310,10 +310,55 @@ export default function RootLayout({
 
             }
 
+            /* The desktop one-line header is wider than a phone screen.
+               Give the logo and controls separate rows and allow the
+               controls to wrap without cropping the cart. */
             .siteNav {
 
-              padding: 12px 14px !important;
+              display: grid !important;
+              grid-template-columns: minmax(0, 1fr) !important;
+              align-items: stretch !important;
+              gap: 9px !important;
+              padding: 10px 12px 12px !important;
+              max-width: 100vw !important;
+              min-width: 0 !important;
 
+            }
+
+            .mobileHeaderIdentity {
+              min-width: 0 !important;
+              max-width: 100% !important;
+            }
+
+            .mobileHeaderIdentity img {
+              max-width: min(185px, 54vw) !important;
+              height: auto !important;
+            }
+
+            .mobileHeaderActions {
+              display: flex !important;
+              width: 100% !important;
+              min-width: 0 !important;
+              max-width: 100% !important;
+              box-sizing: border-box !important;
+              flex-wrap: wrap !important;
+              align-items: center !important;
+              justify-content: flex-end !important;
+              gap: 8px !important;
+            }
+
+            .mobileHeaderActions > * {
+              flex-shrink: 0 !important;
+              max-width: 100% !important;
+            }
+
+            .mobileCart {
+              min-width: 0 !important;
+              max-width: 100% !important;
+            }
+
+            .mobileMenuButton {
+              flex-shrink: 0 !important;
             }
 
             .tickerTrack {
@@ -482,7 +527,7 @@ export default function RootLayout({
 
             >
 
-              <div style={logoArea}>
+              <div className="mobileHeaderIdentity" style={logoArea}>
 
                 <Link
 
@@ -600,7 +645,7 @@ export default function RootLayout({
 
               </div>
 
-              <div style={rightNav}>
+              <div className="mobileHeaderActions" style={rightNav}>
 
                 <AdminMenu />
 

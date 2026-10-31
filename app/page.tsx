@@ -1263,18 +1263,10 @@ export default function HomePage() {
               {!product.is_coming_soon && quantityQuote && <div className="pugpep-card-price-caption">
                 Total for {quantity} {kitSelected ? (quantity === 1 ? "kit (10 vials)" : `kits (${quantity * 10} vials)`)
                   : (quantity === 1 ? "single" : "singles")}
-                {quantityQuote.savings > 0 && (!kitSelected || !activeBundleTier) && <span className="pugpep-card-sale-percent"> · {quantityQuote.percent}% {quantityQuote.compareWithSingles ? "saved vs singles" : "OFF"}</span>}
+                {quantityQuote.savings > 0 && !quantityQuote.compareWithSingles && <span className="pugpep-card-sale-percent"> · {quantityQuote.percent}% OFF</span>}
               </div>}
-              {!product.is_coming_soon && kitSelected && quantityQuote && activeBundleTier && !selectedOption?.hasCampaign && (
-                <div className="pugpep-card-price-caption" aria-label="Separate kit and additional bundle savings">
-                  <span>Standard Kit Savings: 15% off</span>
-                  <span className="pugpep-card-sale-percent"> · Bundle &amp; Save: Additional {activeBundleTier.discount}% off</span>
-                </div>
-              )}
-              {!product.is_coming_soon && kitSelected && quantityQuote && !quantityQuote.compareWithSingles
-                && quantityQuote.kitSavings > quantityQuote.savings && <div className="pugpep-card-price-caption">
-                  Save ${quantityQuote.kitSavings.toFixed(2)} compared with {quantity * 10} singles
-                </div>}
+              {/* Keep Kit savings in the main price summary; avoid extra rows
+                  that make the product card jump when Kit is selected. */}
             </div>
 
           </div>
@@ -1866,6 +1858,14 @@ export default function HomePage() {
           .pugpep-product-card .pugpep-card-bundles { margin-top:8px !important; }
         }
 
+        /* Quiet trust badge near the Proof section; visible without crowding navigation. */
+        .pugpep-veteran-owned { align-self:flex-start; display:inline-flex; align-items:center;
+          margin-top:10px; padding:6px 10px; border:1px solid rgba(125,249,255,.34);
+          border-radius:999px; background:rgba(0,217,255,.07); color:#b8f5ff;
+          font-size:10px; line-height:1.2; font-weight:800; letter-spacing:.10em; }
+        /* Keep pricing footprint stable when switching between singles and kits. */
+        .pugpep-product-card .pugpep-card-price-caption { overflow-wrap:anywhere; }
+
         /* Unified shopping control order on mobile AND desktop. */
         .pugpep-product-card .pugpep-product-title-row { align-items:flex-start; min-height:0; }
         .pugpep-product-card .pugpep-coa-desktop,
@@ -2083,16 +2083,65 @@ export default function HomePage() {
           </picture>
         )}
 
-        <div style={heroNoticeArea}>
-          <div style={researchBadge}>
-            FOR RESEARCH PURPOSES ONLY
-            <br />
-            <span style={{ color: "#00ff99" }}>
-              NOT FOR HUMAN OR VETERINARY USE
-            </span>
+        {/* Combined Veteran Owned and research-use notice: image directly below the hero. */}
+        <div className="pugpep-combined-notice-banner">
+          <img
+            src="/pugpep-veteran-research-banner-trimmed.png"
+            alt="Veteran Owned — Discipline, Integrity, Service. For Research Purposes Only. Not for Human or Veterinary Use."
+            loading="eager"
+            decoding="async"
+          />
+          <div className="pugpep-mobile-notice" aria-label="Veteran owned. For research purposes only. Not for human or veterinary use.">
+            <div className="pugpep-mobile-veteran">
+              <span>★ VETERAN OWNED</span>
+            </div>
+            <div className="pugpep-mobile-research">
+              <strong>FOR RESEARCH PURPOSES ONLY</strong>
+              <span>NOT FOR HUMAN OR VETERINARY USE</span>
+            </div>
           </div>
         </div>
       </section>
+
+      <style jsx global>{`
+        .pugpep-combined-notice-banner {
+          box-sizing: border-box;
+          width: 100%;
+          padding: 2px clamp(8px, 2vw, 24px) 2px;
+          background: #000;
+          display: flex;
+          justify-content: center;
+        }
+        .pugpep-combined-notice-banner img {
+          display: block;
+          width: 100%;
+          max-width: 1320px;
+          height: auto;
+          object-fit: contain;
+        }
+        .pugpep-mobile-notice { display: none; }
+        @media (max-width: 600px) {
+          .pugpep-combined-notice-banner { padding: 4px 8px 4px; }
+          .pugpep-combined-notice-banner > img { display: none; }
+          .pugpep-mobile-notice {
+            width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.28fr);
+            gap: 5px; align-items: stretch; color: #fff;
+          }
+          .pugpep-mobile-veteran, .pugpep-mobile-research {
+            min-height: 58px; border-radius: 7px; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 4px;
+            padding: 6px; box-sizing: border-box; text-align: center;
+          }
+          .pugpep-mobile-veteran {
+            border: 1px solid #23bde3;
+            background: linear-gradient(100deg, rgba(4,31,52,.86), rgba(30,7,35,.75)), url('/pugpep-veteran-research-banner-trimmed.png') left center / auto 150% no-repeat;
+          }
+          .pugpep-mobile-veteran span { font-weight: 900; font-size: 11px; letter-spacing: .02em; color: #e7faff; text-shadow: 0 1px 4px #000; }
+          .pugpep-mobile-research { border: 1px solid #db38ad; background: #0c0714; }
+          .pugpep-mobile-research strong { font-size: 10px; line-height: 1.3; }
+          .pugpep-mobile-research span { font-size: 9px; line-height: 1.25; color: #5cf4dc; font-weight: 800; }
+        }
+      `}</style>
 
       {featuredNewProducts.length > 0 && (
         <section style={newProductsSection}>
@@ -3611,7 +3660,7 @@ const bottomBar = {
 
 const brandIntroSection = {
   maxWidth: 1320,
-  margin: "22px auto 0",
+  margin: "10px auto 0",
   padding: "14px",
   display: "grid",
   gridTemplateColumns: "minmax(0, 1.25fr) minmax(260px, .75fr)",
