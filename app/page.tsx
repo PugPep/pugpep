@@ -2091,15 +2091,7 @@ export default function HomePage() {
             loading="eager"
             decoding="async"
           />
-          <div className="pugpep-mobile-notice" aria-label="Veteran owned. For research purposes only. Not for human or veterinary use.">
-            <div className="pugpep-mobile-veteran">
-              <span>★ VETERAN OWNED</span>
-            </div>
-            <div className="pugpep-mobile-research">
-              <strong>FOR RESEARCH PURPOSES ONLY</strong>
-              <span>NOT FOR HUMAN OR VETERINARY USE</span>
-            </div>
-          </div>
+
         </div>
       </section>
 
@@ -2107,39 +2099,29 @@ export default function HomePage() {
         .pugpep-combined-notice-banner {
           box-sizing: border-box;
           width: 100%;
-          padding: 2px clamp(8px, 2vw, 24px) 2px;
+          padding: 2px clamp(8px, 2vw, 24px);
           background: #000;
           display: flex;
           justify-content: center;
+          align-items: center;
         }
-        .pugpep-combined-notice-banner img {
+        .pugpep-combined-notice-banner > img {
           display: block;
           width: 100%;
           max-width: 1320px;
           height: auto;
           object-fit: contain;
         }
-        .pugpep-mobile-notice { display: none; }
         @media (max-width: 600px) {
-          .pugpep-combined-notice-banner { padding: 4px 8px 4px; }
-          .pugpep-combined-notice-banner > img { display: none; }
-          .pugpep-mobile-notice {
-            width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.28fr);
-            gap: 5px; align-items: stretch; color: #fff;
+          .pugpep-combined-notice-banner {
+            padding: 2px 4px;
           }
-          .pugpep-mobile-veteran, .pugpep-mobile-research {
-            min-height: 58px; border-radius: 7px; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; gap: 4px;
-            padding: 6px; box-sizing: border-box; text-align: center;
+          .pugpep-combined-notice-banner > img {
+            display: block;
+            width: 100%;
+            height: auto;
+            max-width: none;
           }
-          .pugpep-mobile-veteran {
-            border: 1px solid #23bde3;
-            background: linear-gradient(100deg, rgba(4,31,52,.86), rgba(30,7,35,.75)), url('/pugpep-veteran-research-banner-trimmed.png') left center / auto 150% no-repeat;
-          }
-          .pugpep-mobile-veteran span { font-weight: 900; font-size: 11px; letter-spacing: .02em; color: #e7faff; text-shadow: 0 1px 4px #000; }
-          .pugpep-mobile-research { border: 1px solid #db38ad; background: #0c0714; }
-          .pugpep-mobile-research strong { font-size: 10px; line-height: 1.3; }
-          .pugpep-mobile-research span { font-size: 9px; line-height: 1.25; color: #5cf4dc; font-weight: 800; }
         }
       `}</style>
 
