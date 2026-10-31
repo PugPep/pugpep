@@ -1196,7 +1196,7 @@ export default function HomePage() {
           <div className="pugpep-product-title-row">
           <Link href={productPath} className="pugpep-product-name"
             onClick={(event) => { void handleProductAccess(event, product.slug); }}>{product.name}</Link>
-            {selectedCoaUrl && <a className="pugpep-coa-button" href={selectedCoaUrl}
+            {selectedCoaUrl && <a className="pugpep-coa-button pugpep-coa-desktop" href={selectedCoaUrl}
               onClick={(event) => { void handleProductAccess(event, product.slug, selectedCoaUrl); }}
               aria-label={`View current COA for ${product.name}${selectedStrength?.label ? ` ${selectedStrength.label}` : ""}`}>View COA</a>}
           </div>
@@ -1256,25 +1256,24 @@ export default function HomePage() {
                 </div>}
             </div>
             <div className="pugpep-purchase-controls">
-            {selectedOption && <div className="pugpep-purchase-type">
-              {!selectedStrength?.kit && <span>{kitSelected ? "Kit" : "Single"}</span>}
-              {!kitSelected && selectedStrength?.kit && <span>Single</span>}
-              {selectedStrength?.kit && <label>
-                <input type="checkbox" checked={kitSelected}
-                  disabled={pending || product.is_coming_soon || !selectedStrength.single ||
-                    (saleOnly && (!catalogActivePromotion(selectedStrength.kit) || !catalogActivePromotion(selectedStrength.single)))}
-                  onChange={(event) => {
-                    setCardKitSelections((current) => ({ ...current, [product.slug]: event.target.checked }));
-                    resetCardMessage(product.slug);
-                  }} />
-                Kit{!kitSelected && kitSalePercent > 0 && <span className="pugpep-kit-sale-hint"> · {kitSalePercent}% kit savings</span>}
-              </label>}
-            </div>}
-          <button type="button" className="pugpep-card-cart-button"
-            onClick={() => window.dispatchEvent(new Event("pugpep:open-cart"))}>View Cart</button>
+              <button type="button" className="pugpep-card-cart-button pugpep-cart-desktop"
+                onClick={() => window.dispatchEvent(new Event("pugpep:open-cart"))}>View Cart</button>
             </div>
           </div>
           <div className="pugpep-card-buy-row">
+            {selectedStrength?.kit && <button
+              type="button"
+              className="pugpep-kit-bubble"
+              aria-pressed={kitSelected}
+              aria-label={`${kitSelected ? "Switch to single vials" : "Select kit"} for ${product.name}`}
+              disabled={pending || product.is_coming_soon || !selectedStrength.single ||
+                (saleOnly && (!catalogActivePromotion(selectedStrength.kit) || !catalogActivePromotion(selectedStrength.single)))}
+              title={kitSalePercent > 0 ? `Kit savings: ${kitSalePercent}%` : "Select kit"}
+              onClick={() => {
+                setCardKitSelections((current) => ({ ...current, [product.slug]: !kitSelected }));
+                resetCardMessage(product.slug);
+              }}
+            ><span className="pugpep-kit-circle" aria-hidden="true" /><span className="pugpep-kit-label">Kit</span></button>}
             <div className="pugpep-card-quantity" role="group" aria-label={`Quantity for ${product.name}`}>
               <button type="button" aria-label={`Decrease quantity for ${product.name}`} disabled={(!kitSelected && quantity <= 1) || (kitSelected && quantity <= 1 && !selectedStrength?.single) || pending || product.is_coming_soon}
                 onClick={() => changeCatalogQuantity(product, quantity - 1, saleOnly)}>−</button>
@@ -1290,21 +1289,29 @@ export default function HomePage() {
               {pending ? "Adding…" : product.is_coming_soon ? "Coming Soon" : "Add to Cart"}
             </button>
           </div>
+          <div className={`pugpep-card-secondary-actions${selectedCoaUrl ? "" : " pugpep-no-coa"}`}>
+            <button type="button" className="pugpep-card-cart-button pugpep-cart-mobile"
+              onClick={() => window.dispatchEvent(new Event("pugpep:open-cart"))}>View Cart</button>
+            {selectedCoaUrl && <a className="pugpep-coa-button pugpep-coa-mobile" href={selectedCoaUrl}
+              onClick={(event) => { void handleProductAccess(event, product.slug, selectedCoaUrl); }}
+              aria-label={`View current COA for ${product.name}${selectedStrength?.label ? ` ${selectedStrength.label}` : ""}`}>View COA</a>}
+          </div>
 
-          {bundleTiers.length > 0 && <div className="pugpep-card-bundles">
-            <span className="pugpep-card-bundle-title">Bundle &amp; Save</span>
-            <div className="pugpep-card-bundle-options" role="group" aria-label={`Bundle quantities for ${product.name}`}>
+          <div className={`pugpep-card-bundles${bundleTiers.length === 0 ? " pugpep-card-bundles-empty" : ""}`}>
+            {bundleTiers.length > 0 && <span className="pugpep-card-bundle-title">Bundle &amp; Save</span>}
+            {bundleTiers.length > 0 && <div className="pugpep-card-bundle-options" role="group" aria-label={`Bundle quantities for ${product.name}`}>
               {bundleTiers.map((tier) => <button key={`${tier.quantity}-${tier.discount}`} type="button"
+                aria-label={`Buy ${tier.quantity} for ${tier.discount}% off`}
                 aria-pressed={activeBundleTier?.quantity === tier.quantity}
                 disabled={pending}
                 onClick={() => {
                   changeCatalogQuantity(product, tier.quantity, saleOnly);
                 }}>
-                Buy {tier.quantity} · {tier.discount}% off
+                <span className="pugpep-bundle-desktop-label">Buy {tier.quantity} · {tier.discount}% off</span>
+                <span className="pugpep-bundle-mobile-label">{tier.quantity} · {tier.discount}%</span>
               </button>)}
-            </div>
-
-          </div>}
+            </div>}
+          </div>
           {cardMessages[product.slug] && <p className="pugpep-card-message" role="status">{cardMessages[product.slug]}</p>}
 
         </div>
@@ -1360,6 +1367,8 @@ export default function HomePage() {
         .pugpep-card-bundle-options button[aria-pressed="true"] { color:#062027; background:#7df9ff; border-color:#7df9ff; }
         .pugpep-card-bundle-options button:disabled { opacity:.5; cursor:default; }
         .pugpep-card-bundle-options button:focus-visible { outline:3px solid #ff75df; outline-offset:2px; }
+        .pugpep-bundle-mobile-label { display:none; }
+        .pugpep-card-bundles-empty { display:none; }
         .pugpep-product-price > span { color:#aeb3c2; font-size:12px; font-weight:500; }
         .pugpep-purchase-row { margin-top:0; margin-bottom:12px; display:flex; flex-direction:column; align-items:stretch; gap:8px; }
         .pugpep-purchase-controls { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
@@ -1375,6 +1384,7 @@ export default function HomePage() {
         .pugpep-card-quantity input::-webkit-inner-spin-button, .pugpep-card-quantity input::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
         .pugpep-add-button { flex:1; min-width:0; min-height:40px; border:1px solid #7df9ff; border-radius:8px; background:#7df9ff; color:#052027; padding:8px 7px; cursor:pointer; font:inherit; font-size:15px; white-space:nowrap; line-height:1.15; font-weight:800; }
         .pugpep-add-button:disabled, .pugpep-card-quantity button:disabled { opacity:.5; cursor:default; }
+        .pugpep-cart-mobile { display:none; }
         .pugpep-card-cart-button { margin:0 0 0 auto; flex-shrink:0; white-space:nowrap; padding:3px 0; color:#c6cddd; background:transparent; border:0; text-decoration:underline; cursor:pointer; font:inherit; font-size:14px; font-weight:700; }
         .pugpep-card-message { color:#bfe8df; font-size:11px; line-height:1.5; margin:9px 0 0; }
         .pugpep-card-cart-button:focus-visible, .pugpep-card-buy-row button:focus-visible, .pugpep-card-buy-row input:focus-visible { outline:3px solid #ff75df; outline-offset:2px; }
@@ -1505,6 +1515,48 @@ export default function HomePage() {
         }
 
 
+        /* Proof Hits Different: keep desktop layout untouched; on mobile show the
+           entire original image with no crop and position the caption below it. */
+        @media (max-width: 768px) {
+          .pugpep-proof-section {
+            display: grid !important;
+            grid-template-columns: minmax(0, 1fr) !important;
+            gap: 14px !important;
+            min-width: 0;
+          }
+          .pugpep-proof-section > * { min-width: 0; }
+          .pugpep-proof-link {
+            display: block !important;
+            width: 100% !important;
+            min-width: 0;
+          }
+          .pugpep-proof-visual {
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+          }
+          .pugpep-proof-image {
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            object-fit: contain !important;
+            object-position: center center !important;
+            border-radius: 0 !important;
+          }
+          .pugpep-proof-shade { display: none !important; }
+          .pugpep-proof-caption {
+            position: relative !important;
+            inset: auto !important;
+            left: auto !important;
+            right: auto !important;
+            bottom: auto !important;
+            padding: 12px 14px 14px !important;
+            background: #080c12 !important;
+          }
+        }
+
         /* Uniform dosage buttons: five fixed equal columns for every product card.
            Products with fewer strengths leave the remaining slots empty. */
         .pugpep-product-strengths {
@@ -1560,6 +1612,235 @@ export default function HomePage() {
         @media (max-width: 720px) {
           .pugpep-product-name { font-size: 19px; }
           .pugpep-product-strengths .pugpep-strength-button { font-size: 12px; }
+        }
+
+        /* 2026 mobile polish: original artwork carries category names; no added overlays. */
+        .shop-by-focus-grid .category-card {
+          border: 0 !important;
+          outline: none;
+          box-shadow: none !important;
+          background: transparent !important;
+          padding: 0 !important;
+        }
+        .shop-by-focus-grid .shop-by-focus-image {
+          display: block;
+          border: 0 !important;
+        }
+        .shop-by-focus-grid .category-card:focus-visible {
+          outline: 2px solid #7df9ff;
+          outline-offset: 3px;
+        }
+        @media (max-width: 600px) {
+          /* Both the full catalog and horizontal shelves display two cards. */
+          .pugpep-product-grid { grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 10px; }
+          .pugpep-product-row {
+            grid-auto-columns: calc((100% - 10px) / 2) !important;
+            gap: 10px;
+          }
+          .pugpep-product-card { border-radius: 12px; }
+          .pugpep-product-image-link { aspect-ratio: 1 / 1.08; }
+          .pugpep-product-info { padding: 9px !important; }
+          .pugpep-product-family { font-size: 9px; letter-spacing: .04em; }
+          .pugpep-product-title-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+          .pugpep-product-name { font-size: 14px !important; line-height: 1.25; min-height: 0; }
+          .pugpep-product-card .pugpep-coa-button { font-size: 10px; min-height: 32px; padding: 6px 8px; }
+          /* Five compact mg selectors across each of the two mobile cards. */
+          .pugpep-product-strengths {
+            grid-template-columns: repeat(5,minmax(0,1fr)) !important;
+            gap: 3px !important;
+            margin: 9px 0 !important;
+            min-height: 0;
+          }
+          .pugpep-product-strengths .pugpep-strength-button {
+            min-width: 0;
+            width: 100%;
+            min-height: 32px;
+            padding: 5px 0;
+            font-size: clamp(8px, 2.15vw, 10px);
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -0.35px;
+            white-space: nowrap;
+            overflow-wrap: normal;
+            border-radius: 5px;
+          }
+          .pugpep-product-price { font-size: 20px; gap: 4px; }
+          .pugpep-product-info .pugpep-card-price-caption { font-size: 10px; }
+          .pugpep-product-info .pugpep-card-dollar-savings,
+          .pugpep-product-info .pugpep-card-sale-percent { font-size: 10px; }
+          .pugpep-product-info .pugpep-card-original-price { font-size: 11px; }
+          .pugpep-purchase-controls { flex-wrap: wrap; gap: 5px; }
+          .pugpep-product-info .pugpep-purchase-type { font-size: 12px; }
+          .pugpep-product-card .pugpep-card-cart-button { font-size: 11px; padding: 4px 0; }
+          /* Quantity and Add to Cart share a single compact row on mobile. */
+          .pugpep-card-buy-row {
+            display: grid !important;
+            grid-template-columns: minmax(0, 53%) minmax(0, 1fr);
+            align-items: stretch;
+            gap: 5px;
+            width: 100%;
+          }
+          .pugpep-card-quantity {
+            min-width: 0;
+            width: 100%;
+            display: grid;
+            grid-template-columns: minmax(25px, 30%) minmax(0, 1fr) minmax(25px, 30%);
+          }
+          .pugpep-product-card .pugpep-card-quantity button {
+            min-width: 0;
+            min-height: 44px;
+            width: 100%;
+            font-size: 17px;
+          }
+          .pugpep-product-card .pugpep-card-quantity input {
+            min-width: 0;
+            min-height: 44px;
+            width: 100%;
+            font-size: 15px;
+          }
+          .pugpep-product-card .pugpep-add-button {
+            width: 100%;
+            min-width: 0;
+            min-height: 44px;
+            padding: 5px 2px;
+            font-size: clamp(10px, 2.65vw, 13px);
+            line-height: 1.13;
+            white-space: normal;
+            text-wrap: balance;
+          }
+          /* Compact, content-driven mobile cards: no fixed row allocations. */
+          .pugpep-product-info {
+            display:flex !important;
+            flex:0 0 auto !important;
+            flex-direction:column;
+            align-items:stretch;
+            gap:0;
+            min-height:0 !important;
+            height:auto !important;
+          }
+          .pugpep-product-family { line-height:14px; }
+          .pugpep-product-title-row { margin-top:4px; align-content:start; }
+          .pugpep-product-strengths { margin:10px 0 7px !important; min-height:0; align-content:start; }
+          .pugpep-purchase-row { margin:0 0 8px !important; gap:5px; }
+          .pugpep-purchase-controls { gap:4px; align-items:center; }
+          .pugpep-purchase-type { min-width:0; flex-wrap:wrap; gap:3px; }
+          .pugpep-purchase-type label { gap:3px; }
+          .pugpep-card-buy-row { margin:0 !important; min-width:0; }
+          .pugpep-cart-desktop { display:none !important; }
+          .pugpep-product-card .pugpep-cart-mobile {
+            display:block !important;
+            width:100%;
+            min-height:31px;
+            margin:5px 0 0 !important;
+            padding:5px 6px !important;
+            box-sizing:border-box;
+            border:1px solid #4c5260;
+            border-radius:7px;
+            text-align:center;
+            text-decoration:none;
+            background:transparent;
+            color:#fff;
+            font-size:11px;
+          }
+          .pugpep-card-bundles { display:grid !important; gap:4px; margin:8px 0 0 !important; min-height:0 !important; }
+          .pugpep-card-bundles-empty { display:none !important; }
+          .pugpep-card-bundle-options { display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)); gap:3px !important; flex-wrap:nowrap !important; min-width:0; }
+          .pugpep-product-card .pugpep-card-bundle-options button {
+            display:flex; align-items:center; justify-content:center;
+            min-width:0; width:100%; box-sizing:border-box;
+            min-height:32px; padding:4px 1px;
+            font-size:clamp(9px,2.2vw,11px); line-height:1.1;
+            white-space:nowrap; letter-spacing:-.2px;
+          }
+          .pugpep-bundle-desktop-label { display:none; }
+          .pugpep-bundle-mobile-label { display:inline; }
+          .pugpep-product-info .pugpep-card-bundle-title { font-size:12px; line-height:17px; }
+          .pugpep-card-message { margin:6px 0 0; }
+          .pugpep-product-price { line-height:1.16; }
+          .pugpep-card-price-caption { overflow-wrap:anywhere; }
+          .pugpep-product-grid, .pugpep-product-row { align-items:start; }
+          .pugpep-product-card { height:auto !important; align-self:start; }
+          .pugpep-product-badges { top: 5px; left: 5px; right: 5px; }
+          .pugpep-status-badge, .pugpep-offer-badge { padding: 4px 5px; font-size: 9px; }
+          .shop-by-focus-grid .category-card { border: 0 !important; box-shadow: none !important; aspect-ratio: 16 / 9 !important; min-height: 0 !important; }
+          .shop-by-focus-grid .shop-by-focus-image { object-fit: contain !important; background: transparent !important; }
+        }
+        /* Extremely narrow devices need room for functional cart controls. */
+        @media (max-width: 350px) {
+          .pugpep-product-grid { grid-template-columns: 1fr !important; }
+          .pugpep-product-row { grid-auto-columns: min(85%,270px) !important; }
+        }
+
+
+        /* Small circular Kit selector with an adjacent label on desktop and mobile. */
+        .pugpep-kit-bubble {
+          flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+          gap:5px; min-width:0; min-height:40px; padding:0 4px;
+          border:0; border-radius:0; background:transparent; color:#f7f8fb;
+          font:inherit; font-weight:800; font-size:12px; cursor:pointer;
+          white-space:nowrap;
+        }
+        .pugpep-kit-circle {
+          display:inline-block; flex:0 0 17px; width:17px; height:17px;
+          box-sizing:border-box; border:2px solid #c6cad4; border-radius:50%;
+          background:transparent; position:relative;
+        }
+        .pugpep-kit-bubble[aria-pressed="true"] .pugpep-kit-circle {
+          border-color:#7df9ff; background:#7df9ff;
+        }
+        .pugpep-kit-bubble[aria-pressed="true"] .pugpep-kit-circle::after {
+          content:""; position:absolute; width:7px; height:7px;
+          top:3px; left:3px; background:#10212a; border-radius:50%;
+        }
+        .pugpep-kit-bubble:disabled { opacity:.45; cursor:not-allowed; }
+        .pugpep-kit-bubble:focus-visible { outline:3px solid #ff75df; outline-offset:2px; border-radius:4px; }
+        .pugpep-coa-mobile, .pugpep-card-secondary-actions { display:none; }
+        @media (max-width:600px) {
+          /* One shared control row with no separate Kit line. */
+          .pugpep-product-card .pugpep-purchase-controls { display:none !important; }
+          .pugpep-product-card .pugpep-card-buy-row {
+            display:flex !important; gap:4px !important; align-items:stretch;
+          }
+          .pugpep-product-card .pugpep-kit-bubble {
+            flex:0 0 auto; min-width:0; min-height:40px;
+            padding:0 1px; gap:3px; font-size:10px; border:0; background:transparent;
+          }
+          .pugpep-product-card .pugpep-kit-circle {
+            flex-basis:15px; width:15px; height:15px;
+          }
+          .pugpep-product-card .pugpep-kit-bubble[aria-pressed="true"] .pugpep-kit-circle::after {
+            width:5px; height:5px; top:3px; left:3px;
+          }
+          .pugpep-product-card .pugpep-card-quantity {
+            flex:1 1 42%; width:auto; min-width:0;
+            grid-template-columns:minmax(17px,28%) minmax(0,1fr) minmax(17px,28%);
+          }
+          .pugpep-product-card .pugpep-card-quantity button,
+          .pugpep-product-card .pugpep-card-quantity input { min-height:40px; }
+          .pugpep-product-card .pugpep-add-button {
+            flex:1 1 45%; width:auto; min-width:0;
+            min-height:40px; font-size:clamp(9px,2.25vw,12px);
+          }
+          .pugpep-product-card .pugpep-coa-desktop { display:none !important; }
+          .pugpep-product-card .pugpep-product-title-row { min-height:34px; }
+          .pugpep-product-card .pugpep-card-secondary-actions {
+            display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr));
+            gap:5px; width:100%; margin:5px 0 0;
+          }
+          .pugpep-product-card .pugpep-card-secondary-actions.pugpep-no-coa {
+            grid-template-columns:1fr;
+          }
+          .pugpep-product-card .pugpep-card-secondary-actions .pugpep-cart-mobile,
+          .pugpep-product-card .pugpep-card-secondary-actions .pugpep-coa-mobile {
+            display:flex !important; margin:0 !important; width:100%; min-width:0;
+            min-height:32px; padding:5px 2px !important;
+            align-items:center; justify-content:center;
+            box-sizing:border-box; border:1px solid #4c5260;
+            border-radius:7px; background:transparent; color:#fff;
+            font:inherit; font-size:11px; font-weight:800;
+            text-decoration:none; white-space:nowrap;
+          }
+          .pugpep-product-card .pugpep-card-bundles { margin-top:8px !important; }
         }
 
         @keyframes campaignGlow {
@@ -1706,14 +1987,10 @@ export default function HomePage() {
       )}
 
 
-      <section style={brandIntroSection}>
+      <section className="pugpep-proof-section" style={brandIntroSection}>
         <div style={brandIntroCopy}>
           <span style={premiumEyebrow}>WHY PUGPEP</span>
           <h2 style={brandIntroTitle}>Proof Hits Different.</h2>
-          <p style={brandIntroText}>
-            Clean research. Clear documentation. Lot-level traceability.
-            No mystery. No digging.
-          </p>
 
           <div style={brandPunchLine}>
             <span style={brandPunchDot}>●</span>
@@ -1736,31 +2013,21 @@ export default function HomePage() {
           </div>
         </div>
 
-        <Link href="/quality" style={brandQualityVisualLink}>
-          <div style={brandQualityVisual}>
+        <Link href="/quality" className="pugpep-proof-link" style={brandQualityVisualLink}>
+          <div className="pugpep-proof-visual" style={brandQualityVisual}>
             <img
               src="/marketing/lot-specific-coas.png"
               alt="PugPep transparent research quality and testing"
+              className="pugpep-proof-image"
               style={brandQualityImage}
             />
-            <div style={brandQualityShade} />
-            <div style={brandQualityOverlayCopy}>
-              <span style={brandQualityKicker}>TRANSPARENT RESEARCH</span>
-              <strong style={brandQualityOverlayTitle}>Quality You Can Verify</strong>
-              <span style={brandQualityCta}>SEE THE PROOF →</span>
-            </div>
           </div>
         </Link>
       </section>
 
       <section style={categorySection}>
         <div style={sectionLead}>
-          <span style={premiumEyebrow}>SHOP BY FOCUS</span>
           <h2 style={premiumSectionTitle}>Explore the PugPep Catalog</h2>
-          <p style={premiumSectionText}>
-            Premium category visuals guide the storefront while the real product
-            catalog remains clean, fast, and easy to browse.
-          </p>
 
         </div>
 
@@ -1783,12 +2050,6 @@ export default function HomePage() {
               alt="PugPep research peptides category"
               style={categoryImage}
             />
-            <div style={categoryShade} />
-            <div style={categoryContent}>
-              <span style={categoryKicker}>CORE CATALOG</span>
-              <h3 style={categoryTitle}>Research Peptides</h3>
-              <span style={categoryCta}>SHOP PEPTIDES →</span>
-            </div>
           </button>
 
           <button
@@ -1809,12 +2070,6 @@ export default function HomePage() {
               alt="PugPep research sprays category"
               style={categoryImage}
             />
-            <div style={categoryShade} />
-            <div style={categoryContent}>
-              <span style={categoryKicker}>SPRAY CATALOG</span>
-              <h3 style={categoryTitle}>Research Sprays</h3>
-              <span style={categoryCta}>SHOP SPRAYS →</span>
-            </div>
           </button>
 
           <button
@@ -1835,12 +2090,6 @@ export default function HomePage() {
               alt="PugPep laboratory materials category"
               style={categoryImage}
             />
-            <div style={categoryShade} />
-            <div style={categoryContent}>
-              <span style={categoryKicker}>LAB ESSENTIALS</span>
-              <h3 style={categoryTitle}>Lab Materials</h3>
-              <span style={categoryCta}>SHOP LAB MATERIALS →</span>
-            </div>
           </button>
 
         </div>
@@ -1850,7 +2099,6 @@ export default function HomePage() {
         <section id="current-offers" style={saleShowcaseSection} aria-labelledby="current-offers-heading">
           <div className="pugpep-shelf-header">
             <div>
-              <span className="pugpep-shelf-kicker">ACTIVE PROMOTIONS</span>
               <h3 id="current-offers-heading" className="pugpep-shelf-title">Current Offers</h3>
             </div>
             <span style={{ color: "#ffffff", fontSize: 12 }}>{saleProducts.length} products on sale</span>
@@ -3461,13 +3709,13 @@ const categoryCardButton = {
   minHeight: 230,
   overflow: "hidden",
   padding: 0,
-  border: "1px solid rgba(255,255,255,.12)",
-  borderRadius: 18,
+  border: "0",
+  borderRadius: 14,
   background: "#050507",
   color: "#fff",
   textAlign: "left" as const,
   cursor: "pointer",
-  boxShadow: "0 18px 44px rgba(0,0,0,.28)",
+  boxShadow: "none",
 };
 
 const categoryImage = {

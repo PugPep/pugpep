@@ -11,8 +11,23 @@ const EMAILJS_PUBLIC_KEY = "yc_0cE0Mcl3tfzc11";
 const SHIPPING_TEMPLATE_ID = "template_piq2u0f";
 // PugPep Order Processed EmailJS template.
 const PROCESSED_TEMPLATE_ID = "template_qdr0i7h";
-const trackingUrl = (number: string) =>
-  `https://www.17track.net/en?nums=${encodeURIComponent(number.trim())}`;
+type ShippingCarrier = "usps" | "ups";
+
+// Infer only recognizable formats; the admin can override this selection.
+function inferShippingCarrier(number: string): ShippingCarrier | null {
+  const normalized = number.trim().replace(/\s+/g, "").toUpperCase();
+  if (/^1Z[A-Z0-9]{16}$/.test(normalized)) return "ups";
+  if (/^(?:\d{20}|\d{22}|\d{26}|[A-Z]{2}\d{9}US)$/.test(normalized)) return "usps";
+  return null;
+}
+
+function trackingUrl(number: string, carrier: ShippingCarrier): string {
+  const clean = number.trim().replace(/\s+/g, "");
+  const value = encodeURIComponent(clean);
+  return carrier === "usps"
+    ? `https://tools.usps.com/go/TrackConfirmAction.action?tLabels=${value}`
+    : `https://www.ups.com/track?loc=en_US&tracknum=${value}`;
+}
 
 
 type EditableOrderItem = {
@@ -136,6 +151,7 @@ export default function OrderDetailsPage() {
   const [items, setItems] = useState<any[]>([]);
   const [shippingStatus, setShippingStatus] = useState("not shipped");
   const [trackingNumber, setTrackingNumber] = useState("");
+  const [shippingCarrier, setShippingCarrier] = useState<ShippingCarrier | "">("");
   const [shippingCost, setShippingCost] = useState(0);
   const [packagingCost, setPackagingCost] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -296,6 +312,10 @@ export default function OrderDetailsPage() {
 
     setShippingStatus(orderData.shipping_status === "processing" ? "processed" : (orderData.shipping_status || "not shipped"));
     setTrackingNumber(orderData.tracking_number || "");
+    setShippingCarrier((current) => {
+      const savedNumber = String(orderData.tracking_number || "").trim();
+      return inferShippingCarrier(savedNumber) || current;
+    });
     setShippingCost(Number(orderData.estimated_shipping_cost || 0));
     setPackagingCost(Number(orderData.estimated_packaging_cost || 0));
 
@@ -460,6 +480,7 @@ export default function OrderDetailsPage() {
 
     const nextStatus = shippingStatus === "processing" ? "processed" : shippingStatus;
     const cleanedTracking = trackingNumber.trim();
+    const carrier = shippingCarrier || inferShippingCarrier(cleanedTracking);
     const previousStatus = String(order.shipping_status || "not shipped").trim().toLowerCase();
     const previousTracking = String(order.tracking_number || "").trim();
     const isProcessed = nextStatus === "processed";
@@ -468,6 +489,11 @@ export default function OrderDetailsPage() {
     // A tracking number is mandatory before an order may be processed or shipped.
     if ((isProcessed || isShipped) && !cleanedTracking) {
       alert("A tracking number is required before an order can be marked Processed or Shipped.");
+      return;
+    }
+
+    if ((isProcessed || isShipped) && !carrier) {
+      alert("Select USPS or UPS before saving a Processed or Shipped order.");
       return;
     }
 
@@ -518,8 +544,9 @@ export default function OrderDetailsPage() {
               order_number: order.order_number,
               shipping_status: "processed",
               tracking_number: cleanedTracking,
-              tracking_url: trackingUrl(cleanedTracking),
-              tracking_link: trackingUrl(cleanedTracking),
+              shipping_carrier: carrier,
+              tracking_url: trackingUrl(cleanedTracking, carrier!),
+              tracking_link: trackingUrl(cleanedTracking, carrier!),
               shipping_address: `${order.shipping_address || ""}, ${order.city || ""}, ${order.state || ""} ${order.zip || ""}`,
               order_total: Number(order.total || 0).toFixed(2),
               // The template should say payment received ONLY if payment was verified independently.
@@ -844,11 +871,16 @@ export default function OrderDetailsPage() {
 
     const cleanedTracking =
       String(trackingNumber || "").trim();
+    const carrier = shippingCarrier || inferShippingCarrier(cleanedTracking);
 
     if (!cleanedTracking) {
       return alert(
         "Please scan or enter a tracking number before notifying the customer."
       );
+    }
+
+    if (!carrier) {
+      return alert("Select USPS or UPS before notifying the customer.");
     }
 
     if (!order.customer_email) {
@@ -926,9 +958,10 @@ export default function OrderDetailsPage() {
 
             tracking_number:
               cleanedTracking,
+            shipping_carrier: carrier,
 
-            tracking_url: trackingUrl(cleanedTracking),
-            tracking_link: trackingUrl(cleanedTracking),
+            tracking_url: trackingUrl(cleanedTracking, carrier),
+            tracking_link: trackingUrl(cleanedTracking, carrier),
 
             shipping_address:
               `${order.shipping_address}, ${order.city}, ${order.state} ${order.zip}`,
@@ -1023,6 +1056,7 @@ export default function OrderDetailsPage() {
 
                   trackingNumber:
                     cleanedTracking,
+                  shippingCarrier: carrier,
                 }),
             }
           );
@@ -2586,16 +2620,47 @@ export default function OrderDetailsPage() {
                 <option value="delivered">delivered</option>
               </select>
 
+              <label style={label}>Shipping Carrier</label>
+
+              <select
+                value={shippingCarrier}
+                onChange={(event) =>
+                  setShippingCarrier(event.target.value as ShippingCarrier | "")
+                }
+                style={input}
+                aria-label="Shipping carrier"
+              >
+                <option value="">Select carrier</option>
+                <option value="usps">USPS</option>
+                <option value="ups">UPS</option>
+              </select>
+
               <label style={label}>Tracking Number</label>
 
               <input
                 value={trackingNumber}
-                onChange={(event) =>
-                  setTrackingNumber(event.target.value)
-                }
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setTrackingNumber(next);
+                  const detected = inferShippingCarrier(next);
+                  if (detected) setShippingCarrier(detected);
+                }}
                 placeholder="Enter tracking number"
                 style={input}
               />
+
+              {trackingNumber.trim() && shippingCarrier && (
+                <p style={warningText}>
+                  Tracking destination: <a
+                    href={trackingUrl(trackingNumber, shippingCarrier)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "#7df9ff" }}
+                  >
+                    {shippingCarrier === "usps" ? "USPS" : "UPS"} official tracking
+                  </a>
+                </p>
+              )}
 
               {!trackingNumber && (
                 <p style={warningText}>
@@ -2621,15 +2686,15 @@ export default function OrderDetailsPage() {
 
                 <button
                   onClick={notifyCustomer}
-                  disabled={!trackingNumber || sendingEmail}
+                  disabled={!trackingNumber || !shippingCarrier || sendingEmail}
                   style={{
                     ...notifyButton,
                     opacity:
-                      !trackingNumber || sendingEmail
+                      !trackingNumber || !shippingCarrier || sendingEmail
                         ? 0.5
                         : 1,
                     cursor:
-                      !trackingNumber || sendingEmail
+                      !trackingNumber || !shippingCarrier || sendingEmail
                         ? "not-allowed"
                         : "pointer",
                   }}

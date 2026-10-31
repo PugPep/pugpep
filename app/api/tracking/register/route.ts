@@ -1,14 +1,13 @@
+/** PUGPEP | app/api/tracking/register/route.ts
+ * Records the selected USPS/UPS carrier locally for an order.
+ * No AfterShip, 17TRACK, external tracking registration, or automatic
+ * shipping-status changes. The Operations Center controls status updates.
+ */
 import { NextResponse } from "next/server";
-
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-
-const AFTERSHIP_BASE_URL =
-  process.env.AFTERSHIP_API_BASE_URL ||
-  "https://api.aftership.com/tracking/2026-07";
 
 type RegisterBody = {
   orderId?: string;
@@ -16,418 +15,105 @@ type RegisterBody = {
   carrier?: string | null;
 };
 
-type OrderRow = {
-  id: string;
-  order_number: string | null;
-  customer_name: string | null;
-  customer_email: string | null;
-  customer_phone: string | null;
-  city: string | null;
-  state: string | null;
-  zip: string | null;
-  created_at: string | null;
-};
+async function verifyAdmin(request: Request) {
+  const authorization = request.headers.get("authorization") || "";
+  const token = authorization.startsWith("Bearer ")
+    ? authorization.slice(7)
+    : "";
+  if (!token) return null;
 
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !data.user) return null;
 
-function cleanCarrier(
-  value: unknown
-) {
-  const carrier =
-    String(value || "")
-      .trim()
-      .toLowerCase();
-
-  return carrier ||
-    undefined;
-}
-
-async function verifyAdmin(
-  request: Request
-) {
-  const authorization =
-    request.headers.get(
-      "authorization"
-    );
-
-  const token =
-    authorization?.startsWith(
-      "Bearer "
-    )
-      ? authorization.slice(
-          7
-        )
-      : "";
-
-  if (!token) {
-    return null;
-  }
-
-  const {
-    data,
-    error,
-  } =
-    await supabaseAdmin.auth.getUser(
-      token
-    );
-
-  if (error || !data.user) {
-    return null;
-  }
-
-  const {
-    data: roleRow,
-    error: roleError,
-  } = await supabaseAdmin
+  const { data: roleRow, error: roleError } = await supabaseAdmin
     .from("user_roles")
     .select("role")
     .eq("user_id", data.user.id)
     .maybeSingle();
 
-  if (
-    roleError ||
-    !roleRow ||
-    !["admin", "super_admin"].includes(roleRow.role)
-  ) {
+  if (roleError || !roleRow || !["admin", "super_admin"].includes(roleRow.role)) {
     return null;
   }
-
   return data.user;
 }
 
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
   try {
-    const admin =
-      await verifyAdmin(
-        request
-      );
-
+    const admin = await verifyAdmin(request);
     if (!admin) {
       return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Administrator authorization required.",
-        },
-        {
-          status: 401,
-        }
+        { success: false, error: "Administrator authorization required." },
+        { status: 401 }
       );
     }
 
-    const apiKey =
-      process.env.AFTERSHIP_API_KEY;
-
-    if (!apiKey) {
+    let body: RegisterBody;
+    try {
+      body = (await request.json()) as RegisterBody;
+    } catch {
       return NextResponse.json(
-        {
-          success: false,
-          error:
-            "AFTERSHIP_API_KEY is missing.",
-        },
-        {
-          status: 500,
-        }
+        { success: false, error: "Invalid JSON body." },
+        { status: 400 }
       );
     }
 
-    const body =
-      (await request.json()) as
-        RegisterBody;
+    const orderId = String(body.orderId || "").trim();
+    const trackingNumber = String(body.trackingNumber || "").trim();
+    const carrier = String(body.carrier || "").trim().toLowerCase();
 
-    const orderId =
-      String(
-        body.orderId ||
-          ""
-      ).trim();
-
-    const trackingNumber =
-      String(
-        body.trackingNumber ||
-          ""
-      ).trim();
-
-    const carrier =
-      cleanCarrier(
-        body.carrier
-      );
-
-    if (
-      !orderId ||
-      !trackingNumber
-    ) {
+    if (!orderId || !trackingNumber) {
       return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Order ID and tracking number are required.",
-        },
-        {
-          status: 400,
-        }
+        { success: false, error: "Order ID and tracking number are required." },
+        { status: 400 }
+      );
+    }
+    if (carrier !== "usps" && carrier !== "ups") {
+      return NextResponse.json(
+        { success: false, error: "Select USPS or UPS." },
+        { status: 400 }
       );
     }
 
-    const {
-      data: orderData,
-      error: orderError,
-    } =
-      await supabaseAdmin
-        .from("orders")
-        .select(
-          [
-            "id",
-            "order_number",
-            "customer_name",
-            "customer_email",
-            "customer_phone",
-            "city",
-            "state",
-            "zip",
-            "created_at",
-          ].join(",")
-        )
-        .eq("id", orderId)
-        .maybeSingle();
+    const { data: order, error: lookupError } = await supabaseAdmin
+      .from("orders")
+      .select("id,tracking_number,tracking_carrier")
+      .eq("id", orderId)
+      .maybeSingle();
 
-    if (orderError) {
-      throw orderError;
-    }
-
-    const order =
-      orderData as unknown as
-        OrderRow | null;
-
+    if (lookupError) throw lookupError;
     if (!order) {
       return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Order was not found.",
-        },
-        {
-          status: 404,
-        }
+        { success: false, error: "Order was not found." },
+        { status: 404 }
       );
     }
 
-    const trackingPayload: Record<
-      string,
-      unknown
-    > = {
-      tracking_number:
-        trackingNumber,
-      title:
-        order.order_number ||
-        trackingNumber,
-      order_id:
-        order.order_number ||
-        order.id,
-      custom_fields: {
-        pugpep_order_id:
-          order.id,
-      },
-      destination_country_region:
-        "USA",
-      destination_state:
-        order.state ||
-        undefined,
-      destination_city:
-        order.city ||
-        undefined,
-      destination_postal_code:
-        order.zip ||
-        undefined,
-      order_date:
-        order.created_at ||
-        undefined,
-      shipment_direction:
-        "forward",
-      customers: [
-        {
-          id: order.id,
-          role: "customer",
-          name:
-            order.customer_name ||
-            undefined,
-          email:
-            order.customer_email ||
-            undefined,
-          phone_number:
-            order.customer_phone ||
-            undefined,
-          language: "en",
-        },
-      ],
-    };
-
-    if (carrier) {
-      trackingPayload.slug =
-        carrier;
-    }
-
-    const response =
-      await fetch(
-        `${AFTERSHIP_BASE_URL}/trackings`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-            "as-api-key":
-              apiKey,
-          },
-          body:
-            JSON.stringify(
-              trackingPayload
-            ),
-          cache: "no-store",
-        }
-      );
-
-    const responseText =
-      await response.text();
-
-    let afterShipData:
-      | Record<
-          string,
-          any
-        >
-      | null = null;
-
-    try {
-      afterShipData =
-        responseText
-          ? JSON.parse(
-              responseText
-            )
-          : null;
-    } catch {
-      afterShipData = null;
-    }
-
-    /*
-     * AfterShip may return a conflict if the tracking already exists.
-     * We still preserve the local tracking number, then the webhook can
-     * match it by tracking_number.
-     */
-    if (
-      !response.ok &&
-      response.status !==
-        409
-    ) {
-      const message =
-        afterShipData?.meta
-          ?.message ||
-        afterShipData?.message ||
-        responseText ||
-        "AfterShip registration failed.";
-
+    // Prevent stale requests from overwriting a different tracking number.
+    if (String(order.tracking_number || "").trim() !== trackingNumber) {
       return NextResponse.json(
-        {
-          success: false,
-          error: message,
-          aftershipStatus:
-            response.status,
-        },
-        {
-          status: 502,
-        }
+        { success: false, error: "Tracking number changed. Reload the order and save again." },
+        { status: 409 }
       );
     }
 
-    const tracking =
-      afterShipData?.data
-        ?.tracking ||
-      afterShipData?.tracking ||
-      afterShipData?.data ||
-      null;
+    const { error: updateError } = await supabaseAdmin
+      .from("orders")
+      .update({ tracking_carrier: carrier })
+      .eq("id", orderId)
+      .eq("tracking_number", trackingNumber);
 
-    const aftershipTrackingId =
-      String(
-        tracking?.id ||
-          ""
-      ).trim() ||
-      null;
-
-    const detectedCarrier =
-      String(
-        tracking?.slug ||
-          carrier ||
-          ""
-      ).trim() ||
-      null;
-
-    const currentTag =
-      String(
-        tracking?.tag ||
-          ""
-      ).trim() ||
-      null;
-
-    const {
-      error: updateError,
-    } =
-      await supabaseAdmin
-        .from("orders")
-        .update({
-          tracking_number:
-            trackingNumber,
-          tracking_carrier:
-            detectedCarrier,
-          aftership_tracking_id:
-            aftershipTrackingId,
-          tracking_last_status:
-            currentTag,
-          tracking_last_updated_at:
-            new Date().toISOString(),
-          shipping_status:
-            currentTag ===
-            "Delivered"
-              ? "delivered"
-              : "shipped",
-        })
-        .eq("id", orderId);
-
-    if (updateError) {
-      throw updateError;
-    }
+    if (updateError) throw updateError;
 
     return NextResponse.json({
       success: true,
-      alreadyRegistered:
-        response.status ===
-        409,
-      tracking: {
-        id:
-          aftershipTrackingId,
-        number:
-          trackingNumber,
-        carrier:
-          detectedCarrier,
-        status:
-          currentTag,
-      },
+      tracking: { number: trackingNumber, carrier },
+      message: "Carrier saved to order; no third-party tracking service used.",
     });
   } catch (error: unknown) {
-    console.error(
-      "Tracking registration failed:",
-      error
-    );
-
+    console.error("Carrier save failed:", error);
     return NextResponse.json(
-      {
-        success: false,
-        error:
-          error instanceof
-          Error
-            ? error.message
-            : "Tracking registration failed.",
-      },
-      {
-        status: 500,
-      }
+      { success: false, error: error instanceof Error ? error.message : "Unable to save carrier." },
+      { status: 500 }
     );
   }
 }

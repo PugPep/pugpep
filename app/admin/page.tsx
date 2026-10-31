@@ -21,6 +21,24 @@ const PROCESSED_EMAIL_TEMPLATE_ID =
 const EMAILJS_PUBLIC_KEY =
   "yc_0cE0Mcl3tfzc11";
 
+type ShippingCarrier = "usps" | "ups";
+
+function officialTrackingUrl(carrier: ShippingCarrier, number: string) {
+  const encoded = encodeURIComponent(number.trim());
+  return carrier === "usps"
+    ? `https://tools.usps.com/go/TrackConfirmAction.action?tLabels=${encoded}`
+    : `https://www.ups.com/track?loc=en_US&tracknum=${encoded}`;
+}
+
+// Only preselect when the number's format strongly identifies a carrier.
+// Otherwise the operator must make an explicit choice.
+function detectShippingCarrier(value: string): ShippingCarrier | "" {
+  const number = value.trim().replace(/\s+/g, "").toUpperCase();
+  if (/^1Z[0-9A-Z]{16}$/.test(number)) return "ups";
+  if (/^(9[2345]\d{18,24}|\d{20,22})$/.test(number)) return "usps";
+  return "";
+}
+
 const PUGPEP_LOGO_URL =
   "https://pugpep.com/pugpep-logo.png";
 
@@ -53,6 +71,7 @@ type Order = {
   status: string;
   shipping_status?: string;
   tracking_number?: string | null;
+  tracking_carrier?: string | null;
   created_at: string;
   deleted_at?: string | null;
   deleted_by?: string | null;
@@ -130,6 +149,8 @@ export default function AdminPage() {
 
   const [trackingNumber, setTrackingNumber] =
     useState("");
+
+  const [shippingCarrier, setShippingCarrier] = useState<ShippingCarrier | "">("");
 
   const [savingDelivery, setSavingDelivery] =
     useState(false);
@@ -669,9 +690,9 @@ export default function AdminPage() {
           return;
         }
 
-        setTrackingNumber(
-          captured
-        );
+        setTrackingNumber(captured);
+        const scanCarrier = shippingCarrier || detectShippingCarrier(captured);
+        if (!shippingCarrier && scanCarrier) setShippingCarrier(scanCarrier);
 
         setDeliveryStatus(
           "shipped"
@@ -686,7 +707,8 @@ export default function AdminPage() {
           deliveryOrderId,
           "shipped",
           captured,
-          false
+          false,
+          scanCarrier
         );
 
         setScannerOpen(
@@ -710,6 +732,7 @@ export default function AdminPage() {
   }, [
     scannerOpen,
     deliveryOrderId,
+    shippingCarrier,
   ]);
 
   function openDeliveryPanel(
@@ -750,9 +773,17 @@ export default function AdminPage() {
         "not shipped"
     );
 
-    setTrackingNumber(
-      order.tracking_number ||
-        ""
+    const existingNumber = String(order.tracking_number || "");
+    setTrackingNumber(existingNumber);
+    let savedCarrier: ShippingCarrier | "" = "";
+    try {
+      const stored = window.localStorage.getItem(`pugpep:shipping-carrier:${order.id}`);
+      if (stored === "usps" || stored === "ups") savedCarrier = stored;
+    } catch { /* local preferences may be disabled */ }
+    setShippingCarrier(
+      (order.tracking_carrier === "usps" || order.tracking_carrier === "ups"
+        ? order.tracking_carrier
+        : savedCarrier) || detectShippingCarrier(existingNumber)
     );
 
     setScannerOpen(
@@ -766,7 +797,8 @@ export default function AdminPage() {
     orderId = deliveryOrderId,
     status = deliveryStatus,
     tracking = trackingNumber,
-    notifyCustomer = false
+    notifyCustomer = false,
+    carrier: ShippingCarrier | "" = shippingCarrier
   ) {
     if (!orderId || savingDelivery) {
       return;
@@ -783,6 +815,10 @@ export default function AdminPage() {
 
     const cleanedTracking = tracking.trim();
     const finalStatus = status.trim().toLowerCase();
+    if (cleanedTracking && !carrier) {
+      setNotice("Select USPS or UPS before saving a tracking number or sending notifications.");
+      return;
+    }
     const previousStatus = String(currentOrder.shipping_status || "not shipped")
       .trim().toLowerCase();
     const newlyProcessed = finalStatus === "processed" && previousStatus !== "processed";
@@ -825,6 +861,11 @@ export default function AdminPage() {
         return;
       }
 
+      if (cleanedTracking && carrier) {
+        try { window.localStorage.setItem(`pugpep:shipping-carrier:${orderId}`, carrier); }
+        catch { /* still usable in this browser session */ }
+      }
+
       const warnings: string[] = [];
 
       if (cleanedTracking) {
@@ -846,6 +887,7 @@ export default function AdminPage() {
             body: JSON.stringify({
               orderId,
               trackingNumber: cleanedTracking,
+              carrier,
             }),
           }
         );
@@ -856,7 +898,7 @@ export default function AdminPage() {
 
         if (!registrationResponse.ok) {
           warnings.push(
-            `Carrier monitoring could not start: ${
+            `Carrier selection could not be saved: ${
               registration?.error ||
               "unknown registration error"
             }`
@@ -864,8 +906,8 @@ export default function AdminPage() {
         }
 
         } catch (trackingError) {
-          console.error("Carrier tracking registration failed:", trackingError);
-          warnings.push("Carrier monitoring could not start.");
+          console.error("Carrier selection save failed:", trackingError);
+          warnings.push("Carrier selection could not be saved.");
         }
 
         if (newlyProcessed || (notifyCustomer && finalStatus === "shipped")) {
@@ -1004,9 +1046,7 @@ export default function AdminPage() {
                 0
               );
 
-            // 17TRACK provides a carrier-neutral tracking lookup.
-            const trackingUrl =
-              `https://t.17track.net/en#nums=${encodeURIComponent(cleanedTracking)}`;
+            const trackingUrl = officialTrackingUrl(carrier as ShippingCarrier, cleanedTracking);
 
             await emailjs.send(
               EMAILJS_SERVICE_ID,
@@ -1037,6 +1077,7 @@ export default function AdminPage() {
                   cleanedTracking,
                 tracking_url: trackingUrl,
                 tracking_link: trackingUrl,
+                carrier: carrier.toUpperCase(),
                 shipping_address:
                   shippingAddress ||
                   "Address unavailable",
@@ -1112,6 +1153,7 @@ export default function AdminPage() {
                       finalStatus,
                     trackingNumber:
                       cleanedTracking,
+                    carrier,
                   }),
                 }
               );
@@ -1164,6 +1206,7 @@ export default function AdminPage() {
 
       setDeliveryStatus(finalStatus);
       setTrackingNumber(cleanedTracking);
+      setShippingCarrier(carrier);
 
       await loadOrders();
     } finally {
@@ -2187,28 +2230,27 @@ export default function AdminPage() {
                       order.id && (
                       <div style={deliveryPanel}>
                         <div style={deliveryPanelHeader}>
-                          <div>
-                            <span style={deliveryEyebrow}>
-                              QUICK DELIVERY UPDATE
-                            </span>
+                          <div style={{ flex: "0 1 auto", minWidth: 0 }}>
+                            <strong style={{ ...deliveryTitle, marginTop: 0, whiteSpace: "nowrap", fontSize: 16 }}>{order.order_number}</strong>
+                          </div>
 
-                            <strong style={deliveryTitle}>
-                              {order.order_number}
-                            </strong>
+                          <div role="radiogroup" aria-label="Shipping carrier" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flex: "1 1 auto", minWidth: 0, flexWrap: "nowrap" }}>
+                            {(["usps", "ups"] as const).map((carrier) => (
+                              <label key={carrier} style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer", border: shippingCarrier === carrier ? "1px solid #7df9ff" : "1px solid rgba(255,255,255,.22)", borderRadius: 20, padding: "5px 9px", background: shippingCarrier === carrier ? "rgba(125,249,255,.12)" : "rgba(255,255,255,.04)", color: "#fff", fontSize: 12, fontWeight: 800, whiteSpace: "nowrap" }}>
+                                <input type="radio" name={`carrier-${order.id}`} value={carrier} checked={shippingCarrier === carrier} onChange={() => setShippingCarrier(carrier)} style={{ accentColor: "#7df9ff", width: 13, height: 13, margin: 0 }} />
+                                {carrier.toUpperCase()}
+                              </label>
+                            ))}
                           </div>
 
                           <button
                             type="button"
+                            aria-label="Close delivery panel"
                             onClick={() => {
-                              setDeliveryOrderId(
-                                null
-                              );
-
-                              setScannerOpen(
-                                false
-                              );
+                              setDeliveryOrderId(null);
+                              setScannerOpen(false);
                             }}
-                            style={deliveryCloseButton}
+                            style={{ ...deliveryCloseButton, flex: "0 0 27px" }}
                           >
                             ×
                           </button>
@@ -2352,7 +2394,7 @@ export default function AdminPage() {
                         {scannerOpen && (
                           <div style={scannerPanel}>
                             <p style={scannerInstructions}>
-                              Point the camera at the tracking barcode. A successful scan saves the tracking number, marks the order shipped, and registers carrier monitoring. Use Mark Shipped & Notify Customer to send the shipping email and SMS.
+                              Point the camera at the tracking barcode. A successful scan saves the tracking number and shipping status. Select USPS or UPS before saving or notifying the customer. Use Mark Shipped & Notify Customer to send the shipping email and SMS.
                             </p>
 
                             <div
@@ -3215,9 +3257,11 @@ const deliveryPanel = {
 
 const deliveryPanelHeader = {
   display: "flex",
+  alignItems: "center",
   justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 12,
+  gap: 8,
+  flexWrap: "nowrap",
+  minWidth: 0,
 };
 
 const deliveryEyebrow = {
@@ -3236,13 +3280,16 @@ const deliveryTitle = {
 };
 
 const deliveryCloseButton = {
-  width: 42,
-  height: 42,
+  width: 27,
+  height: 27,
+  flexShrink: 0,
+  padding: 0,
+  lineHeight: 1,
   border: "1px solid rgba(255,255,255,.16)",
   borderRadius: 9,
   background: "rgba(255,255,255,.04)",
   color: "#ffffff",
-  fontSize: 22,
+  fontSize: 17,
   cursor: "pointer",
 };
 
