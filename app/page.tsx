@@ -1925,6 +1925,53 @@ export default function HomePage() {
               inset 0 0 24px rgba(255,69,216,.06);
           }
         }
+
+        /* Edge cleanup: remove the fine light seam visible at the left edge
+           of the Proof artwork and Research Sprays on mobile. The source
+           artwork remains unchanged; only 1% of its horizontal edges is
+           concealed inside the existing rounded, clipped wrappers. */
+        .pugpep-proof-link,
+        .pugpep-proof-visual,
+        .shop-by-focus-grid .category-card {
+          overflow: hidden !important;
+          border: 0 !important;
+          outline: 0;
+          box-shadow: none !important;
+          background: transparent !important;
+        }
+        .pugpep-proof-image,
+        .shop-by-focus-grid .shop-by-focus-image {
+          display: block !important;
+          border: 0 !important;
+          outline: 0;
+          box-shadow: none !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        /* Desktop-only: the two source images have a pale strip at their
+           left edge. Conceal the outer 1.5% inside the existing rounded
+           clips without moving, reflowing, or cropping any mobile image. */
+        @media (min-width: 769px) {
+          .pugpep-proof-visual,
+          .shop-by-focus-grid .category-card:nth-child(2) {
+            overflow: hidden !important;
+          }
+          .pugpep-proof-visual > .pugpep-proof-image,
+          .shop-by-focus-grid .category-card:nth-child(2) > .shop-by-focus-image {
+            transform: scaleX(1.03) !important;
+            transform-origin: center center !important;
+          }
+        }
+        @media (max-width: 768px) {
+          .pugpep-proof-image {
+            transform: scaleX(1.02) !important;
+            transform-origin: center center !important;
+          }
+          .shop-by-focus-grid .category-card:nth-child(2) .shop-by-focus-image {
+            transform: scaleX(1.02) !important;
+            transform-origin: center center !important;
+          }
+        }
       `}</style>
 
       {!ageVerified && (
