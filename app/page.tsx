@@ -2134,6 +2134,29 @@ export default function HomePage() {
           top: 4px !important;
           left: 4px !important;
         }
+        /* Give quantity values breathing room without changing card/button heights. */
+        @media (min-width: 721px) {
+          .pugpep-product-card .pugpep-card-quantity {
+            display: grid !important;
+            grid-template-columns: 27px minmax(35px, 1fr) 27px !important;
+            column-gap: 9px !important;
+            align-items: center;
+            justify-content: start;
+          }
+          .pugpep-product-card .pugpep-card-quantity button {
+            width: 27px !important;
+          }
+          .pugpep-product-card .pugpep-card-quantity input {
+            width: 100% !important;
+            min-width: 0;
+          }
+        }
+        @media (max-width: 720px) {
+          .pugpep-product-card .pugpep-card-quantity {
+            column-gap: 3px !important;
+            grid-template-columns: minmax(18px, 28%) minmax(22px, 1fr) minmax(18px, 28%) !important;
+          }
+        }
         /* Desktop quantity value, not the control dimensions. */
         @media (min-width: 721px) {
           .pugpep-product-card .pugpep-card-quantity input {
