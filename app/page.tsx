@@ -104,6 +104,17 @@ function catalogSlug(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+
+function homepageCoaTime(row: {test_date?: string | null; created_at?: string | null}): number {
+  const value = row.test_date || row.created_at;
+  if (!value) return 0;
+  const n = Date.parse(value.length === 10 ? `${value}T12:00:00` : value);
+  return Number.isFinite(n) ? n : 0;
+}
+function homepageCoaBase(value: string): string {
+  return catalogSlug(value).replace(/(?:research)?(?:nasal)?spray$/, "");
+}
+
 function buildCatalogStrengthChoices(
   options: CatalogOption[],
   prices: Map<string, number>,
@@ -496,7 +507,7 @@ export default function HomePage() {
         supabase.from("coa_documents")
           .select("product_slug,dosage,file_path,storage_bucket,test_date,created_at,is_current")
           .eq("status", "active")
-          .order("created_at", { ascending: false }),
+          .order("test_date", { ascending: false, nullsFirst: false }),
       ]);
       if (cancelled) return;
       const optionsResult = results[0];
@@ -546,7 +557,12 @@ export default function HomePage() {
         const key = catalogSlug(product.slug);
         const productOptions = optionsBySlug.get(key) || [];
         const values = productOptions.map((option) => prices.get(option.id)).filter((price): price is number => price !== undefined);
-        const productDocuments = documentsBySlug.get(key) || [];
+        const ownDocuments = documentsBySlug.get(key) || [];
+        const isSpray = canonicalProductCategory(product.category) === "research-sprays";
+        const sourceKey = homepageCoaBase(product.slug);
+        const sourceDocuments = isSpray && sourceKey !== key ? documentsBySlug.get(sourceKey) || [] : [];
+        const productDocuments = [...(sourceDocuments.length ? sourceDocuments : ownDocuments)]
+          .sort((a, b) => homepageCoaTime(b) - homepageCoaTime(a));
         const choices = buildCatalogStrengthChoices(productOptions, prices, failedPrices, campaignOptions);
         const coaUrlsByStrength: Record<string, string> = {};
 
@@ -570,13 +586,21 @@ export default function HomePage() {
           }
         }
 
+        if (isSpray && productDocuments.length) {
+          const newestSource = productDocuments[0];
+          const url = supabase.storage.from(newestSource.storage_bucket || "coas")
+            .getPublicUrl(newestSource.file_path).data.publicUrl;
+          for (const choice of choices) coaUrlsByStrength[choice.key] = url;
+        }
+
         const productLevelDocument =
           productDocuments.find(
             (document) => !String(document.dosage || "").trim()
           );
 
-        const fallbackDocument =
-          productLevelDocument || productDocuments[0];
+        const fallbackDocument = isSpray
+          ? productDocuments[0]
+          : productLevelDocument;
 
         next[product.slug] = {
           choices,
@@ -1178,7 +1202,7 @@ export default function HomePage() {
       (selectedStrength?.key
         ? detail?.coaUrlsByStrength?.[selectedStrength.key]
         : undefined) ||
-      detail?.coaUrl;
+      (canonicalProductCategory(product.category) === "research-sprays" ? detail?.coaUrl : undefined);
     return (
       <article key={product.id} className="pugpep-product-card">
         <Link href={productPath} className="pugpep-product-image-link"

@@ -96,6 +96,7 @@ type CoaDocument = {
   product_name?: string | null;
   dosage?: string | null;
   report_id?: string | null;
+  lot_number?: string | null;
   lab_name?: string | null;
   test_date?: string | null;
   purity_percent?: number | null;
@@ -111,6 +112,24 @@ type CoaDocument = {
   storage_bucket?: string | null;
   created_at?: string | null;
 };
+
+
+// Select certificates by their recorded testing date, not file upload order.
+function coaTestTime(row: { test_date?: string | null; created_at?: string | null }): number {
+  const value = row.test_date || row.created_at;
+  if (!value) return 0;
+  const parsed = Date.parse(value.length === 10 ? `${value}T12:00:00` : value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function coaIdentity(value: string | null | undefined): string {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Match a spray to a same-named starting material without guessing unrelated products.
+function coaBaseIdentity(value: string | null | undefined): string {
+  return coaIdentity(value).replace(/(?:research)?(?:nasal)?spray$/, "");
+}
 
 const RECENTLY_VIEWED_KEY = "pugpep_recently_viewed";
 
@@ -184,46 +203,29 @@ export default function ProductDetailPage() {
     );
   }
 
+  const isSprayProduct = String(product?.category || "").toLowerCase().replace(/[_\s]/g, "-") === "research-sprays";
+
   const selectedCoas = useMemo(() => {
-    if (!selectedOption) {
-      return [] as CoaDocument[];
-    }
-
+    if (!selectedOption || !product) return [] as CoaDocument[];
     const selectedDosage = normalizeDosageKey(selectedOption.dosage);
-
-    return coaDocuments
-      .filter(
-        (document) =>
-          normalizeDosageKey(document.dosage) === selectedDosage
-      )
-      .sort((a, b) => {
-        if (Boolean(a.is_current) !== Boolean(b.is_current)) {
-          return a.is_current ? -1 : 1;
-        }
-
-        const aDate = a.test_date
-          ? new Date(
-              a.test_date.includes("T")
-                ? a.test_date
-                : `${a.test_date}T12:00:00`
-            ).getTime()
-          : a.created_at
-            ? new Date(a.created_at).getTime()
-            : 0;
-
-        const bDate = b.test_date
-          ? new Date(
-              b.test_date.includes("T")
-                ? b.test_date
-                : `${b.test_date}T12:00:00`
-            ).getTime()
-          : b.created_at
-            ? new Date(b.created_at).getTime()
-            : 0;
-
-        return bDate - aDate;
-      });
-  }, [coaDocuments, selectedOption]);
+    const sameProduct = coaDocuments.filter((document) =>
+      coaIdentity(document.product_slug) === coaIdentity(product.slug)
+    );
+    if (!isSprayProduct) {
+      return sameProduct
+        .filter((document) => normalizeDosageKey(document.dosage) === selectedDosage)
+        .sort((a, b) => coaTestTime(b) - coaTestTime(a));
+    }
+    // Spray COAs are starting-material references only. Prefer a clearly
+    // name-matched source vial. Do not assert that this was the actual batch used.
+    const baseName = coaBaseIdentity(product.slug);
+    const matchingSource = coaDocuments.filter((document) =>
+      coaIdentity(document.product_slug) === baseName &&
+      coaIdentity(document.product_slug) !== coaIdentity(product.slug)
+    );
+    return (matchingSource.length ? matchingSource : sameProduct)
+      .sort((a, b) => coaTestTime(b) - coaTestTime(a));
+  }, [coaDocuments, selectedOption, product, isSprayProduct]);
 
   const hideRecommendationSections =
     isSolventWaterProduct(product?.slug) ||
@@ -706,7 +708,7 @@ export default function ProductDetailPage() {
       const { data: coaRows, error: coaError } = await supabase
         .from("coa_documents")
         .select(
-          "id,product_slug,product_name,dosage,report_id,lab_name,test_date,purity_percent,identity_result,net_content,test_method,file_path,file_name,mime_type,file_type,status,is_current,storage_bucket,created_at"
+          "id,product_slug,product_name,dosage,lot_number,report_id,lab_name,test_date,purity_percent,identity_result,net_content,test_method,file_path,file_name,mime_type,file_type,status,is_current,storage_bucket,created_at"
         )
         .eq("status", "active")
         .order("is_current", { ascending: false })
@@ -721,8 +723,9 @@ export default function ProductDetailPage() {
           (coaRows || []) as CoaDocument[]
         ).filter(
           (document) =>
-            normalizeProductSlug(document.product_slug) ===
-            canonicalSlugKey
+            (normalizeProductSlug(document.product_slug) === canonicalSlugKey ||
+              (String(loadedProduct.category || "").toLowerCase().replace(/[_\s]/g, "-") === "research-sprays" &&
+                coaBaseIdentity(document.product_slug) === coaBaseIdentity(loadedProduct.slug)))
         );
 
         setCoaDocuments(coaData);
@@ -2095,7 +2098,7 @@ export default function ProductDetailPage() {
                 <div style={coaPanelHeader}>
                   <div>
                     <span style={coaPanelEyebrow}>
-                      CERTIFICATES OF ANALYSIS
+                      {isSprayProduct ? "STARTING MATERIAL COA" : "CERTIFICATES OF ANALYSIS"}
                     </span>
 
                     <h2 style={coaPanelTitle}>{product.name}</h2>
@@ -2116,9 +2119,9 @@ export default function ProductDetailPage() {
                 </div>
 
                 <p style={coaPanelHelp}>
-                  The newest COA for the selected dosage is shown below.
-                  Older reports are available from the dropdown when
-                  present.
+                  {isSprayProduct
+                    ? "The most recently tested available source-material certificate is shown for reference only. It does not verify the finished spray, its concentration, microbial quality, or the actual material lot used."
+                    : "The newest COA for the selected dosage is shown below. Older reports are available from the dropdown when present."}
                 </p>
 
                 <div style={coaList}>
@@ -2126,8 +2129,7 @@ export default function ProductDetailPage() {
                     <div style={coaEmptyState}>Loading COAs...</div>
                   ) : selectedCoas.length === 0 ? (
                     <div style={coaEmptyState}>
-                      No active COAs are currently listed for{" "}
-                      <strong>{selectedOption.dosage}</strong>.
+                      {isSprayProduct ? "No matching starting-material COA is currently listed." : <>No active COAs are currently listed for <strong>{selectedOption.dosage}</strong>.</>}
                     </div>
                   ) : (
                     <>
@@ -2233,6 +2235,11 @@ export default function ProductDetailPage() {
                                   ).toFixed(2)}%`
                                 : "Not listed"}
                             </strong>
+                          </div>
+
+                          <div style={coaMetaItem}>
+                            <span style={coaMetaLabel}>{isSprayProduct ? "SOURCE COA LOT" : "COA LOT NUMBER"}</span>
+                            <strong>{selectedCoas[0].lot_number || "Not listed"}</strong>
                           </div>
 
                           <div style={coaMetaItem}>
