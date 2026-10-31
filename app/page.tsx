@@ -2237,9 +2237,6 @@ export default function HomePage() {
         <div style={catalogHeader}>
           <div>
             <h2 style={catalogTitle}>Browse the Full Catalog</h2>
-            <p style={catalogIntroText}>
-              Choose a category, view new arrivals or current sale items, or search by product name.
-            </p>
           </div>
 
           <div style={catalogStats}>

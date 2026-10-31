@@ -519,8 +519,8 @@ function SplitAuthShell({ eyebrow, title, subtitle, footer, children }: {
       <style jsx>{`
         .pp-login-page { min-height: 100vh; display: grid; place-items: center; padding: 90px 22px 40px; box-sizing: border-box; color: #f6faff; background: radial-gradient(ellipse at 0% 30%, rgba(0,132,255,.14), transparent 50%), radial-gradient(ellipse at 100% 60%, rgba(232,34,190,.14), transparent 48%), #080d1b; }
         .pp-login-layout { display: grid; grid-template-columns: minmax(0, 1.04fr) minmax(0, 1fr); width: min(1280px,100%); min-height: 740px; background: #09162b; border: 1px solid rgba(0,204,255,.65); border-right-color: rgba(235,38,208,.55); border-radius: 26px; overflow: hidden; box-shadow: 0 28px 100px rgba(0,0,0,.62), 0 0 38px rgba(0,180,255,.13); }
-        .pp-login-visual { position: relative; min-height: 740px; overflow: hidden; background: #123456; }
-        .pp-login-visual-image { display: block; position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center center; }
+        .pp-login-visual { position: relative; min-height: 740px; overflow: hidden; background: #09162b; }
+        .pp-login-visual-image { display: block; position: absolute; top: 0; left: 0; width: 100%; height: 740px; object-fit: cover; object-position: center center; }
         .pp-login-visual::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 88%, rgba(4,12,29,.17)); pointer-events: none; }
         .pp-login-form-panel { min-width: 0; display: flex; justify-content: center; align-items: center; padding: clamp(27px, 4vw, 64px); box-sizing: border-box; background: radial-gradient(ellipse at 100% 100%,rgba(195,31,176,.13),transparent 57%), linear-gradient(160deg,#0c2242 0%,#0a1a33 45%,#090d21 100%); }
         .pp-login-form-inner { width: 100%; max-width: 440px; }
@@ -532,7 +532,7 @@ function SplitAuthShell({ eyebrow, title, subtitle, footer, children }: {
           .pp-login-page { padding: 77px 12px 25px; align-items: start; }
           .pp-login-layout { grid-template-columns: minmax(0,1fr); min-height: 0; border-radius: 18px; }
           .pp-login-visual { min-height: 0; height: clamp(260px, 55vw, 460px); }
-          .pp-login-visual-image { object-position: center 15%; }
+          .pp-login-visual-image { height: 100%; object-position: center 15%; }
           .pp-login-form-panel { padding: 32px 22px 34px; }
         }
         @media (max-width: 480px) {
