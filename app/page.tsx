@@ -2154,6 +2154,23 @@ export default function HomePage() {
             width: 7px !important; height: 7px !important; top: 4px !important; left: 4px !important;
           }
         }
+
+        /* Selected Bundle & Save: subtle PugPep pink, never an all-white button. */
+        .pugpep-product-card .pugpep-card-bundle-options button[aria-pressed="true"],
+        .pugpep-product-card :is(.pugpep-card-bundle-options button[aria-pressed="true"]) {
+          background: #39152e !important;
+          border-color: #f44bb6 !important;
+          color: #ffb1e0 !important;
+          box-shadow: inset 0 0 0 1px rgba(244,75,182,.24) !important;
+        }
+        .pugpep-product-card .pugpep-card-bundle-options button[aria-pressed="true"]:hover:not(:disabled) {
+          background: #51203e !important;
+          border-color: #ff74c9 !important;
+          color: #ffe0f2 !important;
+        }
+        .pugpep-product-card .pugpep-card-bundle-options button[aria-pressed="true"] :is(span, strong) {
+          color: inherit !important;
+        }
       `}</style>
 
       {!ageVerified && (
