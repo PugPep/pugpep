@@ -1196,9 +1196,7 @@ export default function HomePage() {
           <div className="pugpep-product-title-row">
           <Link href={productPath} className="pugpep-product-name"
             onClick={(event) => { void handleProductAccess(event, product.slug); }}>{product.name}</Link>
-            {selectedCoaUrl && <a className="pugpep-coa-button pugpep-coa-desktop" href={selectedCoaUrl}
-              onClick={(event) => { void handleProductAccess(event, product.slug, selectedCoaUrl); }}
-              aria-label={`View current COA for ${product.name}${selectedStrength?.label ? ` ${selectedStrength.label}` : ""}`}>View COA</a>}
+
           </div>
           <div
             className="pugpep-product-strengths"
@@ -1255,12 +1253,9 @@ export default function HomePage() {
                   Save ${quantityQuote.kitSavings.toFixed(2)} compared with {quantity * 10} singles
                 </div>}
             </div>
-            <div className="pugpep-purchase-controls">
-              <button type="button" className="pugpep-card-cart-button pugpep-cart-desktop"
-                onClick={() => window.dispatchEvent(new Event("pugpep:open-cart"))}>View Cart</button>
-            </div>
+
           </div>
-          <div className="pugpep-card-buy-row">
+          <div className="pugpep-kit-selection-row">
             {selectedStrength?.kit && <button
               type="button"
               className="pugpep-kit-bubble"
@@ -1274,6 +1269,11 @@ export default function HomePage() {
                 resetCardMessage(product.slug);
               }}
             ><span className="pugpep-kit-circle" aria-hidden="true" /><span className="pugpep-kit-label">Kit</span></button>}
+            {selectedStrength?.kit && kitSalePercent > 0 && !product.is_coming_soon && (
+              <span className="pugpep-kit-selection-hint">{kitSalePercent}% kit savings</span>
+            )}
+          </div>
+          <div className="pugpep-card-buy-row">
             <div className="pugpep-card-quantity" role="group" aria-label={`Quantity for ${product.name}`}>
               <button type="button" aria-label={`Decrease quantity for ${product.name}`} disabled={(!kitSelected && quantity <= 1) || (kitSelected && quantity <= 1 && !selectedStrength?.single) || pending || product.is_coming_soon}
                 onClick={() => changeCatalogQuantity(product, quantity - 1, saleOnly)}>−</button>
@@ -1841,6 +1841,52 @@ export default function HomePage() {
             text-decoration:none; white-space:nowrap;
           }
           .pugpep-product-card .pugpep-card-bundles { margin-top:8px !important; }
+        }
+
+        /* Unified shopping control order on mobile AND desktop. */
+        .pugpep-product-card .pugpep-product-title-row { align-items:flex-start; min-height:0; }
+        .pugpep-product-card .pugpep-coa-desktop,
+        .pugpep-product-card .pugpep-cart-desktop { display:none !important; }
+        .pugpep-product-card .pugpep-purchase-row { margin-bottom:5px !important; }
+        .pugpep-product-card .pugpep-kit-selection-row {
+          display:flex; align-items:center; justify-content:space-between;
+          gap:6px; min-height:28px; margin:2px 0 6px; width:100%;
+        }
+        .pugpep-product-card .pugpep-kit-selection-hint {
+          font-size:11px; font-weight:700; color:#b5ff85; text-align:right;
+        }
+        .pugpep-product-card .pugpep-kit-bubble { min-height:28px; padding:0 3px; }
+        .pugpep-product-card .pugpep-card-buy-row {
+          display:flex !important; flex-direction:row !important;
+          align-items:stretch !important; gap:6px !important; margin:0 !important;
+        }
+        .pugpep-product-card .pugpep-card-quantity { flex:1 1 50%; min-width:0; width:auto; }
+        .pugpep-product-card .pugpep-add-button { flex:1 1 50%; min-width:0; width:auto; }
+        .pugpep-product-card .pugpep-card-secondary-actions {
+          display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr));
+          gap:6px; width:100%; margin:6px 0 0 !important;
+        }
+        .pugpep-product-card .pugpep-card-secondary-actions.pugpep-no-coa { grid-template-columns:1fr; }
+        .pugpep-product-card .pugpep-card-secondary-actions .pugpep-cart-mobile,
+        .pugpep-product-card .pugpep-card-secondary-actions .pugpep-coa-mobile {
+          display:flex !important; width:100%; min-width:0; margin:0 !important;
+          align-items:center; justify-content:center; box-sizing:border-box;
+          padding:8px 5px; min-height:36px; border:1px solid #4c5260;
+          background:transparent; color:#fff; border-radius:7px;
+          font-size:11px; font-weight:800; text-decoration:none;
+        }
+        .pugpep-product-card .pugpep-card-bundles { margin-top:8px !important; }
+        @media (max-width:600px) {
+          .pugpep-product-card .pugpep-kit-selection-row { min-height:24px; margin:0 0 5px; }
+          .pugpep-product-card .pugpep-kit-selection-hint { font-size:9px; }
+          .pugpep-product-card .pugpep-kit-bubble { min-height:24px; font-size:11px; }
+          .pugpep-product-card .pugpep-card-quantity,
+          .pugpep-product-card .pugpep-add-button { flex:1 1 50%; min-width:0; }
+          .pugpep-product-card .pugpep-card-secondary-actions { margin-top:5px !important; }
+          .pugpep-product-card .pugpep-card-secondary-actions .pugpep-cart-mobile,
+          .pugpep-product-card .pugpep-card-secondary-actions .pugpep-coa-mobile {
+            font-size:10px; min-height:33px; padding:5px 2px;
+          }
         }
 
         @keyframes campaignGlow {
