@@ -1017,11 +1017,10 @@ export default function HomePage() {
   const catalogGroups = [
     ...productFamilies.slice(1).map((family) => ({
       key: family.value,
-      eyebrow: "RESEARCH CATALOG",
       title: family.label,
       products: visibleProducts.filter((product) => canonicalProductCategory(product.category) === family.value),
     })),
-    { key: "other", eyebrow: "RESEARCH CATALOG", title: "Other Research Products",
+    { key: "other", title: "Other Research Products",
       products: visibleProducts.filter((product) => !knownFamilyKeys.has(canonicalProductCategory(product.category))) },
   ].filter((group) => group.products.length > 0);
 
@@ -2228,7 +2227,7 @@ export default function HomePage() {
 
       {featuredProducts.length > 0 && (
         <section style={newProductsSection}>
-          <ProductShelf id="featured-products-row" title="Featured Products" eyebrow="CATALOG HIGHLIGHTS"
+          <ProductShelf id="featured-products-row" title="Featured Products"
             products={featuredProducts} renderProduct={(product) => renderCatalogProduct(product, filter === "sale")}
             onViewAll={() => viewAllProducts()} />
         </section>
@@ -2237,7 +2236,6 @@ export default function HomePage() {
       <section id="catalog" style={catalogShell}>
         <div style={catalogHeader}>
           <div>
-            <span style={catalogEyebrow}>RESEARCH PRODUCT CATEGORIES</span>
             <h2 style={catalogTitle}>Browse the Full Catalog</h2>
             <p style={catalogIntroText}>
               Choose a category, view new arrivals or current sale items, or search by product name.
@@ -2337,7 +2335,7 @@ export default function HomePage() {
         ) : (
           <div style={groupedCatalog}>
             {catalogGroups.map((group) => (
-              <ProductShelf key={group.key} id={`catalog-row-${group.key}`} title={group.title} eyebrow={group.eyebrow}
+              <ProductShelf key={group.key} id={`catalog-row-${group.key}`} title={group.title}
                 products={group.products} renderProduct={(product) => renderCatalogProduct(product, filter === "sale")}
                 onViewAll={() => viewAllProducts("all", knownFamilyKeys.has(group.key) ? group.key : "all")} />
             ))}
