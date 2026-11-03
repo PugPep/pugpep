@@ -33,6 +33,8 @@ import AdminMenu from "./AdminMenu";
 
 import PromoCapture from "./PromoCapture";
 
+import CoaViewer from "./components/CoaViewer";
+
 export default function RootLayout({
 
   children,
@@ -873,6 +875,8 @@ export default function RootLayout({
           <FloatingCart />
 
           {children}
+
+          <CoaViewer />
 
         </CartProvider>
 

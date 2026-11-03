@@ -181,6 +181,14 @@ export default function ProductDetailPage() {
       .toLowerCase()
       .replace(/\s+/g, "");
   }
+  // COA Engine may store `1000mg` while a product option is labeled `1000`.
+  // Normalize the implied mg unit ONLY for COA lookups, without affecting
+  // cart, option selection, pricing or alternative units such as mcg.
+  function normalizeCoaStrength(value: string | null | undefined) {
+    const normalized = String(value || "").trim().toLowerCase().replace(/\s+/g, "");
+    return normalized.replace(/^(\d+(?:\.\d+)?)mg$/, "$1");
+  }
+
 
   function normalizeProductSlug(value: string | null | undefined) {
     return String(value || "")
@@ -207,13 +215,13 @@ export default function ProductDetailPage() {
 
   const selectedCoas = useMemo(() => {
     if (!selectedOption || !product) return [] as CoaDocument[];
-    const selectedDosage = normalizeDosageKey(selectedOption.dosage);
+    const selectedDosage = normalizeCoaStrength(selectedOption.dosage);
     const sameProduct = coaDocuments.filter((document) =>
       coaIdentity(document.product_slug) === coaIdentity(product.slug)
     );
     if (!isSprayProduct) {
       return sameProduct
-        .filter((document) => normalizeDosageKey(document.dosage) === selectedDosage)
+        .filter((document) => normalizeCoaStrength(document.dosage) === selectedDosage)
         .sort((a, b) => coaTestTime(b) - coaTestTime(a));
     }
     // Spray COAs are starting-material references only. Prefer a clearly
@@ -723,7 +731,7 @@ export default function ProductDetailPage() {
           (coaRows || []) as CoaDocument[]
         ).filter(
           (document) =>
-            (normalizeProductSlug(document.product_slug) === canonicalSlugKey ||
+            (coaIdentity(document.product_slug) === coaIdentity(loadedProduct.slug) ||
               (String(loadedProduct.category || "").toLowerCase().replace(/[_\s]/g, "-") === "research-sprays" &&
                 coaBaseIdentity(document.product_slug) === coaBaseIdentity(loadedProduct.slug)))
         );

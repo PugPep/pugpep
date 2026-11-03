@@ -114,6 +114,12 @@ function homepageCoaTime(row: {test_date?: string | null; created_at?: string | 
 function homepageCoaBase(value: string): string {
   return catalogSlug(value).replace(/(?:research)?(?:nasal)?spray$/, "");
 }
+// Keep the distinct strength identity while accepting the COA Engine's
+// `1000mg` and storefront's `1000` as the same mg strength.
+function homepageCoaStrength(value: string | null | undefined): string {
+  const normalized = String(value || "").trim().toLowerCase().replace(/\s+/g, "");
+  return normalized.replace(/^(\d+(?:\.\d+)?)mg$/, "$1");
+}
 
 function buildCatalogStrengthChoices(
   options: CatalogOption[],
@@ -567,10 +573,7 @@ export default function HomePage() {
         const coaUrlsByStrength: Record<string, string> = {};
 
         for (const document of productDocuments) {
-          const dosageKey = String(document.dosage || "")
-            .trim()
-            .toLowerCase()
-            .replace(/\s+/g, "");
+          const dosageKey = homepageCoaStrength(document.dosage);
 
           const publicUrl = supabase.storage
             .from(document.storage_bucket || "coas")
@@ -712,6 +715,12 @@ export default function HomePage() {
       return;
     }
 
+    if (destination && /\/storage\/v1\/object\/public\/coas\//i.test(destination)) {
+      window.dispatchEvent(new CustomEvent("pugpep:open-coa", {
+        detail: { url: destination, title: `Certificate for ${productSlug}` },
+      }));
+      return;
+    }
     router.push(productPath);
   }
 
@@ -1307,7 +1316,7 @@ export default function HomePage() {
           <div className={`pugpep-card-secondary-actions${selectedCoaUrl ? "" : " pugpep-no-coa"}`}>
             <button type="button" className="pugpep-card-cart-button pugpep-cart-mobile"
               onClick={() => window.dispatchEvent(new Event("pugpep:open-cart"))}>View Cart</button>
-            {selectedCoaUrl && <a className="pugpep-coa-button pugpep-coa-mobile" href={selectedCoaUrl}
+            {selectedCoaUrl && <a data-coa-viewer-guard="true" className="pugpep-coa-button pugpep-coa-mobile" href={selectedCoaUrl}
               onClick={(event) => { void handleProductAccess(event, product.slug, selectedCoaUrl); }}
               aria-label={`View current COA for ${product.name}${selectedStrength?.label ? ` ${selectedStrength.label}` : ""}`}>View COA</a>}
           </div>
