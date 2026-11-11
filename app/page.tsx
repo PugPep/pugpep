@@ -1199,6 +1199,13 @@ export default function HomePage() {
     // Do not call an entire product 15% off just because its regular kit saves 15%.
     const offerPercent = catalogActivePromotion(selectedOption)
       ? catalogSalePercent(selectedOption, selectedStrength?.single) : 0;
+    // Display qualifying terms beside the price and in the top-right sale badge.
+    const cardMinimum = saleMap[product.slug]?.source === "campaign"
+      ? saleMap[product.slug].minimumSpend
+      : null;
+    const minimumLabel = catalogActivePromotion(selectedOption) && cardMinimum != null && cardMinimum > 0
+      ? ` · $${Number(cardMinimum.toFixed(2)).toLocaleString("en-US", { maximumFractionDigits: 2 })} min.`
+      : "";
     const offerBadge = `${Math.round(offerPercent)}% OFF`;
     const bundleTiers = product.is_coming_soon ? [] : catalogBundleTiers(selectedOption, quantity);
     const activeBundleTier = [...bundleTiers].reverse().find((tier) => quantity >= tier.quantity);
@@ -1220,7 +1227,12 @@ export default function HomePage() {
           <div className="pugpep-product-badges">
             {product.is_coming_soon ? <span className="pugpep-status-badge">Coming soon</span>
               : isProductNew(product) ? <span className="pugpep-status-badge">New</span> : null}
-            {!product.is_coming_soon && offerPercent > 0 && <span className="pugpep-offer-badge">{offerBadge}</span>}
+            {!product.is_coming_soon && offerPercent > 0 && (
+              <span className="pugpep-offer-badge">
+                <span>{offerBadge}</span>
+                {minimumLabel && <span className="pugpep-offer-minimum">{minimumLabel.trim().replace(/^·\s*/, "")}</span>}
+              </span>
+            )}
           </div>
         </Link>
         <div className="pugpep-product-info">
@@ -1272,7 +1284,7 @@ export default function HomePage() {
               {!product.is_coming_soon && quantityQuote && <div className="pugpep-card-price-caption">
                 Total for {quantity} {kitSelected ? (quantity === 1 ? "kit (10 vials)" : `kits (${quantity * 10} vials)`)
                   : (quantity === 1 ? "single" : "singles")}
-                {quantityQuote.savings > 0 && !quantityQuote.compareWithSingles && <span className="pugpep-card-sale-percent"> · {Math.round(quantityQuote.percent)}% OFF</span>}
+                {quantityQuote.savings > 0 && !quantityQuote.compareWithSingles && <span className="pugpep-card-sale-percent"> · {Math.round(quantityQuote.percent)}% OFF{catalogActivePromotion(selectedOption) && cardMinimum != null && cardMinimum > 0 ? ` · $${Number(cardMinimum.toFixed(2)).toLocaleString("en-US", { maximumFractionDigits: 2 })} min.` : ""}</span>}
               </div>}
               {/* Keep Kit savings in the main price summary; avoid extra rows
                   that make the product card jump when Kit is selected. */}
@@ -1364,7 +1376,8 @@ export default function HomePage() {
         .pugpep-product-image-link img { display:block; width:100%; height:100%; object-fit:cover; object-position:center center; }
         .pugpep-product-badges { position:absolute; top:10px; left:10px; right:10px; display:flex; flex-wrap:wrap; justify-content:space-between; gap:5px; pointer-events:none; }
         .pugpep-status-badge, .pugpep-offer-badge { border-radius:7px; padding:6px 8px; font-size:10px; font-weight:850; background:#181a22; color:#fff; box-shadow:0 2px 8px #0002; }
-        .pugpep-offer-badge { background:#d3ff69; color:#182000; margin-left:auto; }
+        .pugpep-offer-badge { background:#d3ff69; color:#182000; margin-left:auto; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; text-align:center; line-height:1.2; font-size:13px; }
+        .pugpep-offer-minimum { display:block; font-size:inherit; font-weight:850; white-space:nowrap; }
         .pugpep-product-info { padding:16px; display:flex; flex:1; flex-direction:column; }
         /* Unified neutral product typography without changing button contrast. */
         .pugpep-product-info .pugpep-product-family, .pugpep-product-info .pugpep-product-name, .pugpep-product-info .pugpep-card-price-caption, .pugpep-product-info .pugpep-card-sale-percent, .pugpep-product-info .pugpep-card-dollar-savings, .pugpep-product-info .pugpep-card-bundle-title, .pugpep-product-info .pugpep-card-original-price, .pugpep-product-info .pugpep-purchase-type, .pugpep-product-info .pugpep-kit-sale-hint, .pugpep-product-info .pugpep-card-message { color:#fff; }
@@ -1831,7 +1844,7 @@ export default function HomePage() {
           .pugpep-product-grid, .pugpep-product-row { align-items:start; }
           .pugpep-product-card { height:auto !important; align-self:start; }
           .pugpep-product-badges { top: 5px; left: 5px; right: 5px; }
-          .pugpep-status-badge, .pugpep-offer-badge { padding: 4px 5px; font-size: 9px; }
+          .pugpep-status-badge, .pugpep-offer-badge { padding: 5px 7px; font-size: 11px; }
           .shop-by-focus-grid .category-card { border: 0 !important; box-shadow: none !important; aspect-ratio: 16 / 9 !important; min-height: 0 !important; }
           .shop-by-focus-grid .shop-by-focus-image { object-fit: contain !important; background: transparent !important; }
         }
@@ -2279,30 +2292,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Campaign terms come from the currently active storefront campaign. */}
-      {primaryCampaign && primaryCampaign.minimumSpend !== null && primaryCampaign.minimumSpend > 0 && (
-        <aside
-          role="note"
-          aria-label="Active sale minimum purchase requirement"
-          style={{
-            background: "#162534",
-            color: "#ffffff",
-            textAlign: "center",
-            padding: "11px 16px",
-            borderTop: "1px solid #34465a",
-            borderBottom: "1px solid #34465a",
-            lineHeight: 1.5,
-            fontSize: 13,
-            fontWeight: 650,
-            letterSpacing: ".01em",
-          }}
-        >
-          {primaryCampaign.campaignName}: {primaryCampaign.bannerText} —
-          {" "}${primaryCampaign.minimumSpend.toFixed(2)} minimum after the campaign discount,
-          excluding shipping and tax.
-        </aside>
-      )}
-
       <section style={heroVideoSection}>
         {/* Keep the original desktop/mobile hero videos preserved but disabled.
             After payment approval, set ENABLE_HERO_VIDEO = true to restore them. */}
@@ -2501,16 +2490,14 @@ export default function HomePage() {
       </section>
 
       {saleProducts.length > 0 && (
-        <section id="current-offers" style={saleShowcaseSection} aria-labelledby="current-offers-heading">
-          <div className="pugpep-shelf-header">
-            <div>
-              <h3 id="current-offers-heading" className="pugpep-shelf-title">Current Offers</h3>
-            </div>
-            <span style={{ color: "#ffffff", fontSize: 12 }}>{saleProducts.length} products on sale</span>
-          </div>
-          <div className="pugpep-product-grid" style={{ marginTop: 18 }}>
-            {saleProducts.map((product) => renderCatalogProduct(product, true))}
-          </div>
+        <section id="current-offers" style={saleShowcaseSection}>
+          <ProductShelf
+            id="current-offers-row"
+            title="Current Offers"
+            products={saleProducts}
+            renderProduct={(product) => renderCatalogProduct(product, true)}
+            onViewAll={() => viewAllProducts("sale")}
+          />
         </section>
       )}
 

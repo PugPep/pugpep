@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "../lib/supabaseClient";
+import { loadStorefrontSales, getPrimaryStorefrontCampaign } from "../lib/storefrontCampaigns";
 
 import {
 
@@ -892,6 +893,7 @@ function FloatingCart() {
   const { cart, total, updateQuantity, removeFromCart, setPurchaseType } = useCart();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [campaignMinimum, setCampaignMinimum] = useState<number | null>(null);
   const [productQuery, setProductQuery] = useState("");
   const [searchFocused, setSearchFocused] = useState(false);
   const [searchItems, setSearchItems] = useState<{ id: string; name: string; slug: string; image: string | null }[]>([]);
@@ -909,6 +911,31 @@ function FloatingCart() {
   const panelRef = useRef<HTMLElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const count = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setCampaignMinimum(null);
+    void (async () => {
+      try {
+        const sales = await loadStorefrontSales(createClient());
+        if (cancelled) return;
+        // Prefer a campaign relevant to a product already in this cart.
+        const cartCampaign = cart.map((item) => sales[item.slug]).find(
+          (sale) => sale?.source === "campaign" && sale.minimumSpend != null && sale.minimumSpend > 0
+        );
+        const primaryCampaign = getPrimaryStorefrontCampaign(sales);
+        const minimum = cartCampaign?.minimumSpend ?? primaryCampaign?.minimumSpend ?? null;
+        setCampaignMinimum(minimum != null && minimum > 0 ? minimum : null);
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Cart campaign minimum could not be loaded:", error);
+          setCampaignMinimum(null);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, cart]);
 
   function closeCart() {
     setOpen(false);
@@ -1088,7 +1115,10 @@ function FloatingCart() {
           </article>; })}
         </div>
         <div style={{ padding:20, borderTop:"1px solid #303440" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", fontSize:18, fontWeight:800 }}><span>Subtotal</span><span aria-live="polite">${total.toFixed(2)}</span></div>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:18, fontWeight:800, alignItems:"center" }}><span>Subtotal</span><span aria-live="polite">${total.toFixed(2)}</span></div>
+          {campaignMinimum != null && <div role="note" style={{ margin:"9px 0 8px", padding:"10px 12px", background:"#263745", border:"1px solid #75e8f0", borderRadius:8, color:"#ffffff", fontSize:15, lineHeight:1.3, fontWeight:900, textAlign:"center" }}>
+            ${campaignMinimum.toFixed(2)} Minimum After Discount
+          </div>}
           <p style={{ color:"#a7b0c3", fontSize:12, lineHeight:1.5 }}>Final pricing, availability, discounts, and shipping are confirmed at checkout.</p>
           <div style={{ display:"flex", gap:10 }}>
             <Link href="/cart" onClick={closeCart} style={{ flex:1, textAlign:"center", padding:12, border:"1px solid #454956", borderRadius:8, color:"#fff", textDecoration:"none", fontWeight:800 }}>View Cart</Link>

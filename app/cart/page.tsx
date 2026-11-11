@@ -314,19 +314,6 @@ export default function CartPage() {
           </div>
         )}
 
-        {campaignNotices.length > 0 && (
-          <section style={campaignNotice} aria-label="Sale minimum spend information">
-            {campaignNotices.map((notice) => (
-              <p key={notice.campaignId} style={{ margin: 0 }}>
-                <strong>{notice.campaignName || "Current sale"}:</strong>{" "}
-                {money(notice.minimumSpend ?? 0)} minimum merchandise subtotal
-                <strong> after the campaign discount</strong>, before shipping and taxes.
-                Campaign eligibility and pricing are verified at checkout.
-              </p>
-            ))}
-          </section>
-        )}
-
         <div
           className="cart-layout"
           style={layout}
@@ -537,6 +524,15 @@ export default function CartPage() {
                 Cart Total
               </h2>
 
+              {campaignNotices.length > 0 && (
+                <div role="note" aria-label="Sale minimum" style={{ marginTop: 13, marginBottom: 4, borderRadius: 8, border: "1px solid #62dfe5", background: "rgba(98,223,229,.13)", color: "#ffffff", padding: "11px 12px", fontSize: 15, fontWeight: 900, lineHeight: 1.4 }}>
+                  {campaignNotices.map((notice) => (
+                    <div key={notice.campaignId}>
+                      {money(notice.minimumSpend ?? 0)} Minimum After Discount
+                    </div>
+                  ))}
+                </div>
+              )}
               <div style={summaryRows}>
                 <SummaryRow
                   label="Items"
