@@ -2279,6 +2279,30 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* Campaign terms come from the currently active storefront campaign. */}
+      {primaryCampaign && primaryCampaign.minimumSpend !== null && primaryCampaign.minimumSpend > 0 && (
+        <aside
+          role="note"
+          aria-label="Active sale minimum purchase requirement"
+          style={{
+            background: "#162534",
+            color: "#ffffff",
+            textAlign: "center",
+            padding: "11px 16px",
+            borderTop: "1px solid #34465a",
+            borderBottom: "1px solid #34465a",
+            lineHeight: 1.5,
+            fontSize: 13,
+            fontWeight: 650,
+            letterSpacing: ".01em",
+          }}
+        >
+          {primaryCampaign.campaignName}: {primaryCampaign.bannerText} —
+          {" "}${primaryCampaign.minimumSpend.toFixed(2)} minimum after the campaign discount,
+          excluding shipping and tax.
+        </aside>
+      )}
+
       <section style={heroVideoSection}>
         {/* Keep the original desktop/mobile hero videos preserved but disabled.
             After payment approval, set ENABLE_HERO_VIDEO = true to restore them. */}

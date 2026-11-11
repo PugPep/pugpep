@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { createClient } from "../lib/supabaseClient";
 import { trackEvent } from "../lib/trackEvent";
+import { calculateCampaignPricing } from "../lib/pricing/campaignPricing";
 
 export type CartBundleTier = { quantity: number; discount: number };
 export type CartVariant = {
@@ -200,6 +201,78 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     });
     return () => { cancelled = true; clearTimeout(timeoutId); controller.abort(); };
   }, [cartIdentity, hydrated, supabase]);
+
+  // Reprice the ENTIRE cart when its contents change. Product-level RPC prices
+  // are only candidates; they cannot enforce a campaign's cart minimum.
+  // campaignPricing.ts is the shared source of truth for post-discount minimums.
+  // Variant refreshes also trigger this calculation so stale stored prices do
+  // not become permanent when a promotion changes or expires.
+  const pricingFingerprint = cart
+    .map((item) => `${item.productOptionId || "missing"}:${item.quantity}:${item.variantsLoadedAt || 0}`)
+    .sort()
+    .join("|");
+
+  useEffect(() => {
+    if (!hydrated || !pricingFingerprint || cart.some((item) => !item.productOptionId)) return;
+
+    let cancelled = false;
+    const requestItems = cart.map((item) => ({
+      productOptionId: item.productOptionId!,
+      quantity: item.quantity,
+    }));
+
+    void calculateCampaignPricing({ supabase, items: requestItems })
+      .then((result) => {
+        if (cancelled) return;
+        const pricedByOption = new Map(
+          result.items.map((line) => [line.productOptionId, line])
+        );
+
+        setCart((previous) => {
+          // The request may have completed after the user changed quantities.
+          const currentFingerprint = previous
+            .map((item) => `${item.productOptionId || "missing"}:${item.quantity}:${item.variantsLoadedAt || 0}`)
+            .sort()
+            .join("|");
+          if (currentFingerprint !== pricingFingerprint) return previous;
+
+          let changed = false;
+          const updated = previous.map((item) => {
+            const line = pricedByOption.get(item.productOptionId || "");
+            if (!line) return item;
+
+            // The pricing engine has already applied the correct bundle tier,
+            // manual sale, and eligible campaign. Never apply a tier twice.
+            const enginePrice = money(safeNumber(line.actualUnitPrice));
+            const engineRegular = money(safeNumber(line.regularUnitPrice));
+            const next: CartItem = {
+              ...item,
+              price: enginePrice,
+              basePrice: enginePrice,
+              salePrice: enginePrice,
+              regularPrice: engineRegular,
+              hasCampaign: Boolean(line.hasCampaign),
+              wasOnSale: enginePrice < engineRegular || Boolean(line.hasCampaign),
+              salePercent: engineRegular > 0
+                ? money(Math.max(0, (engineRegular - enginePrice) / engineRegular * 100))
+                : 0,
+            };
+            if (item.price !== next.price || item.basePrice !== next.basePrice ||
+                item.regularPrice !== next.regularPrice || item.hasCampaign !== next.hasCampaign ||
+                item.wasOnSale !== next.wasOnSale || item.salePercent !== next.salePercent) {
+              changed = true;
+            }
+            return next;
+          });
+          return changed ? updated : previous;
+        });
+      })
+      .catch((error) => {
+        if (!cancelled) console.error("Unable to refresh cart campaign pricing:", error);
+      });
+
+    return () => { cancelled = true; };
+  }, [pricingFingerprint, hydrated, supabase]);
 
   function addToCart(item: Omit<CartItem, "quantity">, quantity = 1) {
     const incoming = normalizeCartItem({ ...item, quantity: count(quantity) });

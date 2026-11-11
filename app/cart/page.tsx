@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "../../lib/supabaseClient";
 import { useCart } from "../cartContext";
+import { loadStorefrontSales, type StorefrontSale } from "../../lib/storefrontCampaigns";
 
 function money(value: number) {
   return `$${Number(value || 0).toFixed(2)}`;
@@ -30,6 +31,50 @@ export default function CartPage() {
     checkingOut,
     setCheckingOut,
   ] = useState(false);
+
+  const [campaignNotices, setCampaignNotices] = useState<
+    Pick<StorefrontSale, "campaignId" | "campaignName" | "minimumSpend">[]
+  >([]);
+
+  const cartProductSlugs = useMemo(
+    () => Array.from(new Set(cart.map((item) => item.slug))).sort(),
+    [cart]
+  );
+  const cartProductKey = cartProductSlugs.join("|");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!cartProductKey) {
+      setCampaignNotices([]);
+      return;
+    }
+
+    async function loadNotices() {
+      try {
+        const sales = await loadStorefrontSales(supabase);
+        if (cancelled) return;
+        const unique = new Map<string, Pick<StorefrontSale, "campaignId" | "campaignName" | "minimumSpend">>();
+        for (const slug of cartProductKey.split("|")) {
+          const sale = sales[slug];
+          if (sale?.source === "campaign" && sale.campaignId &&
+              sale.minimumSpend != null && sale.minimumSpend > 0) {
+            unique.set(sale.campaignId, {
+              campaignId: sale.campaignId,
+              campaignName: sale.campaignName,
+              minimumSpend: sale.minimumSpend,
+            });
+          }
+        }
+        setCampaignNotices(Array.from(unique.values()));
+      } catch (error) {
+        console.error("Unable to load cart campaign minimum notices:", error);
+        if (!cancelled) setCampaignNotices([]);
+      }
+    }
+
+    void loadNotices();
+    return () => { cancelled = true; };
+  }, [cartProductKey, supabase]);
 
   const subtotalBeforeSales =
     cart.reduce(
@@ -267,6 +312,19 @@ export default function CartPage() {
               Some items may require additional fulfillment time.
             </span>
           </div>
+        )}
+
+        {campaignNotices.length > 0 && (
+          <section style={campaignNotice} aria-label="Sale minimum spend information">
+            {campaignNotices.map((notice) => (
+              <p key={notice.campaignId} style={{ margin: 0 }}>
+                <strong>{notice.campaignName || "Current sale"}:</strong>{" "}
+                {money(notice.minimumSpend ?? 0)} minimum merchandise subtotal
+                <strong> after the campaign discount</strong>, before shipping and taxes.
+                Campaign eligibility and pricing are verified at checkout.
+              </p>
+            ))}
+          </section>
         )}
 
         <div
@@ -716,6 +774,19 @@ const presaleNotice = {
   background:
     "rgba(255,191,0,.08)",
   color: "#ffdd99",
+};
+
+const campaignNotice = {
+  marginBottom: 22,
+  padding: "14px 16px",
+  display: "grid",
+  gap: 9,
+  border: "1px solid rgba(0,217,255,.40)",
+  borderRadius: 12,
+  background: "rgba(0,217,255,.07)",
+  color: "#e9faff",
+  fontSize: 14,
+  lineHeight: 1.6,
 };
 
 const layout = {

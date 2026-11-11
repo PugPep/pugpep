@@ -1000,45 +1000,39 @@ export async function calculateCampaignPricing({
   }
 
   /*
-   * Minimum spend is based only on merchandise that is actually eligible
-   * for that campaign, using regular pre-discount merchandise value.
+   * Evaluate each campaign minimum using its eligible merchandise value
+   * AFTER the campaign discount, before shipping, taxes, and any separate
+   * promo/reward/customer discounts. A campaign with no minimum is unchanged.
    *
-   * Example:
-   *   Campaign minimum: $100
-   *   Eligible campaign products: $80
-   *   Other products: $60
-   *
-   * The campaign does NOT activate because the qualifying subtotal is $80,
-   * not the full $140 cart subtotal. Shipping and later discounts are never
-   * counted toward the minimum.
+   * For BOGO, the line revenue must use the actual paid quantity instead
+   * of saleUnitPrice, since the discount depends on cart quantity.
+   * Unrelated products do not count toward this campaign's minimum.
    */
   const qualifyingSpendByCampaign = new Map<string, number>();
 
   validInputs.forEach((input) => {
-    const campaignPrice = campaignPriceByOption.get(
-      input.productOptionId
-    );
+    const campaignPrice = campaignPriceByOption.get(input.productOptionId);
 
-    if (
-      !campaignPrice?.hasCampaign ||
-      !campaignPrice.saleCampaignId
-    ) {
+    if (!campaignPrice?.hasCampaign || !campaignPrice.saleCampaignId) {
       return;
     }
 
     const quantity = safePositiveQuantity(input.quantity);
+    const discountedLineValue = campaignPrice.saleCampaignType === "buy_x_get_y"
+      ? roundCurrency(
+          nonNegative(campaignPrice.regularUnitPrice) *
+            calculateBuyXGetY({
+              quantity,
+              buyQuantity: campaignPrice.buyQuantity || 1,
+              getQuantity: campaignPrice.getQuantity || 1,
+            }).paidQuantity
+        )
+      : roundCurrency(nonNegative(campaignPrice.saleUnitPrice) * quantity);
 
-    const regularLineValue = roundCurrency(
-      nonNegative(campaignPrice.regularUnitPrice) * quantity
-    );
-
-    const current = qualifyingSpendByCampaign.get(
-      campaignPrice.saleCampaignId
-    ) || 0;
-
+    const current = qualifyingSpendByCampaign.get(campaignPrice.saleCampaignId) || 0;
     qualifyingSpendByCampaign.set(
       campaignPrice.saleCampaignId,
-      roundCurrency(current + regularLineValue)
+      roundCurrency(current + discountedLineValue)
     );
   });
 

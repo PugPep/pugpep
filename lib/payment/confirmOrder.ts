@@ -183,6 +183,39 @@ export async function confirmOrderTransaction({
       );
     }
 
+    /*
+     * Prevent confirming an order when the total displayed on the
+     * payment page no longer matches authoritative campaign pricing.
+     * This includes minimum-spend eligibility changes, expiration,
+     * inventory prices, and changes to other permitted discounts.
+     * Use integer cents to avoid floating-point comparison errors.
+     * Never persist a different total without customer review.
+     */
+    const cents = (value: unknown): number | null => {
+      const amount = Number(value);
+      return Number.isFinite(amount) && amount >= 0
+        ? Math.round(amount * 100)
+        : null;
+    };
+
+    const confirmedTotalCents = cents(pricing.accounting.customerTotal);
+    const displayedTotalCents = cents(
+      order.pricing?.accounting.customerTotal ?? order.total
+    );
+    const pendingTotalCents = cents(order.total);
+
+    if (
+      confirmedTotalCents === null ||
+      displayedTotalCents === null ||
+      pendingTotalCents === null ||
+      confirmedTotalCents !== displayedTotalCents ||
+      confirmedTotalCents !== pendingTotalCents
+    ) {
+      throw new Error(
+        "Your order total has changed since checkout, possibly because a sale or its minimum spend requirement changed. No order was placed. Please return to checkout to review the updated total before confirming payment."
+      );
+    }
+
     const {
       data: profileData,
       error: profileError,

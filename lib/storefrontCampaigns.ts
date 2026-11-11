@@ -13,6 +13,9 @@ export type StorefrontSale = {
   getQuantity: number | null;
   badgeText: string;
   bannerText: string;
+  // Null means the campaign minimum could not be verified (or this is a manual sale).
+  // Zero means the campaign explicitly has no minimum spend.
+  minimumSpend: number | null;
 };
 
 type ProductOptionRow = {
@@ -32,6 +35,11 @@ type CampaignRpcRow = {
   discount_value?: number;
   buy_quantity?: number | null;
   get_quantity?: number | null;
+};
+
+type CampaignMinimumRow = {
+  id: string;
+  minimum_spend: number | null;
 };
 
 function nonNegative(value: unknown) {
@@ -162,6 +170,7 @@ export async function loadStorefrontSales(
       getQuantity: null,
       badgeText: `SALE ${salePercent}% OFF`,
       bannerText: `${salePercent}% OFF SELECTED PRODUCTS`,
+      minimumSpend: null,
     };
 
     sales[option.product_slug] = chooseBetterSale(
@@ -188,9 +197,9 @@ export async function loadStorefrontSales(
           return null;
         }
 
-        const row = campaignData as CampaignRpcRow;
+        const row = (Array.isArray(campaignData) ? campaignData[0] : campaignData) as CampaignRpcRow | undefined;
 
-        if (!row.has_campaign) {
+        if (!row?.has_campaign) {
           return null;
         }
 
@@ -209,6 +218,7 @@ export async function loadStorefrontSales(
           getQuantity: display.getQuantity,
           badgeText: display.badgeText,
           bannerText: display.bannerText,
+          minimumSpend: null,
         };
 
         return candidate;
@@ -219,12 +229,46 @@ export async function loadStorefrontSales(
     })
   );
 
+  const campaignIds = Array.from(
+    new Set(
+      campaignResults
+        .filter((candidate): candidate is StorefrontSale => candidate !== null)
+        .map((candidate) => candidate.campaignId)
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+
+  const minimumByCampaign = new Map<string, number>();
+
+  if (campaignIds.length > 0) {
+    const { data: minimumRows, error: minimumError } = await supabase
+      .from("sale_campaigns")
+      .select("id,minimum_spend")
+      .in("id", campaignIds);
+
+    if (minimumError) {
+      // Do not show an incorrect minimum (including a misleading $0) on the storefront.
+      console.error("Unable to load campaign minimum spends:", minimumError);
+    } else {
+      for (const row of (minimumRows || []) as CampaignMinimumRow[]) {
+        minimumByCampaign.set(row.id, Math.round(nonNegative(row.minimum_spend) * 100) / 100);
+      }
+    }
+  }
+
   campaignResults.forEach((candidate) => {
     if (!candidate) return;
 
-    sales[candidate.productSlug] = chooseBetterSale(
-      sales[candidate.productSlug],
-      candidate
+    const enriched: StorefrontSale = {
+      ...candidate,
+      minimumSpend: candidate.campaignId && minimumByCampaign.has(candidate.campaignId)
+        ? minimumByCampaign.get(candidate.campaignId)!
+        : null,
+    };
+
+    sales[enriched.productSlug] = chooseBetterSale(
+      sales[enriched.productSlug],
+      enriched
     );
   });
 
@@ -247,6 +291,7 @@ export function getPrimaryStorefrontCampaign(
       campaignName: string;
       bannerText: string;
       productCount: number;
+      minimumSpend: number | null;
     }
   >();
 
@@ -264,6 +309,7 @@ export function getPrimaryStorefrontCampaign(
       campaignName: sale.campaignName || "Active Campaign",
       bannerText: sale.bannerText,
       productCount: 1,
+      minimumSpend: sale.minimumSpend,
     });
   });
 

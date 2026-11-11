@@ -175,6 +175,10 @@ export default function ProductDetailPage() {
   const [optionCampaignPriceMap, setOptionCampaignPriceMap] =
     useState<Record<string, OptionCampaignPrice>>({});
 
+  // Minimum-spend notices are tied to the selected option's campaign.
+  const [campaignMinimums, setCampaignMinimums] =
+    useState<Record<string, number>>({});
+
   function normalizeDosageKey(value: string | null | undefined) {
     return String(value || "")
       .trim()
@@ -694,6 +698,36 @@ export default function ProductDetailPage() {
       setOptionCampaignPriceMap(
         Object.fromEntries(optionCampaignEntries)
       );
+
+      const campaignIds = Array.from(
+        new Set(
+          optionCampaignEntries
+            .map(([, campaign]) => campaign.campaignId)
+            .filter((id): id is string => Boolean(id))
+        )
+      );
+      if (campaignIds.length > 0) {
+        const { data: minimumRows, error: minimumError } = await supabase
+          .from("sale_campaigns")
+          .select("id,minimum_spend")
+          .in("id", campaignIds);
+
+        if (minimumError) {
+          console.warn("Unable to load campaign minimums:", minimumError);
+          setCampaignMinimums({});
+        } else {
+          setCampaignMinimums(
+            Object.fromEntries(
+              (minimumRows || []).map((row) => [
+                String(row.id),
+                Math.max(0, Number(row.minimum_spend) || 0),
+              ])
+            )
+          );
+        }
+      } else {
+        setCampaignMinimums({});
+      }
 
       const { data: inventoryRows, error: inventoryError } = await supabase
         .from("inventory")
@@ -1942,6 +1976,45 @@ export default function ProductDetailPage() {
                       )}
                     </div>
                   </section>
+
+                  {(() => {
+                    // The notice belongs to the campaign on the selected option,
+                    // not to a different sale on another option for this product.
+                    const selectedCampaign = optionCampaignPriceMap[selectedOption.id];
+                    const campaignMinimum =
+                      selectedCampaign?.hasCampaign && selectedCampaign.campaignId
+                        ? campaignMinimums[selectedCampaign.campaignId] ?? null
+                        : null;
+
+                    if (campaignMinimum == null || campaignMinimum <= 0) {
+                      return null;
+                    }
+
+                    return (
+                      <div
+                        role="note"
+                        aria-label="Campaign minimum purchase requirement"
+                        style={{
+                          margin: "0 0 12px",
+                          padding: "11px 14px",
+                          border: "1px solid rgba(125,249,255,0.28)",
+                          borderRadius: 10,
+                          background: "rgba(125,249,255,0.07)",
+                          color: "#dceaf0",
+                          fontSize: 13,
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        <strong style={{ color: "#7df9ff" }}>
+                          {selectedCampaign.campaignName || "Current sale"}
+                        </strong>
+                        <span style={{ display: "block" }}>
+                          ${campaignMinimum.toFixed(2)} minimum after campaign discount,
+                          before shipping and taxes. Eligibility is calculated on the cart total.
+                        </span>
+                      </div>
+                    );
+                  })()}
 
                   <button
                     type="button"
