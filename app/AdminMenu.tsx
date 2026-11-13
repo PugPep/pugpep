@@ -204,6 +204,7 @@ export default function AdminMenu() {
             (current) => !current
           );
         }}
+        className="pugpep-admin-trigger"
         style={adminButton}
         aria-expanded={open}
         aria-haspopup="menu"
@@ -374,6 +375,14 @@ export default function AdminMenu() {
       )}
 
       <style jsx>{`
+        @media (min-width: 801px) {
+          .pugpep-admin-trigger { font-size: 16px; }
+          .pugpep-admin-dropdown {
+            --pugpep-admin-item-size: 16px;
+            --pugpep-admin-title-size: 18px;
+            --pugpep-admin-label-size: 11px;
+          }
+        }
         @media (max-width: 640px) {
           .pugpep-admin-dropdown {
             box-sizing: border-box !important;
@@ -549,7 +558,7 @@ const menuHeader = {
 const menuEyebrow = {
   color: "#7df9ff",
 
-  fontSize: 9,
+  fontSize: "var(--pugpep-admin-label-size, 9px)",
 
   fontWeight: 950,
 
@@ -560,7 +569,7 @@ const menuEyebrow = {
 const menuTitle = {
   color: "#ffffff",
 
-  fontSize: 15,
+  fontSize: "var(--pugpep-admin-title-size, 15px)",
 
   textShadow:
     "0 0 14px rgba(255,255,255,.08)",
@@ -589,7 +598,7 @@ const item = {
   WebkitBackdropFilter:
     "blur(4px)",
 
-  fontSize: 13,
+  fontSize: "var(--pugpep-admin-item-size, 13px)",
 
   fontWeight: 750,
 
@@ -656,7 +665,7 @@ const sectionLabel = {
   color:
     "rgba(255,255,255,.38)",
 
-  fontSize: 9,
+  fontSize: "var(--pugpep-admin-label-size, 9px)",
 
   fontWeight: 950,
 

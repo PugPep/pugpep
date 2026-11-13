@@ -5,6 +5,7 @@ import { money, styles } from "./checkoutTheme";
 
 export function FinalReview({
   pricing,
+  customKitSavings,
   proceeding,
   pricingLoading,
   cartIsEmpty,
@@ -12,6 +13,7 @@ export function FinalReview({
   proceedToPayment,
 }: {
   pricing: PricingResult | null;
+  customKitSavings: number;
   proceeding: boolean;
   pricingLoading: boolean;
   cartIsEmpty: boolean;
@@ -89,8 +91,15 @@ export function FinalReview({
               />
 
               <Discount
+                label="Custom Kit Savings (15%)"
+                value={customKitSavings}
+              />
+
+              <Discount
                 label="Bundle Savings"
-                value={pricing.discounts.bundleDiscount}
+                value={Math.max(0, Math.round(
+                  (pricing.discounts.bundleDiscount - customKitSavings) * 100
+                ) / 100)}
               />
 
               <Discount

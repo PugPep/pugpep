@@ -1291,7 +1291,7 @@ export default function ProductDetailPage() {
 
                       {effectiveSale?.isOnSale && (
                         <span style={recommendationSaleBadge}>
-                          {effectiveSale.badgeText}
+                          {effectiveSale.badgeText.replace(/(\d+(?:\.\d+)?)\s*%/g, (_, percent) => `${Math.round(Number(percent))}%`)}
                         </span>
                       )}
                     </div>
@@ -1674,8 +1674,8 @@ export default function ProductDetailPage() {
                         displayOriginal > 0
                           ? Math.round(
                               (displaySavings / displayOriginal) *
-                                10000
-                            ) / 100
+                                100
+                            )
                           : 0;
 
                       return (
@@ -1817,7 +1817,7 @@ export default function ProductDetailPage() {
                               <p style={{ color: "#c0c6d4", fontSize: 13, margin: "8px 0", lineHeight: 1.6 }}>
                                 Standard Kit Savings: 15% off
                                 <span style={{ display: "block", color: "#7df9ff", fontWeight: 800 }}>
-                                  Bundle &amp; Save: Additional {getBundleTier(selectedOption, quantity)?.discount ?? 0}% off
+                                  Bundle &amp; Save: Additional {Math.round(getBundleTier(selectedOption, quantity)?.discount ?? 0)}% off
                                 </span>
                                 <span style={{ display: "block" }}>Save ${displaySavings.toFixed(2)} versus buying individual vials</span>
                               </p>
@@ -1848,12 +1848,10 @@ export default function ProductDetailPage() {
                                   : "Kit savings"}
                                 : ${totalKitSaving.toFixed(2)}{" "}
                                 (
-                                {(
+                                {Math.round(
                                   (totalKitSaving /
-                                    (kitSavings!.tenSingleValue *
-                                      quantity)) *
-                                  100
-                                ).toFixed(1)}
+                                    (kitSavings!.tenSingleValue * quantity)) * 100
+                                )}
                                 %) compared with {quantity * 10} single
                                 vials at regular price ($
                                 {productQuantityTotal(
@@ -1964,10 +1962,10 @@ export default function ProductDetailPage() {
                                       tier.quantity
                                     )
                                   }
-                                  aria-label={`Buy ${tier.quantity} ${selectedOption.purchase_type === "kit" ? "kits" : "units"} for ${tier.discount}% bundle savings`}
+                                  aria-label={`Buy ${tier.quantity} ${selectedOption.purchase_type === "kit" ? "kits" : "units"} for ${Math.round(tier.discount)}% bundle savings`}
                                 >
                                   <strong>Buy {tier.quantity}</strong>
-                                  <span>{tier.discount}% off</span>
+                                  <span>{Math.round(tier.discount)}% off</span>
                                 </button>
                               );
                             }

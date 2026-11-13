@@ -16,8 +16,7 @@ import type {
 import { useCart } from "../cartContext";
 import { createClient } from "../../lib/supabaseClient";
 import { trackEvent } from "../../lib/trackEvent";
-import { calculatePricing } from "../../lib/pricing/pricingEngine";
-import { calculateCampaignPricing } from "../../lib/pricing/campaignPricing";
+import { calculatePricing, quoteCartMerchandise } from "../../lib/pricing/pricingEngine";
 
 import type {
   PricingResult,
@@ -416,6 +415,14 @@ export default function CheckoutPage() {
         "pre-sale"
     );
 
+  const customKitSavings = (pricing?.campaign.items.reduce((cents, line, index) => {
+    const item = cart[index];
+    return item?.customKitGroupId && item.productOptionId === line.productOptionId &&
+      item.quantity === line.quantity
+      ? cents + Math.round(line.bundleDiscountAmount * 100)
+      : cents;
+  }, 0) ?? 0) / 100;
+
   const hasMissingOptionIds =
     cart.some(
       (item) =>
@@ -436,16 +443,17 @@ export default function CheckoutPage() {
 
       try {
         const preview =
-          await calculateCampaignPricing({
+          await quoteCartMerchandise(
             supabase,
-            items: cart.map((item) => ({
+            cart.map((item) => ({
+              customKitGroupId: item.customKitGroupId,
               productOptionId:
                 item.productOptionId as string,
               quantity: Number(
                 item.quantity || 1
               ),
-            })),
-          });
+            }))
+          );
 
         if (!cancelled) {
           setCampaignPreview(preview);
@@ -548,6 +556,8 @@ export default function CheckoutPage() {
                     ) => ({
                       productOptionId:
                         item.productOptionId as string,
+
+                      customKitGroupId: item.customKitGroupId,
 
                       quantity:
                         Number(
@@ -1494,6 +1504,8 @@ export default function CheckoutPage() {
                     productOptionId:
                       item.productOptionId,
 
+                    customKitGroupId: item.customKitGroupId,
+
                     quantity:
                       Number(
                         item.quantity ||
@@ -2196,6 +2208,7 @@ export default function CheckoutPage() {
             />
 
             <OrderBreakdown
+              customKitSavings={customKitSavings}
               pricing={
                 pricing
               }
@@ -2205,6 +2218,7 @@ export default function CheckoutPage() {
 
 
         <FinalReview
+          customKitSavings={customKitSavings}
           pricing={
             pricing
           }

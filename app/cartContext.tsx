@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { createClient } from "../lib/supabaseClient";
 import { trackEvent } from "../lib/trackEvent";
-import { calculateCampaignPricing } from "../lib/pricing/campaignPricing";
+import { quoteCartMerchandise } from "../lib/pricing/pricingEngine";
 
 export type CartBundleTier = { quantity: number; discount: number };
 export type CartVariant = {
@@ -19,6 +19,7 @@ export type CartVariant = {
 };
 export type CartItem = {
   productOptionId?: string;
+  customKitGroupId?: string;
   name: string;
   slug: string;
   image: string;
@@ -40,10 +41,18 @@ export type CartItem = {
   singleOption?: CartVariant;
   kitOption?: CartVariant;
   variantsLoadedAt?: number;
+  customKitLineTotal?: { quantity: number; amount: number; kitSavings: number; salePercent: number };
 };
+export const CUSTOM_KIT_VIAL_COUNT = 10;
+
+export type CustomKitCartLine = Omit<CartItem, "customKitGroupId" | "productOptionId" | "purchaseType"> & {
+  productOptionId: string;
+};
+
 type CartContextType = {
   cart: CartItem[];
   addToCart: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
+  addCustomKit: (lines: readonly CustomKitCartLine[]) => string;
   removeFromCart: (index: number) => void;
   updateQuantity: (index: number, quantity: number) => void;
   setPurchaseType: (index: number, type: "single" | "kit") => void;
@@ -73,6 +82,9 @@ function normalizeCartItem(item: Partial<CartItem>): CartItem {
   return applyDisplayPrice({
     productOptionId: text(item.productOptionId), name: item.name || "", slug: item.slug || "", image: item.image || "", dosage: item.dosage || "",
     purchaseType: item.purchaseType === "kit" ? "kit" : "single", price,
+    customKitGroupId: item.purchaseType === "single" && text(item.productOptionId)
+      ? text(item.customKitGroupId)
+      : undefined,
     regularPrice: money(safeNumber(item.regularPrice, price)), salePrice: money(safeNumber(item.salePrice, price)),
     wasOnSale: Boolean(item.wasOnSale), salePercent: safeNumber(item.salePercent), quantity: count(item.quantity),
     status: text(item.status), cost: safeNumber(item.cost),
@@ -85,7 +97,7 @@ function applyDisplayPrice(item: CartItem): CartItem {
   const base = money(safeNumber(item.basePrice, item.price));
   // Standard kit savings are already included in the stored kit base price.
   // Quantity discounts apply on top, but never on an active campaign or manual sale.
-  const tiers = !item.hasCampaign && base >= item.regularPrice
+  const tiers = !item.customKitGroupId && !item.hasCampaign && base >= item.regularPrice
     && (item.purchaseType === "kit" || item.quantity < 10)
     ? (item.purchaseType === "kit"
       ? [{ quantity: 3, discount: 2 }, { quantity: 5, discount: 4 }, { quantity: 8, discount: 7 }]
@@ -97,7 +109,9 @@ function applyDisplayPrice(item: CartItem): CartItem {
 }
 export function getCartItemTotals(item: CartItem) {
   const quantity = count(item.quantity);
-  const total = money(item.price * quantity);
+  const total = item.customKitGroupId && item.customKitLineTotal?.quantity === quantity
+    ? item.customKitLineTotal.amount
+    : money(item.price * quantity);
   const tenSingles = item.purchaseType === "kit" && item.singleOption ? money(item.singleOption.regularPrice * 10) : 0;
   const compareWithSingles = item.purchaseType === "kit" && item.price >= item.regularPrice && tenSingles > item.regularPrice;
   const originalTotal = money((compareWithSingles ? tenSingles : item.regularPrice) * quantity);
@@ -107,6 +121,7 @@ export function getCartItemTotals(item: CartItem) {
     kitSavings: money(Math.max(0, tenSingles * quantity - total)) };
 }
 function itemsMatch(existing: CartItem, incoming: Partial<CartItem>) {
+  if (existing.customKitGroupId !== incoming.customKitGroupId) return false;
   if (existing.productOptionId && incoming.productOptionId) return existing.productOptionId === incoming.productOptionId;
   return existing.slug === incoming.slug && dosageKey(existing.dosage) === dosageKey(incoming.dosage || "") && existing.purchaseType === incoming.purchaseType;
 }
@@ -119,7 +134,7 @@ function useVariant(item: CartItem, variant: CartVariant, quantity: number): Car
     hasCampaign: Boolean(variant.hasCampaign), bundleTiers: variant.bundleTiers });
 }
 function automaticKit(item: CartItem): CartItem {
-  return item.purchaseType === "single" && item.quantity === 10 && variantAvailable(item.kitOption)
+  return !item.customKitGroupId && item.purchaseType === "single" && item.quantity === 10 && variantAvailable(item.kitOption)
     ? useVariant(item, item.kitOption!, 1) : applyDisplayPrice(item);
 }
 function consolidate(items: CartItem[]) {
@@ -191,7 +206,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       setCart((previous) => consolidate(previous.map((current) => {
         if (current.slug !== item.slug || dosageKey(current.dosage) !== dosageKey(item.dosage)) return current;
         const next = { ...current, singleOption, kitOption, variantsLoadedAt: Date.now() };
-        const variant = current.purchaseType === "kit" ? kitOption : singleOption;
+        const variant = current.customKitGroupId
+          ? variants.find((option) => option.purchaseType === "single" && option.productOptionId === current.productOptionId)
+          : current.purchaseType === "kit" ? kitOption : singleOption;
         return variant ? useVariant(next, variant, current.quantity) : next;
       })));
     }
@@ -208,8 +225,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   // Variant refreshes also trigger this calculation so stale stored prices do
   // not become permanent when a promotion changes or expires.
   const pricingFingerprint = cart
-    .map((item) => `${item.productOptionId || "missing"}:${item.quantity}:${item.variantsLoadedAt || 0}`)
-    .sort()
+    .map((item) => JSON.stringify([item.productOptionId, item.quantity, item.variantsLoadedAt, item.customKitGroupId]))
     .join("|");
 
   useEffect(() => {
@@ -219,27 +235,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const requestItems = cart.map((item) => ({
       productOptionId: item.productOptionId!,
       quantity: item.quantity,
+      customKitGroupId: item.customKitGroupId,
     }));
 
-    void calculateCampaignPricing({ supabase, items: requestItems })
+    void quoteCartMerchandise(supabase, requestItems)
       .then((result) => {
         if (cancelled) return;
-        const pricedByOption = new Map(
-          result.items.map((line) => [line.productOptionId, line])
-        );
-
         setCart((previous) => {
           // The request may have completed after the user changed quantities.
           const currentFingerprint = previous
-            .map((item) => `${item.productOptionId || "missing"}:${item.quantity}:${item.variantsLoadedAt || 0}`)
-            .sort()
+            .map((item) => JSON.stringify([item.productOptionId, item.quantity, item.variantsLoadedAt, item.customKitGroupId]))
             .join("|");
           if (currentFingerprint !== pricingFingerprint) return previous;
 
           let changed = false;
-          const updated = previous.map((item) => {
-            const line = pricedByOption.get(item.productOptionId || "");
-            if (!line) return item;
+          const updated = previous.map((item, index) => {
+            const line = result.items[index];
+            if (!line || line.productOptionId !== item.productOptionId || line.quantity !== item.quantity) return item;
 
             // The pricing engine has already applied the correct bundle tier,
             // manual sale, and eligible campaign. Never apply a tier twice.
@@ -249,6 +261,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               ...item,
               price: enginePrice,
               basePrice: enginePrice,
+              customKitLineTotal: item.customKitGroupId
+                ? {
+                    quantity: line.quantity,
+                    amount: money(line.campaignLineRevenue),
+                    kitSavings: money(line.bundleDiscountAmount),
+                    salePercent: line.regularLineValue > 0
+                      ? (line.saleDiscountAmount / line.regularLineValue) * 100
+                      : 0,
+                  }
+                : undefined,
               salePrice: enginePrice,
               regularPrice: engineRegular,
               hasCampaign: Boolean(line.hasCampaign),
@@ -259,7 +281,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             };
             if (item.price !== next.price || item.basePrice !== next.basePrice ||
                 item.regularPrice !== next.regularPrice || item.hasCampaign !== next.hasCampaign ||
-                item.wasOnSale !== next.wasOnSale || item.salePercent !== next.salePercent) {
+                item.wasOnSale !== next.wasOnSale || item.salePercent !== next.salePercent ||
+                item.customKitLineTotal?.quantity !== next.customKitLineTotal?.quantity ||
+                item.customKitLineTotal?.amount !== next.customKitLineTotal?.amount ||
+                item.customKitLineTotal?.kitSavings !== next.customKitLineTotal?.kitSavings ||
+                item.customKitLineTotal?.salePercent !== next.customKitLineTotal?.salePercent) {
               changed = true;
             }
             return next;
@@ -275,7 +301,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [pricingFingerprint, hydrated, supabase]);
 
   function addToCart(item: Omit<CartItem, "quantity">, quantity = 1) {
-    const incoming = normalizeCartItem({ ...item, quantity: count(quantity) });
+    const incoming = normalizeCartItem({ ...item, customKitGroupId: undefined, quantity: count(quantity) });
     void trackEvent({ event_type: "add_to_cart", page_path: typeof window !== "undefined" ? window.location.pathname : undefined,
       product_slug: incoming.slug || undefined, metadata: { product_name: incoming.name, product_option_id: incoming.productOptionId || null,
         dosage: incoming.dosage, purchase_type: incoming.purchaseType, quantity: incoming.quantity, unit_price: incoming.price,
@@ -288,6 +314,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         bundleTiers: incoming.bundleTiers?.length ? incoming.bundleTiers : existing.bundleTiers, quantity: existing.quantity + incoming.quantity }) : existing));
     });
   }
+  function addCustomKit(lines: readonly CustomKitCartLine[]) {
+    if (lines.some((line) => !text(line.productOptionId) || !text(line.slug) ||
+      !Number.isSafeInteger(line.quantity) || line.quantity < 1) ||
+      lines.reduce((sum, line) => sum + line.quantity, 0) !== CUSTOM_KIT_VIAL_COUNT) {
+      throw new Error("A custom kit must contain exactly 10 vials with valid product options.");
+    }
+
+    const groupId = globalThis.crypto.randomUUID();
+    const groupedLines = lines.map((line) => normalizeCartItem({
+      ...line,
+      purchaseType: "single",
+      customKitGroupId: groupId,
+    }));
+    setCart((previous) => consolidate([...previous, ...groupedLines]));
+    return groupId;
+  }
+
   function removeFromCart(index: number) { setCart((previous) => previous.filter((_item, position) => position !== index)); }
   function updateQuantity(index: number, requested: number) {
     if (!Number.isFinite(requested)) return;
@@ -296,19 +339,26 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       if (position !== index) return [item];
       if (item.purchaseType === "kit" && quantity < 1 && item.singleOption) return [useVariant(item, item.singleOption, 9)];
       if (quantity <= 0) return [];
+      if (item.customKitGroupId) {
+        const otherVials = previous.reduce((sum, other, otherIndex) =>
+          otherIndex !== index && other.customKitGroupId === item.customKitGroupId
+            ? sum + other.quantity
+            : sum, 0);
+        if (otherVials + quantity > CUSTOM_KIT_VIAL_COUNT) return [item];
+      }
       return [automaticKit({ ...item, quantity })];
     })));
   }
   function setPurchaseType(index: number, type: "single" | "kit") {
     setCart((previous) => consolidate(previous.map((item, position) => {
-      if (position !== index || item.purchaseType === type) return item;
+      if (position !== index || item.purchaseType === type || item.customKitGroupId) return item;
       const variant = type === "kit" ? item.kitOption : item.singleOption;
       return variantAvailable(variant) ? useVariant(item, variant!, 1) : item;
     })));
   }
   function clearCart() { setCart([]); try { localStorage.removeItem("pugpep_cart"); } catch {} }
   const total = useMemo(() => money(cart.reduce((sum, item) => sum + getCartItemTotals(item).total, 0)), [cart]);
-  return <CartContext.Provider value={{ cart, addToCart, removeFromCart, updateQuantity, setPurchaseType, clearCart, total }}>{children}</CartContext.Provider>;
+  return <CartContext.Provider value={{ cart, addToCart, addCustomKit, removeFromCart, updateQuantity, setPurchaseType, clearCart, total }}>{children}</CartContext.Provider>;
 }
 export function useCart() {
   const context = useContext(CartContext);

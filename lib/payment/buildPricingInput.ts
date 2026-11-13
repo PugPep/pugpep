@@ -3,131 +3,102 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PricingInput } from "../pricing/types";
 import type { PendingOrder } from "./types";
 
-export function buildPricingInput(
-  order: PendingOrder,
-  supabase: SupabaseClient
-): PricingInput {
-  const sourceItems =
-    order.pricingInput?.items ||
-    order.items.map(
-      (item) => ({
-        productOptionId:
-          item.productOptionId,
+type PendingPricingLine = {
+  productOptionId?: string | null;
+  quantity?: number | null;
+  customKitGroupId?: unknown;
+};
 
-        quantity:
-          Number(
-            item.quantity || 1
-          ),
-      })
-    );
+type PaymentPricingLine = PricingInput["items"][number] & {
+  customKitGroupId?: string;
+};
 
-  const missingItem =
-    sourceItems.find(
-      (item) =>
-        !item.productOptionId
-    );
+type PaymentPricingInput = Omit<PricingInput, "items"> & {
+  items: PaymentPricingLine[];
+};
 
-  if (missingItem) {
+export function paymentLineKey(optionId: string | null, groupId?: string | null) {
+  return JSON.stringify([optionId, groupId ?? null]);
+}
+
+function normalizePricingLine(item: PendingPricingLine): PaymentPricingLine {
+  if (!item.productOptionId) {
     throw new Error(
       "One or more cart items are missing their product option ID. Return to checkout, remove them, and add them again."
     );
   }
 
-  /*
-   * Prefer the promo code captured in the authoritative
-   * checkout pricing input.
-   *
-   * Fall back to the legacy order-level promoCode field
-   * for older pending orders.
-   */
-  const rawPromoCode =
-    order.pricingInput
-      ?.promoCode ??
-    order.promoCode ??
-    null;
+  const groupId = item.customKitGroupId;
+  if (groupId != null && (
+    typeof groupId !== "string" ||
+    !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(groupId) ||
+    !Number.isSafeInteger(item.quantity) || Number(item.quantity) <= 0
+  )) {
+    throw new Error("A custom-kit line is invalid. Return to checkout and review your kit.");
+  }
 
-  const promoCode =
-    typeof rawPromoCode ===
-      "string" &&
-    rawPromoCode.trim()
-      ? rawPromoCode
-          .trim()
-          .toUpperCase()
-      : null;
+  return {
+    productOptionId: item.productOptionId,
+    quantity: Math.max(1, Math.floor(Number(item.quantity || 1))),
+    customKitGroupId: typeof groupId === "string" ? groupId.toLowerCase() : undefined,
+  };
+}
+
+export function buildPricingInput(
+  order: PendingOrder,
+  supabase: SupabaseClient
+): PaymentPricingInput {
+  const cartItems: readonly PendingPricingLine[] = order.items;
+  const quoteItems: readonly PendingPricingLine[] | undefined = order.pricingInput?.items;
+  const items = (quoteItems || cartItems).map(normalizePricingLine);
+
+  if (items.some((item) => item.customKitGroupId) ||
+      cartItems.some((item) => item.customKitGroupId != null)) {
+    const cartByLine = new Map<string, number>();
+    for (const item of cartItems.map(normalizePricingLine)) {
+      const key = paymentLineKey(item.productOptionId, item.customKitGroupId);
+      if (cartByLine.has(key)) {
+        throw new Error("A custom-kit order has duplicate lines. Return to checkout and review your kit.");
+      }
+      cartByLine.set(key, item.quantity);
+    }
+
+    for (const item of items) {
+      const key = paymentLineKey(item.productOptionId, item.customKitGroupId);
+      if (cartByLine.get(key) !== item.quantity) {
+        throw new Error("The cart and checkout quote differ. Return to checkout and review your order.");
+      }
+      cartByLine.delete(key);
+    }
+    if (cartByLine.size) {
+      throw new Error("The cart and checkout quote differ. Return to checkout and review your order.");
+    }
+  }
+
+  const rawPromoCode = order.pricingInput?.promoCode ?? order.promoCode ?? null;
+  const promoCode = typeof rawPromoCode === "string" && rawPromoCode.trim()
+    ? rawPromoCode.trim().toUpperCase()
+    : null;
 
   return {
     supabase,
-
-    customerId:
-      order.userId || "",
-
-    items:
-      sourceItems.map(
-        (item) => ({
-          productOptionId:
-            item.productOptionId as string,
-
-          quantity:
-            Math.max(
-              1,
-              Math.floor(
-                Number(
-                  item.quantity ||
-                    1
-                )
-              )
-            ),
-        })
-      ),
-
-    /*
-     * This code is sent back through calculatePricing()
-     * during final confirmation.
-     *
-     * That means the pricing engine re-evaluates the
-     * sale-vs-promo comparison immediately before the
-     * order is written to the database.
-     */
+    customerId: order.userId || "",
+    items,
     promoCode,
-
-    rewardPointsRequested:
-      Math.max(
-        0,
-        Math.floor(
-          Number(
-            order.pricingInput
-              ?.rewardPointsRequested ??
-            order.rewardPointsUsed ??
-            0
-          )
-        )
-      ),
-
+    rewardPointsRequested: Math.max(
+      0,
+      Math.floor(Number(order.pricingInput?.rewardPointsRequested ?? order.rewardPointsUsed ?? 0))
+    ),
     shippingMethod:
-      order.pricingInput
-        ?.shippingMethod ??
+      order.pricingInput?.shippingMethod ??
       order.shippingMethod ??
-      order.pricing
-        ?.shipping
-        .shippingMethod ??
+      order.pricing?.shipping.shippingMethod ??
       "standard",
-
-    shippingAddress:
-      order.pricingInput
-        ?.shippingAddress || {
-        countryCode:
-          "US",
-
-        stateCode:
-          order.customer.state
-            .trim()
-            .toUpperCase(),
-
-        postalCode:
-          order.customer.zip.trim(),
-
-        city:
-          order.customer.city.trim(),
-      },
+    shippingAddress: order.pricingInput?.shippingAddress || {
+      countryCode: "US",
+      stateCode: order.customer.state.trim().toUpperCase(),
+      postalCode: order.customer.zip.trim(),
+      city: order.customer.city.trim(),
+    },
   };
 }

@@ -63,11 +63,13 @@ export async function persistOrderLedger({
   order,
   pricing,
   insertedItems,
+  itemsInPricingOrder = false,
 }: {
   supabase: SupabaseClient;
   order: PendingOrder;
   pricing: PricingResult;
   insertedItems: InsertedOrderItem[];
+  itemsInPricingOrder?: boolean;
 }) {
   const accounting =
     pricing.accounting;
@@ -279,18 +281,15 @@ export async function persistOrderLedger({
     },
   });
 
-  for (
-    const item
-    of pricing.campaign.items
-  ) {
+  for (const [index, item] of pricing.campaign.items.entries()) {
     await addLedgerEntry({
       supabase,
       orderId:
         order.id,
       orderItemId:
-        insertedItemMap.get(
-          item.productOptionId
-        ) || null,
+        (itemsInPricingOrder
+          ? insertedItems[index]?.id
+          : insertedItemMap.get(item.productOptionId)) ?? null,
       entryType: "debit",
       entryCategory:
         "product_cost",

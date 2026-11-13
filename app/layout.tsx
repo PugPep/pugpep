@@ -646,6 +646,12 @@ export default function RootLayout({
                 />
 
                 <NavLink
+                  href="/create-custom-kit"
+                  label="CREATE A KIT"
+                  closeHeader={closeDesktopHeaderImmediately}
+                />
+
+                <NavLink
 
                   href="/about"
 
@@ -812,6 +818,12 @@ export default function RootLayout({
                 />
 
                 <MobileNavLink
+                  href="/create-custom-kit"
+                  label="CREATE A KIT"
+                  setMenuOpen={setMenuOpen}
+                />
+
+                <MobileNavLink
 
                   href="/about"
 
@@ -911,6 +923,10 @@ function FloatingCart() {
   const panelRef = useRef<HTMLElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const count = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const merchandiseCents = Math.round(total * 100);
+  const kitSavingsCents = cart.reduce((sum, item) =>
+    sum + (item.customKitGroupId && item.customKitLineTotal?.quantity === item.quantity
+      ? Math.round(item.customKitLineTotal.kitSavings * 100) : 0), 0);
 
   useEffect(() => {
     if (!open) return;
@@ -1028,18 +1044,74 @@ function FloatingCart() {
 
   return <>
     <style>{`
-      .pugpep-cart-panel button:focus-visible, .pugpep-cart-panel a:focus-visible, .pugpep-cart-trigger:focus-visible { outline:3px solid #ff75df; outline-offset:3px; }
+      .pugpep-cart-panel {
+        --drawer-cyan: #7df9ff;
+        --drawer-muted: #abb5c4;
+        --drawer-border: rgba(178, 207, 224, .17);
+        position: absolute; inset: 0 0 0 auto; width: min(520px, 100%);
+        display: flex; flex-direction: column; box-sizing: border-box;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 16px; line-height: 1.4;
+        background: #0e141a; color: #fff; box-shadow: -12px 0 35px #0008;
+        border-left: 1px solid var(--drawer-border);
+      }
+      .pugpep-cart-panel :is(button, a, input):focus-visible, .pugpep-cart-trigger:focus-visible {
+        outline: 3px solid #ff75df; outline-offset: 3px;
+      }
+      .pugpep-drawer-header, .pugpep-drawer-footer { flex: none; padding: 14px clamp(12px, 4vw, 24px); }
+      .pugpep-drawer-header { position: relative; z-index: 1; border-bottom: 1px solid var(--drawer-border); }
+      .pugpep-drawer-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+      .pugpep-drawer-title h2 { margin: 0; font-size: clamp(21px, 5vw, 27px); font-weight: 900; text-transform: uppercase; }
+      .pugpep-drawer-title h2 span { color: var(--drawer-cyan); }
+      .pugpep-drawer-close { width: 42px; height: 42px; padding: 0; border: 0; background: transparent; color: #fff; font: inherit; font-size: 30px; cursor: pointer; }
+      .pugpep-drawer-delivery { margin: 11px 0 0; color: var(--drawer-cyan); font-size: 15px; line-height: 1.4; }
+      .pugpep-drawer-delivery small { display: block; margin-top: 6px; color: var(--drawer-muted); font-size: 14px; }
+      .pugpep-drawer-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 15px clamp(12px, 4vw, 24px); scrollbar-color: #44616e #0e141a; }
+      .pugpep-drawer-items { border: 1px solid var(--drawer-border); border-radius: 15px; background: #111920; }
+      .pugpep-drawer-item { display: grid; gap: 10px; padding: 14px; }
+      .pugpep-drawer-item + .pugpep-drawer-item { border-top: 1px solid var(--drawer-border); }
+      .pugpep-drawer-product { display: flex; align-items: center; gap: 12px; min-width: 0; }
+      .pugpep-drawer-product img { display: block; width: 68px; height: 70px; object-fit: contain; border-radius: 9px; background: #191f29; }
+      .pugpep-drawer-name { color: #fff; text-decoration: none; font-size: 18px; font-weight: 850; overflow-wrap: anywhere; }
+      .pugpep-drawer-name:hover, .pugpep-drawer-view:hover { color: var(--drawer-cyan); }
+      .pugpep-drawer-meta { color: var(--drawer-muted); font-size: 15px; line-height: 1.45; margin: 3px 0 0; }
+      .pugpep-drawer-badge { display: inline-block; margin-top: 5px; padding: 3px 6px; border-radius: 5px; background: #d3ff69; color: #182000; font-size: 13px; font-weight: 850; }
+      .pugpep-drawer-controls { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 6px 10px; }
+      .pugpep-drawer-quantity { display: flex; align-items: center; gap: 5px; }
+      .pugpep-cart-step { width: 44px; height: 44px; border: 1px solid rgba(0,217,255,.34); background: #14222b; color: var(--drawer-cyan); border-radius: 50%; cursor: pointer; font: inherit; font-size: 20px; }
+      .pugpep-cart-step:disabled { opacity: .4; cursor: default; }
+      .pugpep-drawer-quantity span { min-width: 23px; text-align: center; font-variant-numeric: tabular-nums; }
+      .pugpep-drawer-line-price { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 7px; font-size: 20px; font-variant-numeric: tabular-nums; }
+      .pugpep-drawer-line-price del { color: var(--drawer-muted); font-size: 14px; }
+      .pugpep-drawer-remove { padding: 9px 0; border: 0; background: transparent; color: #ff9be7; cursor: pointer; font: inherit; font-size: 15px; }
+      .pugpep-drawer-footer { border-top: 1px solid var(--drawer-border); background: #0e141a; padding-bottom: max(14px, env(safe-area-inset-bottom)); }
+      .pugpep-drawer-totals { display: grid; gap: 6px; margin: 0; }
+      .pugpep-drawer-totals > div { display: flex; justify-content: space-between; gap: 12px; }
+      .pugpep-drawer-totals dt { color: var(--drawer-muted); }
+      .pugpep-drawer-totals dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+      .pugpep-drawer-totals .pugpep-drawer-total { padding-top: 8px; margin-top: 2px; border-top: 1px solid var(--drawer-border); font-size: 18px; font-weight: 850; }
+      .pugpep-drawer-total dt { color: #fff; }
+      .pugpep-drawer-cta { display: block; text-align: center; margin-top: 12px; padding: 13px 10px; border-radius: 999px; background: linear-gradient(105deg,#00d9ff,#ff45d8); color: #0d1018; text-decoration: none; font-size: 17px; font-weight: 900; }
+      .pugpep-drawer-view { display: block; text-align: center; color: var(--drawer-muted); padding: 10px 0 0; text-underline-offset: 3px; font-size: 16px; }
       @media(max-width:800px) { .pugpep-cart-trigger { display:none !important; } }
-      .pugpep-cart-step { width:28px; height:30px; border:1px solid #454956; background:#242733; color:#fff; border-radius:6px; cursor:pointer; font-size:16px; }
-      .pugpep-cart-step:disabled { opacity:.4; cursor:default; }
+      @media(max-height:480px) {
+        .pugpep-cart-panel { overflow-y: auto; }
+        .pugpep-drawer-body { flex: none; overflow-y: visible; }
+      }
+      @media(max-width:360px), (max-height:640px) {
+        .pugpep-drawer-header, .pugpep-drawer-footer { padding-top: 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+        .pugpep-drawer-item { padding: 11px; }
+        .pugpep-drawer-title { margin-bottom: 4px; }
+        .pugpep-drawer-delivery { margin-top: 7px; }
+      }
     `}</style>
     {open && <div style={{ position:"fixed", inset:0, zIndex:100010, background:"rgba(0,0,0,.65)" }}
       onClick={(event) => { if (event.target === event.currentTarget) closeCart(); }}>
-      <section id="pugpep-cart-panel" ref={panelRef} tabIndex={-1} className="pugpep-cart-panel" role="dialog" aria-modal="true" aria-labelledby="pugpep-cart-title"
-        style={{ position:"absolute", right:0, top:0, bottom:0, width:"min(420px, 100%)", display:"flex", flexDirection:"column",
-          background:"#14161e", color:"#fff", boxShadow:"-12px 0 35px #0005", boxSizing:"border-box" }}>
-        <div style={{ padding:16, display:"flex", alignItems:"center", gap:8 }}>
-          <h2 id="pugpep-cart-title" style={{ margin:0, fontSize:18, flexShrink:0, whiteSpace:"nowrap" }}>Your Cart ({count})</h2>
+      <section id="pugpep-cart-panel" ref={panelRef} tabIndex={-1} className="pugpep-cart-panel" role="dialog" aria-modal="true" aria-labelledby="pugpep-cart-title">
+        <header className="pugpep-drawer-header">
+          <div className="pugpep-drawer-title">
+            <h2 id="pugpep-cart-title">Shopping Cart <span>({count})</span></h2>
+            <button type="button" onClick={closeCart} aria-label="Close cart" className="pugpep-drawer-close">×</button>
+          </div>
           <div style={{ position:"relative", flex:1, minWidth:0 }}
             onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setSearchFocused(false); }}>
             <input type="search" role="combobox" aria-label="Search products" autoComplete="off"
@@ -1054,76 +1126,94 @@ function FloatingCart() {
                 if (event.key === "Enter" && searchMatches.length) { event.preventDefault(); openSearchProduct((searchMatches[activeResult] || searchMatches[0]).slug); }
                 if (event.key === "Escape" && showSearchResults) { event.preventDefault(); event.stopPropagation(); setSearchFocused(false); setActiveResult(-1); }
               }}
-              style={{ width:"100%", boxSizing:"border-box", minWidth:0, height:32, border:"1px solid #454956", borderRadius:7,
-                padding:"0 8px", background:"#20232e", color:"#fff", fontSize:11 }} />
+              style={{ width:"100%", boxSizing:"border-box", minWidth:0, height:42, border:"1px solid #454956", borderRadius:7,
+                padding:"0 8px", background:"#20232e", color:"#fff", font:"inherit" }} />
             {showSearchResults && <div id="cart-product-results" role="listbox" aria-label="Matching products"
               style={{ position:"absolute", right:0, top:"calc(100% + 6px)", width:"min(300px, calc(100vw - 40px))", maxHeight:300,
                 overflowY:"auto", zIndex:2, background:"#20232e", border:"1px solid #454956", borderRadius:8, boxShadow:"0 8px 24px #0006" }}>
               {searchMatches.length > 0 ? searchMatches.map((item, index) => <button key={item.id} id={`cart-product-result-${index}`}
                 type="button" role="option" aria-selected={activeResult === index} onClick={() => openSearchProduct(item.slug)}
                 style={{ display:"flex", width:"100%", alignItems:"center", gap:8, padding:10, border:0, borderBottom:"1px solid #363b48",
-                  background:activeResult === index ? "#344252" : "transparent", color:"#fff", textAlign:"left", fontSize:13, cursor:"pointer" }}>
+                  background:activeResult === index ? "#344252" : "transparent", color:"#fff", textAlign:"left", font:"inherit", cursor:"pointer" }}>
                 <img src={item.image || "/pugpep-logo.png"} alt="" style={{ width:32, height:38, objectFit:"contain", background:"#fff", borderRadius:4 }} />
                 <span>{item.name}</span>
-              </button>) : <p role="status" style={{ margin:0, padding:12, color:"#b7bed0", fontSize:12 }}>
+              </button>) : <p role="status" style={{ margin:0, padding:12, color:"#b7bed0", fontSize:14 }}>
                 {searchLoading ? "Loading products…" : searchError ? "Product search is temporarily unavailable." : "No matching products."}
               </p>}
             </div>}
           </div>
-          <button type="button" onClick={closeCart} aria-label="Close cart" style={{ flexShrink:0, background:"transparent", color:"#fff", border:0, padding:0, fontSize:28, cursor:"pointer" }}>×</button>
+          <p className="pugpep-drawer-delivery">
+            <small>Discount codes, rewards, and shipping eligibility are confirmed at checkout.</small>
+          </p>
+          {campaignMinimum != null && <p className="pugpep-drawer-meta" role="note">
+            ${campaignMinimum.toFixed(2)} minimum after discount
+          </p>}
+        </header>
+        <div className="pugpep-drawer-body">
+          {cart.length === 0 ? <p className="pugpep-drawer-meta">Your cart is empty.</p> :
+            <div className="pugpep-drawer-items">
+              {cart.map((item, index) => {
+                const quote = getCartItemTotals(item);
+                const kitQuote = item.customKitGroupId && item.customKitLineTotal?.quantity === item.quantity
+                  ? item.customKitLineTotal : undefined;
+                const salePercent = item.customKitGroupId ? kitQuote?.salePercent ?? 0 : item.salePercent;
+                const showSale = item.customKitGroupId ? salePercent > 15
+                  : item.wasOnSale && salePercent > 0 &&
+                    !(item.purchaseType === "kit" && !item.hasCampaign && item.quantity >= 3);
+                const lineTotal = item.customKitGroupId && (!kitQuote || kitQuote.kitSavings > 0)
+                  ? quote.originalTotal : quote.total;
+                const itemLabel = item.customKitGroupId ? "Custom kit vial" : item.purchaseType === "kit" ? "Kit of 10" : "Single vial";
+                const unitLabel = item.purchaseType === "kit" ? "kit" : "vial";
+                return (
+                  <article key={JSON.stringify([item.customKitGroupId, item.productOptionId || item.slug, item.dosage, index])}
+                    className="pugpep-drawer-item">
+                    <div className="pugpep-drawer-product">
+                      <Link href={`/products/${item.slug}`} onClick={closeCart} aria-label={`View ${item.name}`}>
+                        <img src={item.image || "/pugpep-logo.png"} alt="" width={68} height={70} />
+                      </Link>
+                      <div style={{ minWidth: 0 }}>
+                        <Link href={`/products/${item.slug}`} onClick={closeCart} className="pugpep-drawer-name">{item.name}</Link>
+                        <p className="pugpep-drawer-meta">{item.dosage} · {itemLabel}</p>
+                        <p className="pugpep-drawer-meta">${(lineTotal / item.quantity).toFixed(2)} per {unitLabel}</p>
+                        {showSale && <span className="pugpep-drawer-badge">
+                          {item.customKitGroupId && Math.round(salePercent) === 15 ? ">15% OFF" : `${Math.round(salePercent)}% OFF`}
+                        </span>}
+                      </div>
+                    </div>
+                    {!item.customKitGroupId && item.kitOption && <label className="pugpep-drawer-meta">
+                      <input type="checkbox" checked={item.purchaseType === "kit"} disabled={item.purchaseType === "kit" ? !item.singleOption : item.kitOption.status === "out of stock"
+                        || (item.kitOption.maxAvailable != null && item.kitOption.maxAvailable < 10 && item.kitOption.status !== "pre-sale")}
+                        onChange={(event) => setPurchaseType(index, event.target.checked ? "kit" : "single")} /> Kit (10 vials)
+                    </label>}
+                    <div className="pugpep-drawer-controls">
+                      <div className="pugpep-drawer-quantity">
+                        <button className="pugpep-cart-step" type="button" disabled={item.quantity <= 1 && (item.purchaseType !== "kit" || !item.singleOption)} aria-label={`Decrease ${item.name} ${item.dosage} ${unitLabel} quantity`}
+                          onClick={() => updateQuantity(index, item.quantity - 1)}>−</button>
+                        <span aria-live="polite">{item.quantity}</span>
+                        <button className="pugpep-cart-step" type="button" aria-label={`Increase ${item.name} ${item.dosage} ${unitLabel} quantity`}
+                          onClick={() => updateQuantity(index, item.quantity + 1)}>+</button>
+                      </div>
+                      <div className="pugpep-drawer-line-price" aria-live="polite" aria-atomic="true">
+                        {lineTotal < quote.originalTotal && <del>${quote.originalTotal.toFixed(2)}</del>}
+                        <strong>${lineTotal.toFixed(2)}</strong>
+                      </div>
+                      <button className="pugpep-drawer-remove" type="button" onClick={() => removeFromCart(index)}
+                        aria-label={`Remove ${item.name} ${item.dosage} from cart`}>Remove</button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>}
         </div>
-        <div style={{ flex:1, overflowY:"auto", padding:"0 20px" }}>
-          {cart.length === 0 ? <p style={{ color:"#b7bed0" }}>Your cart is empty.</p> : cart.map((item, index) => { const quote = getCartItemTotals(item); return <article key={`${item.productOptionId || item.slug}-${item.dosage}-${item.purchaseType}-${index}`}
-            style={{ display:"flex", gap:12, padding:"16px 0", borderTop:"1px solid #303440" }}>
-            <Link href={`/products/${item.slug}`} onClick={closeCart} aria-label={`View ${item.name}`} style={{ flexShrink:0 }}>
-              <img src={item.image || "/pugpep-logo.png"} alt={item.name} style={{ width:65, height:75, objectFit:"contain", borderRadius:8, background:"#fff" }} />
-            </Link>
-            <div style={{ flex:1, minWidth:0 }}>
-              <Link href={`/products/${item.slug}`} onClick={closeCart} style={{ color:"#fff", textDecoration:"none", fontWeight:800 }}>{item.name}</Link>
-              <p style={{ color:"#b7bed0", fontSize:12, margin:"5px 0" }}>{item.dosage} · {item.purchaseType === "kit" ? "Kit (10 vials)" : "Single"}</p>
-              <div aria-live="polite" aria-atomic="true" style={{ margin:"7px 0" }}>
-                <div style={{ display:"flex", alignItems:"baseline", flexWrap:"wrap", gap:8 }}>
-                  <strong style={{ fontSize:19 }}>${quote.total.toFixed(2)}</strong>
-                  {quote.savings > 0 && <>
-                    <del style={{ color:"#9da6ba", fontSize:14 }}>${quote.originalTotal.toFixed(2)}</del>
-                    <span style={{ color:"#b5ff85", fontWeight:800, fontSize:13 }}>Save ${quote.savings.toFixed(2)}</span>
-                  </>}
-                </div>
-                {quote.savings > 0 && <p style={{ color:"#b5ff85", fontSize:12, margin:"4px 0" }}>
-                  {quote.percent}% {quote.compareWithSingles ? "saved vs singles" : "OFF"}
-                </p>}
-                {item.purchaseType === "kit" && !quote.compareWithSingles && quote.kitSavings > quote.savings &&
-                  <p style={{ color:"#b7bed0", fontSize:12, margin:"4px 0" }}>Save ${quote.kitSavings.toFixed(2)} compared with {quote.vialQuantity} singles</p>}
-              </div>
-              {item.kitOption && <label style={{ display:"flex", alignItems:"center", gap:7, margin:"7px 0", fontSize:13 }}>
-                <input type="checkbox" checked={item.purchaseType === "kit"} disabled={item.purchaseType === "kit" ? !item.singleOption : item.kitOption.status === "out of stock"
-                  || (item.kitOption.maxAvailable != null && item.kitOption.maxAvailable < 10 && item.kitOption.status !== "pre-sale")}
-                  onChange={(event) => setPurchaseType(index, event.target.checked ? "kit" : "single")} />
-                Kit (10 vials)
-              </label>}
-              <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:8 }}>
-                <button className="pugpep-cart-step" type="button" disabled={item.quantity <= 1 && (item.purchaseType !== "kit" || !item.singleOption)} aria-label={`Decrease ${item.name} ${item.dosage} ${item.purchaseType} quantity`}
-                  onClick={() => updateQuantity(index, item.quantity - 1)}>−</button>
-                <span aria-live="polite" style={{ minWidth:22, textAlign:"center" }}>{quote.vialQuantity}</span>
-                <button className="pugpep-cart-step" type="button" aria-label={`Increase ${item.name} ${item.dosage} ${item.purchaseType} quantity`}
-                  onClick={() => updateQuantity(index, item.quantity + 1)}>+</button>
-                <button type="button" onClick={() => removeFromCart(index)} aria-label={`Remove ${item.name} ${item.dosage} ${item.purchaseType} from cart`}
-                  style={{ marginLeft:"auto", padding:"5px 0", border:0, background:"transparent", color:"#ffadb9", cursor:"pointer", fontSize:12, textDecoration:"underline" }}>Remove</button>
-              </div>
-              <p style={{ margin:"8px 0 0", fontSize:12, color:"#b7bed0" }}>Total for {quote.vialQuantity} {quote.vialQuantity === 1 ? "vial" : "vials"}</p>
-            </div>
-          </article>; })}
-        </div>
-        <div style={{ padding:20, borderTop:"1px solid #303440" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", fontSize:18, fontWeight:800, alignItems:"center" }}><span>Subtotal</span><span aria-live="polite">${total.toFixed(2)}</span></div>
-          {campaignMinimum != null && <div role="note" style={{ margin:"9px 0 8px", padding:"10px 12px", background:"#263745", border:"1px solid #75e8f0", borderRadius:8, color:"#ffffff", fontSize:15, lineHeight:1.3, fontWeight:900, textAlign:"center" }}>
-            ${campaignMinimum.toFixed(2)} Minimum After Discount
-          </div>}
-          <p style={{ color:"#a7b0c3", fontSize:12, lineHeight:1.5 }}>Final pricing, availability, discounts, and shipping are confirmed at checkout.</p>
-          <div style={{ display:"flex", gap:10 }}>
-            <Link href="/cart" onClick={closeCart} style={{ flex:1, textAlign:"center", padding:12, border:"1px solid #454956", borderRadius:8, color:"#fff", textDecoration:"none", fontWeight:800 }}>View Cart</Link>
-            {cart.length > 0 && <Link href="/checkout" onClick={(event) => { void handleCheckout(event); }} style={{ flex:1, textAlign:"center", padding:12, borderRadius:8, background:"#7df9ff", color:"#062027", textDecoration:"none", fontWeight:800 }}>Checkout</Link>}
-          </div>
+        <div className="pugpep-drawer-footer">
+          <dl className="pugpep-drawer-totals">
+            <div><dt>Subtotal</dt><dd>${((merchandiseCents + kitSavingsCents) / 100).toFixed(2)}</dd></div>
+            {kitSavingsCents > 0 && <div><dt>Custom Kit Savings (15%)</dt><dd>−${(kitSavingsCents / 100).toFixed(2)}</dd></div>}
+            <div><dt>Shipping</dt><dd>Calculated at checkout</dd></div>
+            <div className="pugpep-drawer-total"><dt>Estimated total</dt><dd aria-live="polite">${(merchandiseCents / 100).toFixed(2)}</dd></div>
+          </dl>
+          {cart.length > 0 && <Link href="/checkout" onClick={(event) => { void handleCheckout(event); }} className="pugpep-drawer-cta">Proceed to Checkout</Link>}
+          <Link href="/cart" onClick={closeCart} className="pugpep-drawer-view">View Full Cart</Link>
         </div>
       </section>
     </div>}
@@ -1226,6 +1316,8 @@ const bodyStyle = {
 
 };
 
+const announcementHeight = 34;
+
 const activationStrip = {
 
   position:
@@ -1234,7 +1326,7 @@ const activationStrip = {
 
   zIndex: 100000,
 
-  top: 28,
+  top: announcementHeight,
 
   left: 0,
 
@@ -1288,7 +1380,7 @@ const headerShell = {
 
   zIndex: 99999,
 
-  top: 28,
+  top: announcementHeight,
 
   left: 0,
 
@@ -1360,7 +1452,9 @@ const navLinks = {
 
   display: "flex",
 
-  gap: 22,
+  flexWrap: "wrap" as const,
+
+  gap: "0 clamp(10px, 1.35vw, 20px)",
 
   alignItems: "center",
 
@@ -1384,7 +1478,7 @@ const navLink = {
 
   fontWeight: 900,
 
-  fontSize: 17,
+  fontSize: "clamp(18px, 1.65vw, 20px)",
 
   letterSpacing: 0.6,
 
@@ -1508,7 +1602,7 @@ const topTicker = {
   zIndex: 100001,
   top: 0,
   left: 0,
-  height: 28,
+  height: announcementHeight,
   boxSizing: "border-box" as const,
   width: "100%",
 
@@ -1526,9 +1620,9 @@ const topTicker = {
 
   fontWeight: 900,
 
-  fontSize: 12,
+  fontSize: 14,
 
-  lineHeight: "18px",
+  lineHeight: "21px",
   letterSpacing: 1,
 
   whiteSpace:
@@ -1543,7 +1637,7 @@ const tickerTrack = {
 
   gap: 50,
 
-  padding: "5px 0",
+  padding: "6px 0",
 
   animation:
 

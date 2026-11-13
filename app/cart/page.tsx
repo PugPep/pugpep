@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createClient } from "../../lib/supabaseClient";
-import { useCart } from "../cartContext";
+import { getCartItemTotals, useCart } from "../cartContext";
+import { calculateHeroSavingsCents, useHeroSavingsRate } from "../../lib/pricing/useHeroSavings";
 import { loadStorefrontSales, type StorefrontSale } from "../../lib/storefrontCampaigns";
 
 function money(value: number) {
@@ -26,6 +27,8 @@ export default function CartPage() {
     removeFromCart,
     updateQuantity,
   } = useCart();
+
+  const heroRate = useHeroSavingsRate(supabase);
 
   const [
     checkingOut,
@@ -95,17 +98,19 @@ export default function CartPage() {
       0
     );
 
-  const saleSavings =
-    Math.max(
-      0,
-      subtotalBeforeSales -
-        total
-    );
+  const kitSavingsCents = cart.reduce((sum, item) =>
+    sum + (item.customKitGroupId && item.customKitLineTotal?.quantity === item.quantity
+      ? Math.round(item.customKitLineTotal.kitSavings * 100) : 0), 0);
+  const saleSavings = Math.max(0, Math.round((subtotalBeforeSales - total) * 100) - kitSavingsCents) / 100;
+
+  const merchandiseCents = Math.round(total * 100);
+  const heroSavingsCents = calculateHeroSavingsCents(merchandiseCents, heroRate);
+  const estimatedTotal = (merchandiseCents - heroSavingsCents) / 100;
 
   const estimatedPoints =
     Math.max(
       0,
-      Math.floor(total)
+      Math.floor(estimatedTotal)
     );
 
   const hasPresaleItems =
@@ -247,30 +252,58 @@ export default function CartPage() {
     return (
       <main style={page}>
         <div style={container}>
-          <section style={emptyCard}>
-            <div style={emptyIcon}>
-              🧪
+          <section className="pugpep-empty-cart" aria-labelledby="empty-cart-title">
+            <div className="pugpep-empty-copy">
+              <h1 id="empty-cart-title">Your cart is empty</h1>
+              <p>Browse the catalog to find what you need for your next project.</p>
+              <Link href="/" className="pugpep-empty-return">
+                <span aria-hidden="true">←</span> Return to the Lab
+              </Link>
             </div>
-
-            <p style={eyebrow}>
-              YOUR CART
-            </p>
-
-            <h1 style={title}>
-              Your Cart Is Empty
-            </h1>
-
-            <p style={emptyText}>
-              Return to the laboratory to explore the current catalog.
-            </p>
-
-            <Link
-              href="/"
-              style={primaryLink}
-            >
-              Return to the Lab
-            </Link>
+            <img
+              className="pugpep-empty-image"
+              src="/pugpep-empty-cart-lab.png"
+              alt=""
+              fetchPriority="high"
+            />
           </section>
+          <style jsx>{`
+            .pugpep-empty-cart {
+              display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
+              max-width: 1040px; margin: clamp(18px, 6vh, 66px) auto 32px;
+              overflow: hidden; border: 1px solid #2a3c49; border-radius: 22px;
+              background: linear-gradient(145deg, #111b25, #0c1018);
+              box-shadow: 0 20px 50px #0006; font-family: system-ui, sans-serif;
+            }
+            .pugpep-empty-copy {
+              display: flex; flex-direction: column; justify-content: center;
+              align-items: flex-start; padding: clamp(24px, 5vw, 58px);
+            }
+            .pugpep-empty-copy h1 {
+              margin: 0; font-size: clamp(29px, 4vw, 48px);
+              line-height: 1.06; letter-spacing: -.045em; color: #f8fafc;
+            }
+            .pugpep-empty-copy p { margin: 14px 0 24px; color: #b7c5d3; line-height: 1.6; max-width: 32ch; }
+            .pugpep-empty-copy :global(.pugpep-empty-return) {
+              display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+              min-height: 48px; padding: 0 18px; border-radius: 10px;
+              color: #09202b; background: #7df9ff; font-weight: 750; text-decoration: none;
+            }
+            .pugpep-empty-copy :global(.pugpep-empty-return:hover) { background: #a2fbff; }
+            .pugpep-empty-copy :global(.pugpep-empty-return:focus-visible) {
+              outline: 3px solid #ff75df; outline-offset: 4px;
+            }
+            .pugpep-empty-image {
+              display: block; width: 100%; height: 100%; min-height: 320px;
+              aspect-ratio: 3 / 2; object-fit: cover; object-position: center;
+              background: #101b26;
+            }
+            @media (max-width: 700px) {
+              .pugpep-empty-cart { grid-template-columns: minmax(0, 1fr); margin-top: 12px; }
+              .pugpep-empty-image { grid-row: 1; height: auto; min-height: 0; max-height: 260px; }
+              .pugpep-empty-copy { padding: 24px; }
+            }
+          `}</style>
         </div>
       </main>
     );
@@ -324,13 +357,7 @@ export default function CartPage() {
                 item,
                 index
               ) => {
-                const lineTotal =
-                  Number(
-                    item.price || 0
-                  ) *
-                  Number(
-                    item.quantity || 1
-                  );
+                const { total: lineTotal } = getCartItemTotals(item);
 
                 const regularLineTotal =
                   Number(
@@ -342,11 +369,20 @@ export default function CartPage() {
                     item.quantity || 1
                   );
 
+                const kitQuote = item.customKitGroupId && item.customKitLineTotal?.quantity === item.quantity
+                  ? item.customKitLineTotal : undefined;
+                const displayedLineTotal = item.customKitGroupId && (!kitQuote || kitQuote.kitSavings > 0)
+                  ? regularLineTotal : lineTotal;
+                const badgePercent = item.customKitGroupId
+                  ? (kitQuote && kitQuote.salePercent > 15 ? kitQuote.salePercent : 0)
+                  : (item.wasOnSale && !(item.purchaseType === "kit" && !item.hasCampaign && Number(item.quantity) >= 3)
+                    ? item.salePercent : 0);
+
                 const lineSavings =
                   Math.max(
                     0,
                     regularLineTotal -
-                      lineTotal
+                      displayedLineTotal
                   );
 
                 return (
@@ -398,14 +434,10 @@ export default function CartPage() {
                           </p>
                         </div>
 
-                        {item.wasOnSale &&
-                          item.salePercent >
-                            0 && !(item.purchaseType === "kit" && !item.hasCampaign && Number(item.quantity) >= 3) && (
+                        {badgePercent > 0 && (
                           <span style={saleBadge}>
-                            {
-                              item.salePercent
-                            }
-                            % OFF
+                            {item.customKitGroupId && Math.round(badgePercent) === 15
+                              ? ">15% OFF" : `${Math.round(badgePercent)}% OFF`}
                           </span>
                         )}
                       </div>
@@ -434,7 +466,7 @@ export default function CartPage() {
                           <strong style={linePrice}>
                             {
                               money(
-                                lineTotal
+                                displayedLineTotal
                               )
                             }
                           </strong>
@@ -552,6 +584,22 @@ export default function CartPage() {
                   />
                 )}
 
+                {kitSavingsCents > 0 && (
+                  <SummaryRow
+                    label="Custom Kit Savings (15%)"
+                    value={`-${money(kitSavingsCents / 100)}`}
+                    positive
+                  />
+                )}
+
+                {heroSavingsCents > 0 && (
+                  <SummaryRow
+                    label={`Hero Savings (${heroRate}%)`}
+                    value={`-${money(heroSavingsCents / 100)}`}
+                    positive
+                  />
+                )}
+
                 <SummaryRow
                   label="Estimated PugPoints"
                   value={`+${estimatedPoints}`}
@@ -566,11 +614,11 @@ export default function CartPage() {
 
               <div style={totalRow}>
                 <span>
-                  Current Total
+                  {heroSavingsCents > 0 ? "Estimated Total" : "Current Total"}
                 </span>
 
                 <strong>
-                  {money(total)}
+                  {money(estimatedTotal)}
                 </strong>
               </div>
 
@@ -863,12 +911,9 @@ const itemMeta = {
 const saleBadge = {
   flexShrink: 0,
   padding: "6px 9px",
-  border:
-    "1px solid rgba(0,255,153,.5)",
-  borderRadius: 999,
-  background:
-    "rgba(0,255,153,.08)",
-  color: "#00ff99",
+  borderRadius: 7,
+  background: "#d3ff69",
+  color: "#182000",
   fontSize: 10,
   fontWeight: 900,
 };
@@ -1071,48 +1116,3 @@ const trustIcon = {
   fontWeight: 900,
 };
 
-const emptyCard = {
-  maxWidth: 620,
-  margin: "10vh auto 0",
-  padding:
-    "clamp(28px, 6vw, 44px)",
-  display: "grid",
-  justifyItems: "center",
-  gap: 13,
-  textAlign: "center" as const,
-  border:
-    "1px solid rgba(0,217,255,.38)",
-  borderRadius: 19,
-  background:
-    "linear-gradient(145deg, rgba(10,10,14,.96), rgba(16,8,17,.94))",
-  boxShadow:
-    "0 0 26px rgba(0,217,255,.08)",
-};
-
-const emptyIcon = {
-  fontSize: 44,
-};
-
-const emptyText = {
-  margin: 0,
-  color: "#a7a7af",
-  lineHeight: 1.65,
-};
-
-const primaryLink = {
-  minHeight: 52,
-  marginTop: 5,
-  padding: "12px 18px",
-  display: "grid",
-  placeItems: "center",
-  border:
-    "1px solid #ff62de",
-  borderRadius: 11,
-  background:
-    "linear-gradient(90deg, #d92eb8, #079dca)",
-  color: "#ffffff",
-  textDecoration: "none",
-  fontWeight: 900,
-  boxShadow:
-    "0 0 20px rgba(255,47,208,.20)",
-};

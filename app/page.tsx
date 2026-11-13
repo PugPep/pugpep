@@ -1513,10 +1513,6 @@ export default function HomePage() {
         @media(max-width:480px) { .pugpep-product-row { grid-auto-columns:max(270px,82%); } .pugpep-product-grid { grid-template-columns:minmax(0,1fr); } .pugpep-shelf-header { gap:8px; } .pugpep-shelf-title { font-size:22px; } }
         @media(prefers-reduced-motion:reduce) { .pugpep-product-card { transition:none; } }
 
-        .category-grid {
-          grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
-        }
-
         .catalog-products-grid {
           grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
         }
@@ -1547,13 +1543,43 @@ export default function HomePage() {
 
 
         .shop-by-focus-grid {
-          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .shop-by-focus-grid .category-card {
+          position: relative;
+          display: block;
+          box-sizing: border-box;
+          width: 100%;
+          min-width: 0;
+          aspect-ratio: 16 / 9;
+          overflow: hidden;
+          padding: 0;
+          border: 0;
+          border-radius: 14px;
+          background: #eef6ff;
+          cursor: pointer;
+          text-decoration: none;
+        }
+
+        .shop-by-focus-grid .shop-by-focus-image {
+          display: block;
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          object-position: center;
+        }
+
+        .shop-by-focus-grid .category-card:focus-visible {
+          outline: 2px solid #7df9ff;
+          outline-offset: 3px;
         }
 
         @media (max-width: 1100px) {
-          .category-grid,
           .shop-by-focus-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
 
           .catalog-products-grid {
@@ -1562,34 +1588,14 @@ export default function HomePage() {
         }
 
         @media (max-width: 720px) {
-          .category-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-          }
-
-          .shop-by-focus-grid .category-card {
-            min-height: 0 !important;
-            aspect-ratio: 4 / 3;
-            background: #050507 !important;
-          }
-
-          .shop-by-focus-grid .shop-by-focus-image {
-            object-fit: contain !important;
-            object-position: center center !important;
-            background: #050507;
-          }
-
           .catalog-products-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
           }
         }
 
         @media (max-width: 420px) {
-          .category-grid {
-            grid-template-columns: 1fr !important;
-          }
-
-          .shop-by-focus-grid .category-card {
-            aspect-ratio: 16 / 10;
+          .shop-by-focus-grid {
+            grid-template-columns: minmax(0, 1fr);
           }
 
           .catalog-products-grid {
@@ -1697,22 +1703,6 @@ export default function HomePage() {
           .pugpep-product-strengths .pugpep-strength-button { font-size: 12px; }
         }
 
-        /* 2026 mobile polish: original artwork carries category names; no added overlays. */
-        .shop-by-focus-grid .category-card {
-          border: 0 !important;
-          outline: none;
-          box-shadow: none !important;
-          background: transparent !important;
-          padding: 0 !important;
-        }
-        .shop-by-focus-grid .shop-by-focus-image {
-          display: block;
-          border: 0 !important;
-        }
-        .shop-by-focus-grid .category-card:focus-visible {
-          outline: 2px solid #7df9ff;
-          outline-offset: 3px;
-        }
         @media (max-width: 600px) {
           /* Both the full catalog and horizontal shelves display two cards. */
           .pugpep-product-grid { grid-template-columns: repeat(2,minmax(0,1fr)) !important; gap: 10px; }
@@ -1845,8 +1835,6 @@ export default function HomePage() {
           .pugpep-product-card { height:auto !important; align-self:start; }
           .pugpep-product-badges { top: 5px; left: 5px; right: 5px; }
           .pugpep-status-badge, .pugpep-offer-badge { padding: 5px 7px; font-size: 11px; }
-          .shop-by-focus-grid .category-card { border: 0 !important; box-shadow: none !important; aspect-ratio: 16 / 9 !important; min-height: 0 !important; }
-          .shop-by-focus-grid .shop-by-focus-image { object-fit: contain !important; background: transparent !important; }
         }
         /* Extremely narrow devices need room for functional cart controls. */
         @media (max-width: 350px) {
@@ -1993,21 +1981,15 @@ export default function HomePage() {
           }
         }
 
-        /* Edge cleanup: remove the fine light seam visible at the left edge
-           of the Proof artwork and Research Sprays on mobile. The source
-           artwork remains unchanged; only 1% of its horizontal edges is
-           concealed inside the existing rounded, clipped wrappers. */
         .pugpep-proof-link,
-        .pugpep-proof-visual,
-        .shop-by-focus-grid .category-card {
+        .pugpep-proof-visual {
           overflow: hidden !important;
           border: 0 !important;
           outline: 0;
           box-shadow: none !important;
           background: transparent !important;
         }
-        .pugpep-proof-image,
-        .shop-by-focus-grid .shop-by-focus-image {
+        .pugpep-proof-image {
           display: block !important;
           border: 0 !important;
           outline: 0;
@@ -2015,9 +1997,6 @@ export default function HomePage() {
           margin: 0 !important;
           padding: 0 !important;
         }
-        /* Desktop-only: the two source images have a pale strip at their
-           left edge. Conceal the outer 1.5% inside the existing rounded
-           clips without moving, reflowing, or cropping any mobile image. */
         /* Keep the sort menu beside the catalog title, not below the filters. */
         @media (max-width: 600px) {
           #catalog h2 { min-width: 0; font-size: clamp(19px, 5.2vw, 26px) !important; }
@@ -2029,22 +2008,13 @@ export default function HomePage() {
           }
         }
         @media (min-width: 769px) {
-          .pugpep-proof-visual,
-          .shop-by-focus-grid .category-card:nth-child(2) {
-            overflow: hidden !important;
-          }
-          .pugpep-proof-visual > .pugpep-proof-image,
-          .shop-by-focus-grid .category-card:nth-child(2) > .shop-by-focus-image {
+          .pugpep-proof-visual > .pugpep-proof-image {
             transform: scaleX(1.03) !important;
             transform-origin: center center !important;
           }
         }
         @media (max-width: 768px) {
           .pugpep-proof-image {
-            transform: scaleX(1.02) !important;
-            transform-origin: center center !important;
-          }
-          .shop-by-focus-grid .category-card:nth-child(2) .shop-by-focus-image {
             transform: scaleX(1.02) !important;
             transform-origin: center center !important;
           }
@@ -2428,7 +2398,7 @@ export default function HomePage() {
 
         </div>
 
-        <div className="category-grid shop-by-focus-grid" style={categoryGrid}>
+        <div className="shop-by-focus-grid">
           <button
             type="button"
             onClick={() => {
@@ -2439,13 +2409,11 @@ export default function HomePage() {
                 ?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
             className="category-card"
-            style={categoryCardButton}
           >
             <img
               className="shop-by-focus-image"
               src="/marketing/research-peptides.png"
               alt="PugPep research peptides category"
-              style={categoryImage}
             />
           </button>
 
@@ -2459,13 +2427,11 @@ export default function HomePage() {
                 ?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
             className="category-card"
-            style={categoryCardButton}
           >
             <img
               className="shop-by-focus-image"
               src="/marketing/research-sprays.png"
               alt="PugPep research sprays category"
-              style={categoryImage}
             />
           </button>
 
@@ -2479,15 +2445,18 @@ export default function HomePage() {
                 ?.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
             className="category-card"
-            style={categoryCardButton}
           >
             <img
               className="shop-by-focus-image"
               src="/marketing/lab-materials.png"
               alt="PugPep laboratory materials category"
-              style={categoryImage}
             />
           </button>
+
+          <Link href="/create-custom-kit" className="category-card">
+            <img className="shop-by-focus-image" src="/marketing/create-custom-kit.png"
+              alt="Create a Kit" />
+          </Link>
 
         </div>
       </section>
@@ -4080,36 +4049,6 @@ const categorySection = {
 };
 
 
-
-const categoryGrid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-  gap: 10,
-};
-
-
-const categoryCardButton = {
-  position: "relative" as const,
-  minHeight: 230,
-  overflow: "hidden",
-  padding: 0,
-  border: "0",
-  borderRadius: 14,
-  background: "#050507",
-  color: "#fff",
-  textAlign: "left" as const,
-  cursor: "pointer",
-  boxShadow: "none",
-};
-
-const categoryImage = {
-  position: "absolute" as const,
-  inset: 0,
-  width: "100%",
-  height: "100%",
-  objectFit: "cover" as const,
-  objectPosition: "center",
-};
 
 const categoryShade = {
   position: "absolute" as const,

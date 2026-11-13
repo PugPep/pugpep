@@ -477,151 +477,150 @@ function calculateRemainingMerchandise({
  * are a separate pricing benefit in the current PugPep
  * engine.
  */
+function removeLineSalePricing(line: CampaignPricingResult["items"][number]) {
+  /*
+   * saleDiscountAmount contains ONLY campaign/manual-sale
+   * savings. Bundle savings are reported separately by
+   * campaignPricing.ts.
+   *
+   * Because bundle pricing is mutually exclusive with an
+   * active campaign/manual sale, restoring the sale portion
+   * means returning the affected line to its regular
+   * merchandise value.
+   */
+  const hadSale =
+    nonNegative(
+      line.saleDiscountAmount
+    ) > 0 ||
+    line.hasCampaign ||
+    line.hasManualSale;
+
+  if (!hadSale) {
+    /*
+     * Bundle-only/full-price lines are left exactly as they
+     * were. A winning promo is allowed to remain separate
+     * from bundle pricing under the current pricing model.
+     */
+    return line;
+  }
+
+  const restoredRevenue =
+    roundCurrency(
+      nonNegative(
+        line.regularLineValue
+      )
+    );
+
+  const restoredUnitPrice =
+    line.quantity > 0
+      ? roundCurrency(
+          restoredRevenue /
+            line.quantity
+        )
+      : roundCurrency(
+          nonNegative(
+            line.regularUnitPrice
+          )
+        );
+
+  const lineCost =
+    roundCurrency(
+      nonNegative(
+        line.lineCost
+      )
+    );
+
+  const lineProfit =
+    roundCurrency(
+      restoredRevenue -
+        lineCost
+    );
+
+  const lineMargin =
+    restoredRevenue > 0
+      ? (
+          lineProfit /
+          restoredRevenue
+        ) * 100
+      : 0;
+
+  return {
+    ...line,
+
+    /*
+     * Restore normal full-price merchandise revenue.
+     */
+    campaignLineRevenue:
+      restoredRevenue,
+
+    actualUnitPrice:
+      restoredUnitPrice,
+
+    saleDiscountAmount:
+      0,
+
+    /*
+     * If the losing sale was BOGO, restore all units to
+     * paid merchandise. Otherwise stale freeQuantity /
+     * paidQuantity values would survive even though the
+     * campaign price was removed.
+     */
+    paidQuantity:
+      line.quantity,
+
+    freeQuantity:
+      0,
+
+    hasCampaign:
+      false,
+
+    saleCampaignId:
+      null,
+
+    saleCampaignName:
+      null,
+
+    saleCampaignType:
+      null,
+
+    hasManualSale:
+      false,
+
+    manualSalePercent:
+      0,
+
+    /*
+     * Campaign-level stacking restrictions belong to the
+     * campaign that just lost. Once that sale is removed,
+     * downstream referral/rewards logic should evaluate the
+     * line normally instead of inheriting restrictions from
+     * a campaign price that is no longer being used.
+     */
+    allowRewardPoints:
+      true,
+
+    allowGeneralPromos:
+      true,
+
+    allowSalesRepDiscount:
+      true,
+
+    allowReferralDiscount:
+      true,
+
+    lineProfitBeforeOrderCosts:
+      lineProfit,
+
+    lineMarginBeforeOrderCosts:
+      lineMargin,
+  };
+}
+
 function removeSalePricing(
   campaign:
     CampaignPricingResult
 ): CampaignPricingResult {
-  const items =
-    campaign.items.map(
-      (line) => {
-        /*
-         * saleDiscountAmount contains ONLY campaign/manual-sale
-         * savings. Bundle savings are reported separately by
-         * campaignPricing.ts.
-         *
-         * Because bundle pricing is mutually exclusive with an
-         * active campaign/manual sale, restoring the sale portion
-         * means returning the affected line to its regular
-         * merchandise value.
-         */
-        const hadSale =
-          nonNegative(
-            line.saleDiscountAmount
-          ) > 0 ||
-          line.hasCampaign ||
-          line.hasManualSale;
-
-        if (!hadSale) {
-          /*
-           * Bundle-only/full-price lines are left exactly as they
-           * were. A winning promo is allowed to remain separate
-           * from bundle pricing under the current pricing model.
-           */
-          return line;
-        }
-
-        const restoredRevenue =
-          roundCurrency(
-            nonNegative(
-              line.regularLineValue
-            )
-          );
-
-        const restoredUnitPrice =
-          line.quantity > 0
-            ? roundCurrency(
-                restoredRevenue /
-                  line.quantity
-              )
-            : roundCurrency(
-                nonNegative(
-                  line.regularUnitPrice
-                )
-              );
-
-        const lineCost =
-          roundCurrency(
-            nonNegative(
-              line.lineCost
-            )
-          );
-
-        const lineProfit =
-          roundCurrency(
-            restoredRevenue -
-              lineCost
-          );
-
-        const lineMargin =
-          restoredRevenue > 0
-            ? (
-                lineProfit /
-                restoredRevenue
-              ) * 100
-            : 0;
-
-        return {
-          ...line,
-
-          /*
-           * Restore normal full-price merchandise revenue.
-           */
-          campaignLineRevenue:
-            restoredRevenue,
-
-          actualUnitPrice:
-            restoredUnitPrice,
-
-          saleDiscountAmount:
-            0,
-
-          /*
-           * If the losing sale was BOGO, restore all units to
-           * paid merchandise. Otherwise stale freeQuantity /
-           * paidQuantity values would survive even though the
-           * campaign price was removed.
-           */
-          paidQuantity:
-            line.quantity,
-
-          freeQuantity:
-            0,
-
-          hasCampaign:
-            false,
-
-          saleCampaignId:
-            null,
-
-          saleCampaignName:
-            null,
-
-          saleCampaignType:
-            null,
-
-          hasManualSale:
-            false,
-
-          manualSalePercent:
-            0,
-
-          /*
-           * Campaign-level stacking restrictions belong to the
-           * campaign that just lost. Once that sale is removed,
-           * downstream referral/rewards logic should evaluate the
-           * line normally instead of inheriting restrictions from
-           * a campaign price that is no longer being used.
-           */
-          allowRewardPoints:
-            true,
-
-          allowGeneralPromos:
-            true,
-
-          allowSalesRepDiscount:
-            true,
-
-          allowReferralDiscount:
-            true,
-
-          lineProfitBeforeOrderCosts:
-            lineProfit,
-
-          lineMarginBeforeOrderCosts:
-            lineMargin,
-        };
-      }
-    );
+  const items = campaign.items.map(removeLineSalePricing);
 
   const merchandiseRevenue =
     roundCurrency(
@@ -966,8 +965,189 @@ function resolvePromotionalWinner({
   };
 }
 
+type CustomKitPricingInput = Omit<PricingInput, "items"> & {
+  items: Array<PricingInput["items"][number] & { customKitGroupId?: string }>;
+};
+
+function getCompleteCustomKitGroups(items: CustomKitPricingInput["items"]) {
+  const groups = new Map<string, number[]>();
+  items.forEach((item, index) => {
+    if (!item.customKitGroupId) return;
+    const indexes = groups.get(item.customKitGroupId) ?? [];
+    indexes.push(index);
+    groups.set(item.customKitGroupId, indexes);
+  });
+
+  return Array.from(groups.values()).filter((indexes) =>
+    indexes.reduce((sum, index) => sum + items[index].quantity, 0) === 10
+  );
+}
+
+function hasMatchingMerchandiseLines(campaign: CampaignPricingResult, items: CustomKitPricingInput["items"]) {
+  return campaign.items.length === items.length &&
+    campaign.items.every((line, index) =>
+      line.productOptionId === items[index].productOptionId && line.quantity === items[index].quantity
+    );
+}
+
+async function priceCartCampaign(supabase: SupabaseClient, items: CustomKitPricingInput["items"]) {
+  const campaign = await calculateCampaignPricing({ supabase, items });
+  if (!items.some((item) => item.customKitGroupId)) return campaign;
+  if (!hasMatchingMerchandiseLines(campaign, items)) {
+    throw new Error("A custom kit contains an unavailable product option.");
+  }
+
+  let changed = false;
+  const lines = campaign.items.map((line, index) => {
+    if (!items[index].customKitGroupId || line.bundleDiscountAmount <= 0) return line;
+    changed = true;
+    const revenue = roundCurrency(line.campaignLineRevenue + line.bundleDiscountAmount);
+    const profit = roundCurrency(revenue - line.lineCost);
+    return {
+      ...line,
+      campaignLineRevenue: revenue,
+      actualUnitPrice: roundCurrency(revenue / line.quantity),
+      bundleDiscountApplied: false,
+      bundleDiscountPercent: 0,
+      bundleDiscountAmount: 0,
+      bundleTierQuantity: null,
+      lineProfitBeforeOrderCosts: profit,
+      lineMarginBeforeOrderCosts: revenue > 0 ? profit / revenue * 100 : 0,
+    };
+  });
+  return changed ? withMerchandiseLines(campaign, lines) : campaign;
+}
+
+async function buildCustomKitCandidate(
+  input: CustomKitPricingInput,
+  campaign: CampaignPricingResult
+) {
+  const completeGroups = getCompleteCustomKitGroups(input.items);
+  if (completeGroups.length === 0) return null;
+
+  const kitIndexes = completeGroups.flat();
+  const optionIds = Array.from(new Set(kitIndexes.map((index) => input.items[index].productOptionId)));
+  const { data, error } = await input.supabase
+    .from("product_options")
+    .select("id, product_slug, dosage")
+    .in("id", optionIds)
+    .eq("custom_kit_eligible", true)
+    .eq("purchase_type", "single")
+    .eq("status", "in stock")
+    .eq("is_active", true)
+    .is("archived_at", null);
+  if (error) throw error;
+  const options = data ?? [];
+  if (options.length !== optionIds.length) {
+    throw new Error("A vial in your custom kit is no longer eligible.");
+  }
+
+  const { data: inventory, error: inventoryError } = await input.supabase
+    .from("inventory")
+    .select("product_slug, dosage, quantity")
+    .in("product_slug", Array.from(new Set(options.map((option) => option.product_slug))))
+    .eq("purchase_type", "single")
+    .eq("status", "in stock");
+  if (inventoryError) throw inventoryError;
+
+  for (const option of options) {
+    const matchingLines = campaign.items.filter((line) =>
+      line.productSlug === option.product_slug && line.dosage === option.dosage
+    );
+    const vialsNeeded = matchingLines.reduce((sum, line) =>
+      sum + line.quantity * (line.purchaseType === "kit" ? 10 : 1), 0);
+    const stock = (inventory ?? []).filter((row) =>
+      row.product_slug === option.product_slug && row.dosage === option.dosage
+    );
+    if (stock.length !== 1 || Number(stock[0].quantity) < vialsNeeded) {
+      throw new Error("There is not enough stock for a vial in your custom kit.");
+    }
+  }
+
+  const priced = applyCustomKitLinePricing(campaign, completeGroups);
+  const savings = roundCurrency(campaign.campaignMerchandiseRevenue - priced.campaignMerchandiseRevenue);
+  return { savings, campaign: priced };
+}
+
+function applyCustomKitLinePricing(
+  campaign: CampaignPricingResult,
+  completeGroups: readonly number[][]
+): CampaignPricingResult {
+  const discountByLine = new Map<number, number>();
+  for (const indexes of completeGroups) {
+    let regularCents = 0;
+    let savingsCents = 0;
+    for (const index of indexes) {
+      const line = campaign.items[index];
+      // Compare the effective sale discount before rounding the displayed percentage.
+      if (Math.round(line.saleDiscountAmount * 100) * 100 >
+          Math.round(line.regularLineValue * 100) * 15) continue;
+      regularCents += Math.round(line.regularLineValue * 100);
+      const nextSavingsCents = Math.round(regularCents * 15 / 100);
+      discountByLine.set(index, (nextSavingsCents - savingsCents) / 100);
+      savingsCents = nextSavingsCents;
+    }
+  }
+
+  const items = campaign.items.map((line, index) => {
+    const discount = discountByLine.get(index);
+    if (discount === undefined) return line;
+    const revenue = roundCurrency(line.regularLineValue - discount);
+    const profit = roundCurrency(revenue - line.lineCost);
+    return {
+      ...removeLineSalePricing(line),
+      campaignLineRevenue: revenue,
+      actualUnitPrice: roundCurrency(revenue / line.quantity),
+      bundleDiscountApplied: discount > 0,
+      bundleDiscountPercent: discount > 0 ? 15 : 0,
+      bundleDiscountAmount: discount,
+      bundleTierQuantity: discount > 0 ? 10 : null,
+      lineProfitBeforeOrderCosts: profit,
+      lineMarginBeforeOrderCosts: revenue > 0 ? profit / revenue * 100 : 0,
+    };
+  });
+  const remainingSaleCents = items.reduce((sum, line) =>
+    sum + Math.round(line.saleDiscountAmount * 100), 0);
+  const saleMetadata = remainingSaleCents === 0 && campaign.hasSaleItems
+    ? removeSalePricing(campaign)
+    : campaign;
+  return {
+    ...withMerchandiseLines(saleMetadata, items),
+    saleDiscount: remainingSaleCents / 100,
+  };
+}
+
+function withMerchandiseLines(campaign: CampaignPricingResult, items: CampaignPricingResult["items"]): CampaignPricingResult {
+  return {
+    ...campaign,
+    items,
+    bundleDiscount: roundCurrency(items.reduce((sum, line) => sum + line.bundleDiscountAmount, 0)),
+    campaignMerchandiseRevenue: roundCurrency(items.reduce((sum, line) => sum + line.campaignLineRevenue, 0)),
+  };
+}
+
+export async function quoteCartMerchandise(supabase: SupabaseClient, items: CustomKitPricingInput["items"]) {
+  const campaign = await priceCartCampaign(supabase, items);
+  const groups = getCompleteCustomKitGroups(items);
+  return groups.length ? applyCustomKitLinePricing(campaign, groups) : campaign;
+}
+
+export async function quoteCustomKitMerchandise(
+  supabase: SupabaseClient,
+  items: PricingInput["items"]
+) {
+  const campaign = await quoteCartMerchandise(supabase, items.map((item) => ({
+    ...item,
+    customKitGroupId: "kit-preview",
+  })));
+  if (campaign.warnings.some((warning) => warning.severity === "critical")) {
+    throw new Error("The selected vials could not be priced.");
+  }
+  return campaign;
+}
+
 export async function calculatePricing(
-  input: PricingInput
+  input: CustomKitPricingInput
 ): Promise<PricingResult> {
   validatePricingInput(
     input
@@ -1007,15 +1187,7 @@ export async function calculatePricing(
    * Calculate normal campaign / product / bundle
    * pricing first.
    */
-  const rawCampaign =
-    await calculateCampaignPricing(
-      {
-        supabase,
-
-        items:
-          input.items,
-      }
-    );
+  const rawCampaign = await priceCartCampaign(supabase, input.items);
 
   if (
     rawCampaign.items
@@ -1075,13 +1247,23 @@ export async function calculatePricing(
       }
     );
 
-  const campaign =
-    promotionResolution
-      .campaign;
-
-  const promo =
-    promotionResolution
-      .promo;
+  const customKit = await buildCustomKitCandidate(input, rawCampaign);
+  // Compare the mixed sale/kit price against the merchandise price of the
+  // existing winner after its code discount, before downstream benefits.
+  const competingRevenue = roundCurrency(
+    promotionResolution.campaign.campaignMerchandiseRevenue -
+    promotionResolution.promo.generalPromoDiscount -
+    promotionResolution.promo.salesRepDiscount
+  );
+  const kitWins = customKit !== null &&
+    customKit.campaign.campaignMerchandiseRevenue < competingRevenue;
+  const campaign = kitWins ? customKit.campaign : promotionResolution.campaign;
+  const promo = kitWins
+    ? suppressPromoDiscount({
+        promo: rawPromo,
+        message: "Your kit pricing gives you the lower subtotal.",
+      })
+    : promotionResolution.promo;
 
   const referral =
     await calculateReferralPricing(
@@ -1538,6 +1720,14 @@ export async function calculatePricing(
         marketingRules.critical_margin_percent,
     })
   );
+
+  if (kitWins && customKit.savings > 0) {
+    engineWarnings.push(createWarning({
+      code: "PROMO_BLOCKED",
+      message: "Kit savings were applied to eligible vials without a sale price.",
+      severity: "info",
+    }));
+  }
 
   const warnings =
     uniqueWarnings([

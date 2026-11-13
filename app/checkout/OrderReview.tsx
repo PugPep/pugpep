@@ -234,49 +234,18 @@ export function OrderReview({
       ) : (
         <div style={styles.cartList}>
           {cart.map((item, index) => {
-            const pricedLine =
-              pricing?.campaign.items.find(
-                (line) =>
-                  line.productOptionId ===
-                  item.productOptionId
-              );
-
-            const quantity =
-              Math.max(
-                1,
-                Number(item.quantity || 1)
-              );
-
-            /*
-             * The cart already knows the product price.
-             * Use it while authoritative checkout pricing
-             * is still waiting for the shipping address.
-             */
-            const fallbackUnitPrice =
-              Number(
-                item.salePrice ??
-                item.price ??
-                0
-              );
-
-            const fallbackRegularUnitPrice =
-              Number(
-                item.regularPrice ??
-                item.price ??
-                fallbackUnitPrice
-              );
-
-            const fallbackLinePrice =
-              fallbackUnitPrice *
-              quantity;
-
-            const fallbackRegularLinePrice =
-              fallbackRegularUnitPrice *
-              quantity;
-
-            const fallbackHasSavings =
-              fallbackRegularLinePrice >
-              fallbackLinePrice;
+            const quotedLine = (pricing?.campaign ?? campaignPreview)?.items[index];
+            const pricedLine = quotedLine?.productOptionId === item.productOptionId &&
+              quotedLine?.quantity === item.quantity ? quotedLine : undefined;
+            const regularLinePrice = pricedLine?.regularLineValue ?? item.regularPrice * item.quantity;
+            const salePercent = pricedLine && regularLinePrice > 0
+              ? pricedLine.saleDiscountAmount / regularLinePrice * 100
+              : 0;
+            const showCustomKitSale = Boolean(item.customKitGroupId) && salePercent > 15;
+            const linePrice = item.customKitGroupId && !showCustomKitSale
+              ? regularLinePrice
+              : pricedLine?.campaignLineRevenue ?? item.price * item.quantity;
+            const hasLineSavings = regularLinePrice > linePrice;
 
             return (
               <article
@@ -313,12 +282,20 @@ export function OrderReview({
                     }}
                   >
                     {item.dosage} ·{" "}
-                    {item.purchaseType === "single"
-                      ? "Single"
-                      : "Kit of 10"}
+                    {item.customKitGroupId
+                      ? "Custom Kit Vial"
+                      : item.purchaseType === "single" ? "Single" : "Kit of 10"}
                   </span>
 
-                  {pricedLine?.hasCampaign && (
+                  {showCustomKitSale && (
+                    <span style={{
+                      justifySelf: "start", background: "#d3ff69", color: "#182000",
+                      borderRadius: 7, padding: "5px 8px", fontSize: 13, fontWeight: 850,
+                    }}>
+                      {Math.round(salePercent) === 15 ? ">15% OFF" : `${Math.round(salePercent)}% OFF`}
+                    </span>
+                  )}
+                  {!item.customKitGroupId && pricedLine?.hasCampaign && (
                     <span
                       style={{
                         color: "#00ff99",
@@ -433,77 +410,16 @@ export function OrderReview({
                     gap: 3,
                   }}
                 >
-                  {pricedLine ? (
-                    <>
-                      {pricedLine.regularLineValue >
-                        pricedLine.campaignLineRevenue && (
-                        <span
-                          style={{
-                            color: "#777",
-                            fontSize: 13,
-                            textDecoration:
-                              "line-through",
-                          }}
-                        >
-                          {money(
-                            pricedLine.regularLineValue
-                          )}
-                        </span>
-                      )}
-
-                      <strong>
-                        {money(
-                          pricedLine.campaignLineRevenue
-                        )}
-                      </strong>
-
-                      {pricedLine.bundleDiscountAmount >
-                        0 && (
-                        <span
-                          style={{
-                            color: "#00ff99",
-                            fontSize: 11,
-                            fontWeight: 800,
-                          }}
-                        >
-                          Bundle savings included
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {fallbackHasSavings && (
-                        <span
-                          style={{
-                            color: "#777",
-                            fontSize: 13,
-                            textDecoration:
-                              "line-through",
-                          }}
-                        >
-                          {money(
-                            fallbackRegularLinePrice
-                          )}
-                        </span>
-                      )}
-
-                      <strong>
-                        {money(
-                          fallbackLinePrice
-                        )}
-                      </strong>
-
-                      <span
-                        style={{
-                          color: "#888",
-                          fontSize: 10,
-                          fontWeight: 700,
-                          textAlign: "right",
-                        }}
-                      >
-                        PRODUCT PRICE
-                      </span>
-                    </>
+                  {hasLineSavings && (
+                    <span style={{ color: "#777", fontSize: 13, textDecoration: "line-through" }}>
+                      {money(regularLinePrice)}
+                    </span>
+                  )}
+                  <strong>{money(linePrice)}</strong>
+                  {!item.customKitGroupId && (pricedLine?.bundleDiscountAmount ?? 0) > 0 && (
+                    <span style={{ color: "#00ff99", fontSize: 11, fontWeight: 800 }}>
+                      Bundle savings included
+                    </span>
                   )}
                 </div>
               </article>
@@ -517,8 +433,10 @@ export function OrderReview({
 
 export function OrderBreakdown({
   pricing,
+  customKitSavings,
 }: {
   pricing: PricingResult | null;
+  customKitSavings: number;
 }) {
   if (!pricing) {
     return (
@@ -613,7 +531,8 @@ export function OrderBreakdown({
 
             // A concise, item-specific Bundle & Save explanation is rendered above.
             // Avoid repeating the same adjustment in technical snapshot messages.
-            if (pricing.campaign.items.some((line) => line.purchaseType === "kit" && line.bundleDiscountApplied)
+            if ((customKitSavings > 0 ||
+                pricing.campaign.items.some((line) => line.purchaseType === "kit" && line.bundleDiscountApplied))
               && /bundle/i.test(`${step.label} ${step.message}`)) {
               return false;
             }

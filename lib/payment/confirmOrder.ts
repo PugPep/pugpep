@@ -165,13 +165,13 @@ export async function confirmOrderTransaction({
      *
      * Browser pricing remains display-only.
      */
-    const pricing =
-      await calculatePricing(
-        buildPricingInput(
-          order,
-          supabase
-        )
-      );
+    const pricingInput = buildPricingInput(order, supabase);
+    const pricing = await calculatePricing(pricingInput);
+    const hasCustomKit = pricingInput.items.some((item) => item.customKitGroupId);
+
+    if (hasCustomKit && pricing.warnings.some((warning) => warning.severity === "critical")) {
+      throw new Error("An item in your order is no longer available. Return to checkout and review your cart.");
+    }
 
     if (
       !pricing.campaign.items ||
@@ -281,6 +281,7 @@ export async function confirmOrderTransaction({
         supabase,
         order,
         pricing,
+        pricedInputItems: pricingInput.items,
       });
 
     await persistOrderLedger({
@@ -288,6 +289,7 @@ export async function confirmOrderTransaction({
       order,
       pricing,
       insertedItems,
+      itemsInPricingOrder: hasCustomKit,
     });
 
     /*
