@@ -538,19 +538,27 @@ export default function ProductManagerPage() {
 
     if (!product || saving) return;
 
-    setSaving(true);
+    const name = product.name.trim();
+    if (!name) {
+      setNotice("Enter a product name before saving.");
+      return;
+    }
 
+    const savedProduct = products.find((row) => row.id === product.id);
+    if (!savedProduct) {
+      setNotice("Reload Product Manager before saving this product.");
+      return;
+    }
+
+    const nameChanged = name !== savedProduct.name;
+    setSaving(true);
     setNotice("");
 
     try {
-
-      const { error } = await supabase
-
+      const update = supabase
         .from("products")
-
         .update({
-
-          name: product.name,
+          ...(nameChanged ? { name } : {}),
 
           category: product.category,
 
@@ -578,24 +586,41 @@ export default function ProductManagerPage() {
 
         })
 
-        .eq("id", product.id);
+        .eq("id", product.id)
+        .eq("slug", savedProduct.slug)
+        .is("deleted_at", null);
+
+      const verifiedUpdate = nameChanged ? update.eq("name", savedProduct.name) : update;
+      const { data, error } = await verifiedUpdate.select("*").maybeSingle();
 
       if (error) {
-
-        setNotice(`Save failed: ${error.message}`);
-
+        setNotice(`Save could not be verified: ${error.message}`);
         return;
-
       }
 
+      if (!data) {
+        setNotice("No product row was returned. Reload Product Manager and check whether the product changed or was archived before retrying.");
+        return;
+      }
+
+      const updated = data as Product;
       setProducts((current) =>
-
-        current.map((row) => (row.id === product.id ? product : row))
-
+        current.map((row) => (row.id === updated.id ? updated : row))
       );
 
-      setNotice("Product details saved.");
+      if (nameChanged && updated.name !== name) {
+        setNotice(`The database returned the name “${updated.name}”. Review it before retrying.`);
+        return;
+      }
 
+      setNotice(nameChanged
+        ? `Storefront name saved and verified in Supabase: “${updated.name}”.`
+        : "Product details saved.");
+
+    } catch (error) {
+      setNotice(error instanceof Error
+        ? `Save could not be verified: ${error.message}`
+        : "Save could not be verified. Reload Product Manager and check the saved values before retrying.");
     } finally {
 
       setSaving(false);
@@ -1036,7 +1061,7 @@ export default function ProductManagerPage() {
 
           <div style={noticeBox}>
 
-            <span>{notice}</span>
+            <span role="status">{notice}</span>
 
             <button onClick={() => setNotice("")} style={closeButton}>×</button>
 
@@ -1790,18 +1815,13 @@ export default function ProductManagerPage() {
 
             <div className="pm-general-grid" style={generalGrid}>
 
-              <Field label="Name">
-
+              <Field label="Storefront Name">
                 <input
-
                   value={product.name}
-
                   onChange={(e) => updateProduct("name", e.target.value)}
-
+                  disabled={saving}
                   style={input}
-
                 />
-
               </Field>
 
               <Field label="Product Type">

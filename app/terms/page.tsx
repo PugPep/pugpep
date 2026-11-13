@@ -22,7 +22,7 @@ export default function TermsPage() {
           </p>
 
           <p style={updatedText}>
-            Last updated: August 22, 2026
+            Last updated: November 13, 2026
           </p>
         </section>
 
@@ -51,7 +51,7 @@ export default function TermsPage() {
           </p>
 
           <PolicyLink href="/research-use">
-            View the full Research Use Policy →
+            View the full Research Use Only Policy →
           </PolicyLink>
         </Section>
 
@@ -77,7 +77,7 @@ export default function TermsPage() {
             PugPep reserves the right to decline, cancel, restrict, or review
             an order when information available to PugPep reasonably indicates
             that a transaction may be inconsistent with these Terms, the
-            Research Use Policy, or applicable requirements.
+            Research Use Only Policy, or applicable requirements.
           </p>
         </Section>
 
@@ -205,15 +205,6 @@ export default function TermsPage() {
             Customers are responsible for providing accurate payment
             information and following the payment instructions presented for
             the selected payment method.
-          </p>
-
-          <p style={paragraphStyle}>
-            Cryptocurrency and other irreversible payment transactions require
-            particular care. Customers are responsible for confirming wallet
-            addresses, networks, assets, amounts, and transaction details
-            before sending funds. PugPep is not responsible for funds sent to
-            an incorrect address, through an unsupported network, or through an
-            incorrect transaction selected by the customer.
           </p>
         </Section>
 
@@ -401,7 +392,7 @@ export default function TermsPage() {
             </PolicyLink>
 
             <PolicyLink href="/research-use">
-              Research Use Policy
+              Research Use Only Policy
             </PolicyLink>
 
             <PolicyLink href="/refund-policy">

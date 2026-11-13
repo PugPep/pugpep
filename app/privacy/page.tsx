@@ -21,7 +21,7 @@ export default function PrivacyPage() {
           </p>
 
           <p style={updatedText}>
-            Last updated: August 22, 2026
+            Last updated: November 13, 2026
           </p>
         </section>
 
@@ -208,7 +208,7 @@ export default function PrivacyPage() {
         >
           <p style={bodyText}>
             Payment methods may be supported by third-party financial,
-            payment, banking, cryptocurrency, or transaction-service
+            payment, banking, or transaction-service
             providers. PugPep may receive transaction status, payment
             references, confirmation details, or other information necessary
             to associate payment activity with an order.
@@ -367,7 +367,7 @@ export default function PrivacyPage() {
             </PolicyLink>
 
             <PolicyLink href="/research-use">
-              Research Use Policy
+              Research Use Only Policy
             </PolicyLink>
           </div>
         </section>

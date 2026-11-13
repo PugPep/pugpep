@@ -12,7 +12,7 @@ export default function ResearchUsePolicyPage() {
           </p>
 
           <h1 style={title}>
-            Research Use Policy
+            Research Use Only Policy
           </h1>
 
           <p style={subtitle}>
@@ -193,7 +193,7 @@ export default function ResearchUsePolicyPage() {
           <p style={bodyText}>
             PugPep reserves the right to decline, cancel, or restrict an order
             when information available to PugPep reasonably indicates that the
-            requested transaction may be inconsistent with this Research Use
+            requested transaction may be inconsistent with this Research Use Only
             Policy or other applicable PugPep policies.
           </p>
         </section>

@@ -2341,8 +2341,11 @@ export default function HomePage() {
       </section>
 
       <style jsx global>{`
-        @media (max-width: 600px) {
-          .pugpep-footer-legal { font-size: 12px !important; }
+        @media (min-width: 1000px) {
+          .pugpep-footer-policy-links { justify-content: space-between; }
+        }
+        @media (max-width: 520px) {
+          .pugpep-home-footer-grid { grid-template-columns: minmax(0, 1fr) !important; }
         }
         .pugpep-combined-notice-banner {
           box-sizing: border-box;
@@ -2612,7 +2615,7 @@ export default function HomePage() {
 
 
       <footer style={footer}>
-        <div style={footerGrid}>
+        <div className="pugpep-home-footer-grid" style={footerGrid}>
           <div style={footerColumn}>
             <p style={footerColumnTitle}>
               CUSTOMER SUPPORT
@@ -2655,10 +2658,6 @@ export default function HomePage() {
               Quality &amp; Testing
             </Link>
 
-            <Link href="/research-use" style={footerLink}>
-              Research Use Policy
-            </Link>
-
             <Link href="/policies" style={footerLink}>
               Legal &amp; Policies
             </Link>
@@ -2669,12 +2668,15 @@ export default function HomePage() {
               LEGAL &amp; POLICIES
             </p>
 
-            <div style={footerLegalLinks}>
+            <div className="pugpep-footer-policy-links" style={footerLegalLinks}>
               <Link href="/terms" style={footerLink}>
                 Terms &amp; Conditions
               </Link>
               <Link href="/privacy" style={footerLink}>
                 Privacy Policy
+              </Link>
+              <Link href="/research-use" style={footerLink}>
+                Research Use Only Policy
               </Link>
               <Link href="/refund-policy" style={footerLink}>
                 Refund &amp; Return Policy
@@ -4250,31 +4252,31 @@ const footer = {
 
 const footerGrid = {
   width: "100%",
-  maxWidth: 1180,
+  maxWidth: 1280,
   margin: "0 auto",
   display: "grid",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: 18,
+  gap: "24px 32px",
 };
 
 const footerColumn = {
   display: "grid",
   alignContent: "start",
-  gap: 8,
+  gap: 9,
 };
 
 const footerLegalLinks = {
   display: "flex",
   flexWrap: "wrap" as const,
   alignItems: "center",
-  columnGap: "clamp(16px, 3vw, 34px)",
-  rowGap: 10,
+  columnGap: "clamp(18px, 2vw, 28px)",
+  rowGap: 12,
 };
 
 const footerColumnTitle = {
   margin: "0 0 5px",
   color: "#ff75df",
-  fontSize: 11,
+  fontSize: 14,
   fontWeight: 900,
   letterSpacing: ".13em",
 };
@@ -4282,7 +4284,7 @@ const footerColumnTitle = {
 const footerSupportPromise = {
   margin: "0 0 8px",
   color: "#00ff99",
-  fontSize: 11,
+  fontSize: 14,
   lineHeight: 1.5,
   fontWeight: 700,
 };
@@ -4290,14 +4292,14 @@ const footerSupportPromise = {
 const footerLink = {
   width: "fit-content",
   color: "#cfcfd5",
-  fontSize: 11,
+  fontSize: 15,
   lineHeight: 1.5,
   textDecoration: "none",
 };
 
 const footerDivider = {
   width: "100%",
-  maxWidth: 1180,
+  maxWidth: 1280,
   height: 1,
   margin: "32px auto 24px",
   background:
@@ -4305,21 +4307,21 @@ const footerDivider = {
 };
 
 const footerResearchNotice = {
-  maxWidth: 1100,
+  maxWidth: 1280,
   margin: "0 auto 10px",
   color: "#ffffff",
-  lineHeight: 1.5,
-  fontSize: 13,
+  lineHeight: 1.65,
+  fontSize: 16,
   fontWeight: 400,
   textAlign: "left" as const,
 };
 
 const footerText = {
-  maxWidth: 1100,
+  maxWidth: 1280,
   margin: "0 auto 10px",
   color: "#c9cdd3",
-  lineHeight: 1.5,
-  fontSize: 13,
+  lineHeight: 1.65,
+  fontSize: 15,
   fontWeight: 400,
   textAlign: "left" as const,
 };
@@ -4329,7 +4331,7 @@ const footerCopyright = {
   margin: "22px auto 0",
   color: "#00d9ff",
   fontWeight: 900,
-  fontSize: 11,
+  fontSize: 13,
   textAlign: "center" as const,
 };
 

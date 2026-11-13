@@ -33,9 +33,9 @@ export default function RefundPolicyPage() {
           </div>
 
           <p style={bodyText}>
-            Due to the nature of specialized laboratory research materials,
-            PugPep does not accept returns, exchanges, or refunds once an order
-            has been processed or shipped.
+            For sanitation and quality assurance reasons, PugPep cannot
+            accept returns. All sales are final. Once an order has been
+            processed or shipped, PugPep does not offer exchanges or refunds.
           </p>
 
           <div style={noticeBox}>
@@ -68,6 +68,15 @@ export default function RefundPolicyPage() {
             supporting information.
           </p>
 
+          <p style={bodyText}>
+            If a vial arrives broken, PugPep will replace it or issue store
+            credit toward your next purchase. Contact our support team at{" "}
+            <a href="mailto:Support@PugPep.com" style={link}>
+              Support@PugPep.com
+            </a>{" "}
+            to arrange your replacement or store credit.
+          </p>
+
           <div style={resolutionGrid}>
             <PolicyPoint
               title="Damaged Shipment"
@@ -91,7 +100,7 @@ export default function RefundPolicyPage() {
           </div>
 
           <p style={bodyText}>
-            When PugPep determines that a verified fulfillment issue occurred,
+            For other verified fulfillment issues,
             the available resolution may include a replacement, account credit,
             or another appropriate remedy at PugPep&apos;s discretion.
           </p>

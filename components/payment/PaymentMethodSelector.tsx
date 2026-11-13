@@ -13,16 +13,19 @@ type MethodOption = {
   logo?: string;
   accent: string;
   comingSoon?: boolean;
+  hidden?: boolean;
 };
 
 const methods: MethodOption[] = [
   { value: "cashapp", label: "Cash App", logo: "/cashapp.png", accent: "#31d86f" },
   { value: "venmo", label: "Venmo", logo: "/venmo.png", accent: "#00bfff" },
   { value: "zelle", label: "Zelle", logo: "/zelle.png", accent: "#b86cff" },
-  { value: "crypto", label: "Crypto", logo: "/aurpay.png", accent: "#f7931a" },
+  { value: "crypto", label: "Crypto", logo: "/aurpay.png", accent: "#f7931a", hidden: true },
   { value: "credit_card", label: "Credit Card", logo: "/credit.png", accent: "#d4af37", comingSoon: true },
   { value: "debit_card", label: "Debit Card", logo: "/debit.png", accent: "#20c997", comingSoon: true },
 ];
+
+const visibleMethods = methods.filter(({ hidden }) => !hidden);
 
 export function PaymentMethodSelector({ method, setMethod, orderNumber }: {
   method: PaymentMethod;
@@ -39,7 +42,7 @@ export function PaymentMethodSelector({ method, setMethod, orderNumber }: {
         </div>
       </div>
       <div className="payment-method-grid" style={{ ...methodGrid, gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
-        {methods.map(({ value, label, logo, accent, comingSoon }) => {
+        {visibleMethods.map(({ value, label, logo, accent, comingSoon }) => {
           const selected = method === value;
           return (
             <button

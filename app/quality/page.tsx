@@ -294,12 +294,19 @@ export default function QualityPage() {
 
 
 
+      const productNamesBySlug = new Map<string, string>();
       const productImagesBySlug = new Map<string, string>();
       const productImagesByName = new Map<string, string>();
 
 
 
       for (const product of productResult.data || []) {
+
+        const slugKey = normalizeKey(String(product.slug || ""));
+        const name = String(product.name || "").trim();
+        if (slugKey && name) {
+          productNamesBySlug.set(slugKey, name);
+        }
 
         const image = String(product.image || "").trim();
 
@@ -308,8 +315,6 @@ export default function QualityPage() {
         if (!image) continue;
 
 
-
-        const slugKey = normalizeKey(String(product.slug || ""));
 
         const nameKey = normalizeKey(String(product.name || ""));
 
@@ -429,7 +434,7 @@ export default function QualityPage() {
 
             name: folder.name,
 
-            displayName: formatName(folder.name),
+            displayName: productNamesBySlug.get(normalizeKey(folder.name)) || formatName(folder.name),
 
             count: coaFiles.length,
 
