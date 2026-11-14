@@ -146,9 +146,9 @@ export default function PoliciesPage() {
 
             <PolicyCard
               eyebrow="RESEARCH"
-              title="Research Use Policy"
+              title="Research Use Only Policy"
               description="Standards governing laboratory research materials, customer research-use responsibilities, analytical information, and the prohibition on human or veterinary use."
-              href="/research-use"
+              href="/research-use-policy"
               accent="#ffcc66"
             />
 

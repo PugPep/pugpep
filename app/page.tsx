@@ -2644,7 +2644,7 @@ export default function HomePage() {
               <Link href="/privacy" style={footerLink}>
                 Privacy Policy
               </Link>
-              <Link href="/research-use" style={footerLink}>
+              <Link href="/research-use-policy" style={footerLink}>
                 Research Use Only Policy
               </Link>
               <Link href="/refund-policy" style={footerLink}>

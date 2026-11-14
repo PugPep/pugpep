@@ -366,7 +366,7 @@ export default function PrivacyPage() {
               SMS Terms
             </PolicyLink>
 
-            <PolicyLink href="/research-use">
+            <PolicyLink href="/research-use-policy">
               Research Use Only Policy
             </PolicyLink>
           </div>

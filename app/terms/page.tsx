@@ -50,7 +50,7 @@ export default function TermsPage() {
             or prevent disease.
           </p>
 
-          <PolicyLink href="/research-use">
+          <PolicyLink href="/research-use-policy">
             View the full Research Use Only Policy →
           </PolicyLink>
         </Section>
@@ -391,7 +391,7 @@ export default function TermsPage() {
               Legal &amp; Policies
             </PolicyLink>
 
-            <PolicyLink href="/research-use">
+            <PolicyLink href="/research-use-policy">
               Research Use Only Policy
             </PolicyLink>
 
