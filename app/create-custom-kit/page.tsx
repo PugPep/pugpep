@@ -459,9 +459,6 @@ export default function CreateCustomKitPage() {
               setQuoteAttempt((attempt) => attempt + 1);
             }}>Retry pricing</button>
           </p>}
-          {remaining > 0 && <p className="kit-stock-note">
-            Add {remaining} more {remaining === 1 ? "vial" : "vials"} to qualify for kit savings.
-          </p>}
           {notice && <p role="alert">{notice}</p>}
           <button className="kit-primary" type="button" disabled={remaining !== 0 || !selectionAvailable || adding}
             onClick={() => { void addKitToCart(); }}>
