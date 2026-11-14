@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { createClient } from "../lib/supabaseClient";
 import { loadStorefrontSales, getPrimaryStorefrontCampaign } from "../lib/storefrontCampaigns";
@@ -54,6 +54,8 @@ export default function RootLayout({
 
   ] = useState(false);
 
+  const pathname = usePathname();
+  const isProductPage = pathname?.startsWith("/products/") ?? false;
   const [mobileHeaderHidden, setMobileHeaderHidden] = useState(false);
 
   const [
@@ -200,7 +202,7 @@ export default function RootLayout({
 
     <html lang="en">
 
-      <body style={bodyStyle}>
+      <body style={bodyStyle} className={isProductPage ? "product-page-layout" : undefined}>
 
         <style>{`
 
@@ -434,6 +436,12 @@ export default function RootLayout({
 
           }
 
+          body.product-page-layout .siteHeaderShell {
+            position: static !important;
+            margin-top: ${announcementHeight}px;
+            transform: none !important;
+          }
+
           @media (prefers-reduced-motion: reduce) {
 
             .siteHeaderShell {
@@ -469,7 +477,7 @@ export default function RootLayout({
 
                 <span>
 
-                  FREE U.S. SHIPPING ON
+                  FREE PRIORITY SHIPPING ON
 
                   ORDERS OVER $250
 
@@ -499,7 +507,7 @@ export default function RootLayout({
 
                 <span>
 
-                  FREE U.S. SHIPPING ON
+                  FREE PRIORITY SHIPPING ON
 
                   ORDERS OVER $250
 
@@ -531,7 +539,7 @@ export default function RootLayout({
 
           </div>
 
-          <div
+          {!isProductPage && <div
 
             className="topActivationStrip"
 
@@ -553,7 +561,7 @@ export default function RootLayout({
 
             />
 
-          </div>
+          </div>}
 
           <header
 
@@ -563,13 +571,13 @@ export default function RootLayout({
 
             onMouseEnter={
 
-              openDesktopHeader
+              isProductPage ? undefined : openDesktopHeader
 
             }
 
             onMouseLeave={
 
-              scheduleDesktopHeaderClose
+              isProductPage ? undefined : scheduleDesktopHeaderClose
 
             }
 

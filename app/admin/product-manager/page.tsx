@@ -550,6 +550,13 @@ export default function ProductManagerPage() {
       return;
     }
 
+    const slug = product.slug.trim();
+    const slugChanged = slug !== savedProduct.slug;
+    if (slugChanged && !/^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$/.test(slug)) {
+      setNotice("Enter a URL slug using letters, numbers, and single hyphens between words.");
+      return;
+    }
+
     const nameChanged = name !== savedProduct.name;
     setSaving(true);
     setNotice("");
@@ -559,6 +566,7 @@ export default function ProductManagerPage() {
         .from("products")
         .update({
           ...(nameChanged ? { name } : {}),
+          ...(slugChanged ? { slug } : {}),
 
           category: product.category,
 
@@ -608,14 +616,27 @@ export default function ProductManagerPage() {
         current.map((row) => (row.id === updated.id ? updated : row))
       );
 
+      if (updated.slug !== savedProduct.slug) {
+        setSelectedSlug((current) => current === savedProduct.slug ? updated.slug : current);
+      }
+
+      if (slugChanged && updated.slug !== slug) {
+        setNotice(`The database saved the slug “${updated.slug}”. Review it before retrying.`);
+        return;
+      }
+
       if (nameChanged && updated.name !== name) {
         setNotice(`The database returned the name “${updated.name}”. Review it before retrying.`);
         return;
       }
 
-      setNotice(nameChanged
-        ? `Storefront name saved and verified in Supabase: “${updated.name}”.`
-        : "Product details saved.");
+      if (slugChanged) {
+        setNotice(`Product details saved. Storefront URL: /products/${updated.slug}`);
+      } else {
+        setNotice(nameChanged
+          ? `Storefront name saved and verified in Supabase: “${updated.name}”.`
+          : "Product details saved.");
+      }
 
     } catch (error) {
       setNotice(error instanceof Error
@@ -1561,154 +1582,6 @@ export default function ProductManagerPage() {
 
         )}
 
-        <section style={summaryPanel}>
-
-          <div style={combinedSelectionHeader}>
-
-            <div className="pm-selector-grid" style={combinedSelectorGrid}>
-
-              <label style={field}>
-
-                <span style={label}>PRODUCT</span>
-
-                <select
-
-                  value={selectedSlug}
-
-                  onChange={(event) => {
-
-                    setSelectedSlug(event.target.value);
-
-                    setSelectedDosage("");
-
-                  }}
-
-                  style={input}
-
-                >
-
-                  {products.map((row) => (
-
-                    <option key={row.id} value={row.slug}>
-
-                      {row.name}
-
-                    </option>
-
-                  ))}
-
-                </select>
-
-              </label>
-
-              <label style={field}>
-
-                <span style={label}>STRENGTH</span>
-
-                <select
-
-                  value={selectedDosage}
-
-                  onChange={(event) => setSelectedDosage(event.target.value)}
-
-                  style={input}
-
-                >
-
-                  {dosages.length === 0 && (
-
-                    <option value="">No dosages yet</option>
-
-                  )}
-
-                  {dosages.map((dosage) => (
-
-                    <option key={dosage} value={dosage}>
-
-                      {dosage}
-
-                    </option>
-
-                  ))}
-
-                </select>
-
-              </label>
-
-            </div>
-
-            <div style={selectionActions}>
-
-              <div className="pm-status-bar" style={statusBar}>
-
-                <StatusPill
-
-                  label="Stock"
-
-                  value={selectedDosage ? String(inventoryQuantity) : "—"}
-
-                  accent={inventoryQuantity > 0 ? "#00ff99" : "#ffcc00"}
-
-                />
-
-                <StatusPill
-
-                  label="COA"
-
-                  value={coaReady ? "✓ Current" : "Needs COA"}
-
-                  accent={coaReady ? "#00d9ff" : "#ffcc00"}
-
-                />
-
-                <StatusPill
-
-                  label="Lot"
-
-                  value={matchingCoa?.lot_number || "Not Set"}
-
-                  accent={lotReady ? "#00ff99" : "#ffcc00"}
-
-                />
-
-                <StatusPill
-
-                  label="Image"
-
-                  value={imageReady ? "✓ Live" : "Missing"}
-
-                  accent={imageReady ? "#ff45d8" : "#ffcc00"}
-
-                />
-
-              </div>
-
-              {product && (
-
-                <a
-
-                  href={`/products/${product.slug}`}
-
-                  target="_blank"
-
-                  rel="noreferrer"
-
-                  style={secondaryLink}
-
-                >
-
-                  View Live Page
-
-                </a>
-
-              )}
-
-            </div>
-
-          </div>
-
-        </section>
-
         <section style={actionPanel}>
 
           <div style={actionHeading}>
@@ -1813,6 +1686,154 @@ export default function ProductManagerPage() {
 
             </div>
 
+            <div style={summaryPanel}>
+
+              <div style={combinedSelectionHeader}>
+
+                <div className="pm-selector-grid" style={combinedSelectorGrid}>
+
+                  <label style={field}>
+
+                    <span style={label}>PRODUCT</span>
+
+                    <select
+
+                      value={selectedSlug}
+
+                      onChange={(event) => {
+
+                        setSelectedSlug(event.target.value);
+
+                        setSelectedDosage("");
+
+                      }}
+
+                      style={input}
+
+                    >
+
+                      {products.map((row) => (
+
+                        <option key={row.id} value={row.slug}>
+
+                          {row.name}
+
+                        </option>
+
+                      ))}
+
+                    </select>
+
+                  </label>
+
+                  <label style={field}>
+
+                    <span style={label}>STRENGTH</span>
+
+                    <select
+
+                      value={selectedDosage}
+
+                      onChange={(event) => setSelectedDosage(event.target.value)}
+
+                      style={input}
+
+                    >
+
+                      {dosages.length === 0 && (
+
+                        <option value="">No dosages yet</option>
+
+                      )}
+
+                      {dosages.map((dosage) => (
+
+                        <option key={dosage} value={dosage}>
+
+                          {dosage}
+
+                        </option>
+
+                      ))}
+
+                    </select>
+
+                  </label>
+
+                </div>
+
+                <div style={selectionActions}>
+
+                  <div className="pm-status-bar" style={statusBar}>
+
+                    <StatusPill
+
+                      label="Stock"
+
+                      value={selectedDosage ? String(inventoryQuantity) : "—"}
+
+                      accent={inventoryQuantity > 0 ? "#00ff99" : "#ffcc00"}
+
+                    />
+
+                    <StatusPill
+
+                      label="COA"
+
+                      value={coaReady ? "✓ Current" : "Needs COA"}
+
+                      accent={coaReady ? "#00d9ff" : "#ffcc00"}
+
+                    />
+
+                    <StatusPill
+
+                      label="Lot"
+
+                      value={matchingCoa?.lot_number || "Not Set"}
+
+                      accent={lotReady ? "#00ff99" : "#ffcc00"}
+
+                    />
+
+                    <StatusPill
+
+                      label="Image"
+
+                      value={imageReady ? "✓ Live" : "Missing"}
+
+                      accent={imageReady ? "#ff45d8" : "#ffcc00"}
+
+                    />
+
+                  </div>
+
+                  {product && (
+
+                    <a
+
+                      href={`/products/${selectedSlug}`}
+
+                      target="_blank"
+
+                      rel="noreferrer"
+
+                      style={secondaryLink}
+
+                    >
+
+                      View Live Page
+
+                    </a>
+
+                  )}
+
+                </div>
+
+              </div>
+
+            </div>
+
             <div className="pm-general-grid" style={generalGrid}>
 
               <Field label="Storefront Name">
@@ -1822,6 +1843,22 @@ export default function ProductManagerPage() {
                   disabled={saving}
                   style={input}
                 />
+              </Field>
+
+              <Field label="URL Slug" wide>
+                <input
+                  value={product.slug}
+                  onChange={(e) => updateProduct("slug", e.target.value)}
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  disabled={saving}
+                  autoComplete="off"
+                  aria-describedby="product-edit-slug-help"
+                  style={input}
+                />
+                <span id="product-edit-slug-help" style={{ ...muted, fontSize: 13, overflowWrap: "anywhere" }}>
+                  Product URL after saving: /products/{product.slug.trim() || "your-slug"}
+                </span>
               </Field>
 
               <Field label="Product Type">
@@ -2623,6 +2660,7 @@ const selectionActions = {
 const summaryPanel = {
 
   ...panel,
+  marginBottom: 20,
 
   background:
 
