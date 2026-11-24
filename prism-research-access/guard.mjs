@@ -7,6 +7,8 @@
 // user-agent or IP exemption. Nothing here is a browser overlay.
 import { researchClient, SITE_KEY } from './client.mjs';
 import { readGrant, grantCookie } from './session.mjs';
+import { joshSettings } from './josh-compat.mjs';
+import { joshPolicyResponse } from './josh-policies.mjs';
 import { ENTRY_PATH, RETURN_PATH, FORGET_PATH, TERMS_PATH, trim, notice, handleEntry, handleReturn, handleForget, handlePublicTerms, readBrowserAction, handleBrowser } from './routes.mjs';
 
 const PRIVATE = { 'Cache-Control': 'private, no-store, max-age=0', 'X-Robots-Tag': 'noindex, nofollow' };
@@ -42,12 +44,19 @@ export function validateResearchConfig(config) {
     && ['checkout', 'host'].includes(route.owner))) fail('serviceRoutes');
   const reserved = [ENTRY_PATH, RETURN_PATH, FORGET_PATH, TERMS_PATH];
   if ([...config.publicPaths, ...config.serviceRoutes.map(route => route.path)].some(value => reserved.includes(trim(value)))) fail('reserved path');
+  joshSettings(config); // An explicit profile must match this site's canonical origin and fixed theme.
   return config;
 }
 
 // Test seam only: a plain setter, never read from config.
 let clientFactory = researchClient;
 export const setClientFactoryForTests = f => { clientFactory = f; };
+
+/** Public Josh policies precede secret-dependent validation; all other routes retain the existing guard. */
+export function publicResearchResponse(request, site) {
+  const settings = joshSettings(site, request);
+  return settings ? joshPolicyResponse(request, settings) : null;
+}
 
 /** @returns {Promise<{response: Response} | {pass: 'public'|'service'|'research', setCookie?: string}>} */
 export async function researchOutcome(request, config) {
@@ -60,6 +69,8 @@ export async function researchOutcome(request, config) {
     return config.serviceRoutes.some(route => route.anyHost === true && route.owner === 'host' && trim(route.path) === path && route.method === method)
       ? { pass: 'service' } : { response: deny(404) };
   }
+  const policy = publicResearchResponse(request, config);
+  if (policy) return { response: policy };
   const client = clientFactory(config);
 
   // 2. Exact Research Access endpoints.
@@ -83,6 +94,9 @@ export async function researchOutcome(request, config) {
   // 5-7. Remembered browser, provenance, fresh central decision.
   const grant = await readGrant(request, config.cookieSecret, config.siteId);
   let decision = 'none', maxAge = 0;
+  // Hashed build files (styles, scripts, images) for a browser with a valid signed grant: the page
+  // document already got a fresh central decision, so skip one call per file to avoid unstyled pages.
+  if (grant && request.method === 'GET' && /^\/(?:assets|api\/prism-site-files)\/[^/]+$/.test(new URL(request.url).pathname)) return { pass: 'research' };
   if (grant) {
     try { ({ decision, maxAge } = await client.decision(grant.token, await config.getIngress(request))); }
     catch { decision = 'unavailable'; }
@@ -95,7 +109,7 @@ export async function researchOutcome(request, config) {
     return { pass: 'research', ...(renew ? { setCookie: await grantCookie(config.cookieSecret, config.siteId, grant.token, maxAge, grant.renew) } : {}) };
   }
   if (decision === 'unavailable') return { response: wantsDocument(request)
-    ? notice(503, 'Access is temporarily unavailable. Please try again shortly.', { 'Retry-After': '30' }, config.theme) : deny(503, { 'Retry-After': '30' }) };
+    ? notice(503, 'Access is temporarily unavailable. Please try again shortly.', { 'Retry-After': '30' }, config, request) : deny(503, { 'Retry-After': '30' }) };
   if (!wantsDocument(request)) return { response: deny(403) };   // APIs/files: neutral private denial, no payload
   return { response: await handleBrowser(request, config, client) };
 }
@@ -103,6 +117,8 @@ export async function researchOutcome(request, config) {
 /** Wrap the host's real handler so admitted responses retain cache protection and renewal. */
 export async function researchGate(request, config, next) {
   try {
+    const policy = publicResearchResponse(request, config);
+    if (policy) return policy;
     validateResearchConfig(config);
     const outcome = await researchOutcome(request, config);
     if (outcome.response) return outcome.response;
@@ -116,6 +132,6 @@ export async function researchGate(request, config, next) {
     if (outcome.setCookie) headers.append('Set-Cookie', outcome.setCookie);
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   } catch {
-    return notice(503, 'Access is temporarily unavailable. Please try again shortly.', { 'Retry-After': '30' }, config.theme);
+    return notice(503, 'Access is temporarily unavailable. Please try again shortly.', { 'Retry-After': '30' }, config, request);
   }
 }

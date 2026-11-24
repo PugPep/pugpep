@@ -38,6 +38,12 @@ async function loadGateSubject(decision: "allow" | "deny" = "allow") {
       html: "<!doctype html><title>Research Gate</title>",
       maxAge: 3600,
     }),
+    browser: async (input: { door?: string; features?: string[] }) => ({
+      kind: "page",
+      status: 200,
+      csp: "default-src 'self'",
+      html: `<!doctype html><html lang="en"><head><title>Research Access</title></head><body><div class="pra-wrap"><main class="pra-card" id="pra-agree" data-door="${input?.door || ""}" data-features="${(input?.features || []).join(",")}"><h1>Research Access</h1><form method="post"><input type="hidden" name="_pra_action" value="agree"><button type="submit">Confirm</button><button class="pra-leave" type="submit">Cancel</button></form></main></div></body></html>`,
+    }),
     action: async () => ({
       status: 200,
       headers: { "content-type": "application/json" },
@@ -248,5 +254,27 @@ describe("PugPep PRISM Research Gate (proxy.ts)", () => {
     expect(html).toContain("Research Use Only Policy");
     expect(html).toContain(config.LOGO_ASSET_PATH);
     expect(html).not.toContain("<script");
+  });
+
+  it("serves Nov 21 2-column front door without VPN or Remember copy", async () => {
+    const { proxy } = await loadGateSubject();
+
+    const gateReq = new NextRequest("https://pugpep.com/", {
+      method: "GET",
+      headers: { "x-real-ip": "203.0.113.10" },
+    });
+    const gateRes = await proxy(gateReq, DUMMY_EVENT);
+    expect(gateRes.status).toBe(200);
+    const gateHtml = await gateRes.text();
+    expect(gateHtml).toContain("pfd-shell");
+    expect(gateHtml).toContain("PugPep");
+    expect(gateHtml).toContain("support@pugpep.com");
+    expect(gateHtml).toContain("Need help logging in?");
+    expect(gateHtml).toContain("https://pugpep.com/research-use-policy");
+    expect(gateHtml).toContain('data-door="v2"');
+    expect(gateHtml).toContain('data-features=""');
+    expect(gateHtml.toLowerCase()).not.toContain("remember me");
+    expect(gateHtml.toLowerCase()).not.toContain("vpn");
+    expect(gateHtml.toLowerCase()).not.toContain("institutional email");
   });
 });

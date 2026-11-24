@@ -6,7 +6,7 @@
 // nothing or next() from @vercel/functions continues, and next({ headers }) sets response
 // headers (a Headers object is accepted; @vercel/functions 3.9.9 copies it with new Headers()).
 // Next.js 16 uses proxy.ts (Node.js runtime): pass { next: init => NextResponse.next(init) }.
-import { researchOutcome, validateResearchConfig } from '../guard.mjs';
+import { publicResearchResponse, researchOutcome, validateResearchConfig } from '../guard.mjs';
 import { ingressReader } from '../ingress.mjs';
 import { notice } from '../routes.mjs';
 
@@ -23,10 +23,12 @@ export function createResearchVercelGate(site, { next, middleware }, env = proce
   const load = () => config ||= validateResearchConfig({ ...site,
     siteKey: env.PRA_SITE_KEY, cookieSecret: env.PRA_COOKIE_SECRET, turnstileSecret: env.PRA_TURNSTILE_SECRET, getIngress: ingressReader(site.ingress) });
   return async function researchAccess(request, context) {
+    const policy = publicResearchResponse(request, site);
+    if (policy) return policy;
     let outcome;
     // Misconfiguration withholds everything rather than exposing the site.
     try { outcome = await researchOutcome(request, load()); }
-    catch { return notice(503, 'Access is temporarily unavailable. Please try again shortly.', { 'Retry-After': '60' }, site.theme); }
+    catch { return notice(503, 'Access is temporarily unavailable. Please try again shortly.', { 'Retry-After': '60' }, site, request); }
     if (outcome.response) return outcome.response;
     const response = middleware ? await middleware(request, context) : undefined;
     if (outcome.pass !== 'research') return response || next();

@@ -2,6 +2,7 @@
 // paired policy service and returned at the requested client URL, before host rendering.
 // Only the dedicated flow token and allowlisted fields cross the server boundary.
 import { grantCookie, clearGrantCookie, readGrant, LEGACY_COOKIE } from './session.mjs';
+import { decorateJoshEntrance, joshSettings, joshNotice } from './josh-compat.mjs';
 
 export const ENTRY_PATH = '/research-entry'; // legacy links return to a local document
 export const RETURN_PATH = '/research-return'; // retained for existing one-use handoffs
@@ -12,7 +13,8 @@ export const LEGACY_FLOW_COOKIE = '__Host-prism_research_flow'; // read only; ne
 // The visitor's Remember me choice (1/0), held only between the door click and the exchange that follows it.
 const KEEP_COOKIE = '__Host-ra_keep';
 const DAY = 86400; // an unticked browser's access lasts at most this long and is never renewed
-const DOOR = { door: 'v2', features: ['remember'] }; // the service shows the Remember me control only to an adapter declaring it
+const DOOR = { door: 'v2', features: ['remember'] };
+const door = config => config.frontDoor?.profile === 'josh-20261019' ? { door: 'v2' } : DOOR; // the service shows the Remember me control only to an adapter declaring it
 const FLOW = /^v1\.[A-Za-z0-9_-]+\.\d{1,12}\.[0-9a-f]{64}$/;
 const CODE = /^[0-9a-f]{64}$/;
 const PRIVATE = { 'Cache-Control': 'private, no-store, max-age=0', 'Referrer-Policy': 'same-origin', 'X-Robots-Tag': 'noindex, nofollow', 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY' };
@@ -20,8 +22,10 @@ const UNAVAILABLE = 'Access is temporarily unavailable. Please try again shortly
 const FIELDS = { agree: ['csrf', 'agreement_id', 'statement'], email: ['csrf', 'email'], code: ['csrf', 'code'], cancel: ['csrf'] };
 
 export const trim = path => path.length > 1 ? path.replace(/\/+$/, '') : path;
-const redirect = (location, cookies = [], status = 303) => {
-  const headers = new Headers({ ...PRIVATE, Location: location });
+const redirect = (location, cookies = [], status = 303, publicOrigin) => {
+  // Next's response adapter requires an absolute Location. Only already-validated local destinations use this base.
+  const target = location.startsWith('/') ? new URL(location, publicOrigin).href : location;
+  const headers = new Headers({ ...PRIVATE, Location: target });
   for (const cookie of cookies) headers.append('Set-Cookie', cookie);
   return new Response(null, { status, headers });
 };
@@ -38,6 +42,12 @@ const clearKeep = request => readKeep(request) === undefined ? [] : [keepCookie(
  * at most a day, never renewed. The choice: this request's door click, else the keep cookie a click left (consumed
  * here), else the setting of a valid access cookie the browser already holds (never an upgrade), else `otherwise`. */
 const admit = async (request, config, exchanged, posted, otherwise) => {
+  if (config.frontDoor?.profile === 'josh-20261019') {
+    // Original Josh has no visitor choice: a successful admission follows the service lifetime.
+    // Existing nonrenewable cookies are still respected by the ordinary request guard.
+    return [await grantCookie(config.cookieSecret, config.siteId, exchanged.token, exchanged.maxAge, true),
+      flowCookie(), ...clearKeep(request), ...clearLegacy(request, LEGACY_COOKIE, LEGACY_FLOW_COOKIE)];
+  }
   const keep = readKeep(request);
   const held = posted === undefined && keep === undefined ? await readGrant(request, config.cookieSecret, config.siteId) : null;
   const remember = posted ?? (keep !== undefined ? keep === '1' : held ? held.renew : otherwise);
@@ -50,10 +60,16 @@ const admit = async (request, config, exchanged, posted, otherwise) => {
 const sha256 = async text => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
 
 /** Neutral fixed-appearance first-party notice; no detection details or invented branding. */
-export const notice = (status, text, extra = {}, theme = 'light') => new Response(
+export const notice = (status, text, extra = {}, appearance = 'light', request) => {
+  let settings;
+  try { settings = typeof appearance === 'object' ? joshSettings(appearance, request) : null; } catch { settings = null; }
+  if (settings) return joshNotice(status, text, settings, extra);
+  const theme = typeof appearance === 'object' ? appearance.theme : appearance;
+  return new Response(
   `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Access</title><style>:root{color-scheme:${theme === 'dark' ? 'dark' : 'light'}}body{margin:0;min-height:100svh;display:grid;place-content:center;padding:24px;font:15px/1.6 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;background:${theme === 'dark' ? '#10151d' : '#f4f6f9'};color:${theme === 'dark' ? '#f0f3f8' : '#1a263a'}}main{max-width:440px}a{color:inherit}</style><main><p>${text}</p><p><a href="/">Return to the home page</a></p></main></html>`,
   { status, headers: { ...PRIVATE, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'", ...extra } });
-const unavailable = config => notice(503, UNAVAILABLE, { 'Retry-After': '30' }, config.theme);
+};
+const unavailable = (config, request) => notice(503, UNAVAILABLE, { 'Retry-After': '30' }, config, request);
 
 /** Same-origin path + query only; remove only gate controls, preserving host parameters. */
 export function safeDestination(raw, config) {
@@ -123,11 +139,11 @@ export async function readBrowserAction(request) {
   return { operation, form, botToken: tokens[0] || '', ...(operation === 'agree' ? { remember: params.get('remember') === '1' } : {}) };
 }
 
-/** Real Siteverify with the matching widget secret, exact host/action and visitor address.
+/** Real Siteverify with the client-owned secret, exact host/action and visitor address.
  * https://developers.cloudflare.com/turnstile/get-started/server-side-validation/ */
 async function botProof(config, network, flow, action, token) {
   const response = await (config.fetch || fetch)('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-    method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
+    method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(8000),
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ secret: config.turnstileSecret, response: token, remoteip: network.visitor_ip }),
   });
@@ -141,19 +157,20 @@ async function botProof(config, network, flow, action, token) {
 
 /** Return only gate HTML at this document URL; a successful exchange alone grants access. */
 export async function handleBrowser(request, config, client, action = { operation: 'open' }) {
-  if (action.invalid) return notice(400, 'This request was refused.', {}, config.theme);
+  if (action.invalid) return notice(400, 'This request was refused.', {}, config, request);
   const url = new URL(request.url);
   const returnPath = safeDestination(url.pathname + url.search, config);
-  if (!returnPath) return notice(400, 'This link is unavailable.', {}, config.theme);
+  if (!returnPath) return notice(400, 'This link is unavailable.', {}, config, request);
   const flow = readFlow(request);
   // Door v2: the agreement screen carries a signed ticket (its csrf) and no flow, so only the
   // checkbox click and cancel may arrive flowless; the service validates the ticket.
   const ticketPost = request.method === 'POST' && !flow && ['agree', 'cancel'].includes(action.operation);
-  if (request.method === 'POST' && (request.headers.get('origin') !== config.publicOrigin || (!flow && !ticketPost))) return notice(403, 'This request was refused.', {}, config.theme);
+  if (request.method === 'POST' && (request.headers.get('origin') !== config.publicOrigin || (!flow && !ticketPost))) return notice(403, 'This request was refused.', {}, config, request);
   let network;
-  try { network = await config.getIngress(request); } catch { return unavailable(config); }
+  try { network = await config.getIngress(request); } catch { return unavailable(config, request); }
   const grant = await readGrant(request, config.cookieSecret, config.siteId);
-  const input = { operation: action.operation, return_path: returnPath, ...DOOR,
+  const settings = joshSettings(config, request);
+  const input = { operation: action.operation, return_path: returnPath, ...door(config),
     ...(flow ? { flow_token: flow } : {}), ...(grant ? { grant_token: grant.token } : {}),
     ...(request.method === 'POST' ? { browser_origin: request.headers.get('origin') } : {}),
     ...(action.form ? { form: action.form } : {}) };
@@ -163,9 +180,9 @@ export async function handleBrowser(request, config, client, action = { operatio
       // flow cookie; a live flow's csrf is its 64-hex binding, which binds to the flow cookie.
       const bound = FLOW.test(String(action.form?.csrf || '')) ? String(action.form.csrf) : flow;
       const proof = await botProof(config, network, bound, action.operation === 'agree' ? 'pra_accept' : 'pra_email', action.botToken);
-      if (!proof) return notice(400, 'Complete the verification and try again.', {}, config.theme);
+      if (!proof) return notice(400, 'Complete the verification and try again.', {}, config, request);
       input.bot_proof = proof;
-    } catch { return unavailable(config); }
+    } catch { return unavailable(config, request); }
   }
   let output = await client.browser(input, network);
   // A changed connection at the one-use exchange may require another screen. Re-open
@@ -179,31 +196,31 @@ export async function handleBrowser(request, config, client, action = { operatio
       if (request.method === 'GET' && ['/', TERMS_PATH].includes(trim(url.pathname))) headers.delete('X-Robots-Tag');
       if (output.flow_token) headers.append('Set-Cookie', flowCookie(output.flow_token, output.flow_max_age));
       // The email and code steps may come between the door click and the exchange: the choice waits beside the flow.
-      if (action.remember !== undefined) headers.append('Set-Cookie', keepCookie(action.remember ? '1' : '0', output.flow_token ? output.flow_max_age : 1200));
-      return new Response(output.html, { status: output.status, headers });
+      if (!settings && action.remember !== undefined) headers.append('Set-Cookie', keepCookie(action.remember ? '1' : '0', output.flow_token ? output.flow_max_age : 1200));
+      return new Response(settings ? decorateJoshEntrance(output.html, settings) : output.html, { status: output.status, headers });
     }
     if (output.kind === 'leave') return redirect(output.url, [flowCookie(), ...clearKeep(request), ...clearLegacy(request, LEGACY_FLOW_COOKIE)]);
-    if (output.kind !== 'handoff') return unavailable(config);
+    if (output.kind !== 'handoff') return unavailable(config, request);
     const exchanged = await client.exchange(output.code, network);
     if (exchanged?.ok) {
       const destination = safeDestination(exchanged.returnPath, config);
-      if (!destination) return unavailable(config);
+      if (!destination) return unavailable(config, request);
       // No recorded choice and no access cookie already held counts as unticked here.
-      return redirect(destination, await admit(request, config, exchanged, action.remember, false));
+      return redirect(destination, await admit(request, config, exchanged, action.remember, false), 303, config.publicOrigin);
     }
     // A click that created its flow in this call has no flow cookie: re-open flowless (the door screen).
-    if (!exchanged?.continue || attempt > 0) return unavailable(config);
-    output = await client.browser({ operation: 'open', return_path: returnPath, ...DOOR, ...(flow ? { flow_token: flow } : {}), ...(grant ? { grant_token: grant.token } : {}) }, network);
+    if (!exchanged?.continue || attempt > 0) return unavailable(config, request);
+    output = await client.browser({ operation: 'open', return_path: returnPath, ...door(config), ...(flow ? { flow_token: flow } : {}), ...(grant ? { grant_token: grant.token } : {}) }, network);
   }
-  return unavailable(config);
+  return unavailable(config, request);
 }
 
 /** The client-domain public page: answered for every visitor, indexable, no flow. */
 export async function handlePublicTerms(request, config, client) {
   let network;
-  try { network = await config.getIngress(request); } catch { return unavailable(config); }
-  const output = await client.browser({ operation: 'public_terms', return_path: '/', ...DOOR }, network);
-  if (output.kind !== 'page' || output.status !== 200) return unavailable(config);
+  try { network = await config.getIngress(request); } catch { return unavailable(config, request); }
+  const output = await client.browser({ operation: 'public_terms', return_path: '/', ...door(config) }, network);
+  if (output.kind !== 'page' || output.status !== 200) return unavailable(config, request);
   const headers = new Headers({ ...PRIVATE, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': output.csp });
   headers.delete('X-Robots-Tag');
   return new Response(request.method === 'HEAD' ? null : output.html, { status: 200, headers });
@@ -211,31 +228,31 @@ export async function handlePublicTerms(request, config, client) {
 
 /** Older entrance links only return to a normal client document; no shared-host fallback. */
 export async function handleEntry(request, config) {
-  if (!['GET', 'HEAD'].includes(request.method)) return notice(405, 'This link is unavailable.', { Allow: 'GET, HEAD' }, config.theme);
-  return redirect(safeDestination(new URL(request.url).searchParams.get('return') || '', config) || home(config));
+  if (!['GET', 'HEAD'].includes(request.method)) return notice(405, 'This link is unavailable.', { Allow: 'GET, HEAD' }, config, request);
+  return redirect(safeDestination(new URL(request.url).searchParams.get('return') || '', config) || home(config), [], 303, config.publicOrigin);
 }
 
 /** Compatibility for outstanding pre-migration handoffs; continuations stay local. */
 export async function handleReturn(request, config, client) {
-  if (request.method !== 'GET') return notice(405, 'This link is unavailable.', { Allow: 'GET' }, config.theme);
+  if (request.method !== 'GET') return notice(405, 'This link is unavailable.', { Allow: 'GET' }, config, request);
   const code = new URL(request.url).searchParams.get('code') || '';
-  const restart = () => notice(400, 'This entry link is no longer valid. Please start again from the home page.', {}, config.theme);
+  const restart = () => notice(400, 'This entry link is no longer valid. Please start again from the home page.', {}, config, request);
   if (!CODE.test(code)) return restart();
   let network;
-  try { network = await config.getIngress(request); } catch { return unavailable(config); }
+  try { network = await config.getIngress(request); } catch { return unavailable(config, request); }
   const exchanged = await client.exchange(code, network);
-  if (!exchanged) return unavailable(config);
-  if (exchanged.continue) return redirect(home(config));
+  if (!exchanged) return unavailable(config, request);
+  if (exchanged.continue) return redirect(home(config), [], 303, config.publicOrigin);
   if (!exchanged.ok) return restart();
   // The service-hosted entrance never offers Remember me: with no keep cookie and no access cookie held, remembered.
-  return redirect(safeDestination(exchanged.returnPath, config) || home(config), await admit(request, config, exchanged, undefined, true));
+  return redirect(safeDestination(exchanged.returnPath, config) || home(config), await admit(request, config, exchanged, undefined, true), 303, config.publicOrigin);
 }
 
 /** Same-origin POST revokes only this browser's grant and clears both local cookies. */
 export async function handleForget(request, config, client) {
-  if (request.method !== 'POST') return notice(405, 'This link is unavailable.', { Allow: 'POST' }, config.theme);
-  if (request.headers.get('origin') !== config.publicOrigin) return notice(403, 'This request was refused.', {}, config.theme);
+  if (request.method !== 'POST') return notice(405, 'This link is unavailable.', { Allow: 'POST' }, config, request);
+  if (request.headers.get('origin') !== config.publicOrigin) return notice(403, 'This request was refused.', {}, config, request);
   const grant = await readGrant(request, config.cookieSecret, config.siteId);
   if (grant) await client.revoke(grant.token);
-  return redirect('/', [clearGrantCookie(), flowCookie(), ...clearKeep(request), ...clearLegacy(request, LEGACY_COOKIE, LEGACY_FLOW_COOKIE)]);
+  return redirect('/', [clearGrantCookie(), flowCookie(), ...clearKeep(request), ...clearLegacy(request, LEGACY_COOKIE, LEGACY_FLOW_COOKIE)], 303, config.publicOrigin);
 }

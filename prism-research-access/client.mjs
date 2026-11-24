@@ -22,7 +22,7 @@ export function researchClient({ serviceOrigin, siteKey, siteId, fetch: fetchImp
   async function call(path, body, authenticated = true) {
     if (!usable || (authenticated && !SITE_KEY.test(siteKey || ''))) return { status: 0, value: null };
     try {
-      const response = await fetchImpl(serviceOrigin + path, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
+      const response = await fetchImpl(serviceOrigin + path, { method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(8000),
         headers: { 'Content-Type': 'application/json', ...(authenticated ? { Authorization: 'Bearer ' + siteKey } : {}) },
         body: JSON.stringify(body) });
       let value = null;

@@ -14,6 +14,7 @@ declare module "*prism-research-access.config.mjs" {
     browserTransport: string;
     turnstileSiteKey?: string;
     theme: "light" | "dark";
+    frontDoor?: unknown;
     ingress: {
       adapter: string;
       source: string;
