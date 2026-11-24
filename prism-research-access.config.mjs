@@ -74,6 +74,7 @@ export default {
   publicAssetPaths: [LOGO_ASSET_PATH],
   serviceRoutes: [
     { path: "/api/prism/callback", method: "POST", owner: "checkout" },
+    { path: "/api/prism/merchant", method: "POST", owner: "checkout" },
     { path: "/api/cron/unpaid-orders", method: "GET", owner: "host", anyHost: true },
     { path: "/api/tracking/webhook", method: "POST", owner: "host" },
     { path: "/api/aurpay/webhook", method: "POST", owner: "host" },

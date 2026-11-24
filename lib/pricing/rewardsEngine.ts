@@ -17,7 +17,7 @@ import {
 
 type RewardsEngineInput = {
   supabase: SupabaseClient;
-  customerId: string;
+  customerId: string | null;
   campaign: CampaignPricingResult;
   marketingRules: MarketingRulesRecord;
 
@@ -132,16 +132,39 @@ export async function calculateRewardsPricing({
   const warnings:
     PricingWarning[] = [];
 
+  const requestedPoints =
+    safeQuantity(
+      rewardPointsRequested
+    );
+
+  if (!customerId) {
+    if (requestedPoints > 0) {
+      warnings.push(
+        createWarning({
+          code: "REWARDS_BLOCKED",
+          message: "Sign in to your PugPep account to redeem PugPoints.",
+          severity: "info",
+        })
+      );
+    }
+
+    return {
+      rewardsEnabled: Boolean(marketingRules.rewards_enabled),
+      availablePoints: 0,
+      requestedPoints,
+      pointsUsed: 0,
+      rewardDiscount: 0,
+      rewardsAllowed: false,
+      pointsEarned: 0,
+      warnings: uniqueWarnings(warnings),
+    };
+  }
+
   const availablePoints =
     await loadAvailableRewardPoints({
       supabase,
       customerId,
     });
-
-  const requestedPoints =
-    safeQuantity(
-      rewardPointsRequested
-    );
 
   if (
     !marketingRules.rewards_enabled

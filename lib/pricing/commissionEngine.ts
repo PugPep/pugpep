@@ -15,7 +15,7 @@ import {
 
 type CommissionEngineInput = {
   supabase: SupabaseClient;
-  customerId: string;
+  customerId: string | null;
   promo: PromoPricingResult;
   accounting: AccountingResult;
   marketingRules: MarketingRulesRecord;
@@ -134,7 +134,7 @@ export async function calculateCommission({
   let salesRepName =
     promo.salesRepName;
 
-  if (!salesRepId) {
+  if (!salesRepId && customerId) {
     const assignment =
       await loadCustomerAssignment({
         supabase,

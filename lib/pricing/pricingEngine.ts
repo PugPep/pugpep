@@ -398,15 +398,9 @@ async function loadCustomerProfile({
   };
 }
 
-function validatePricingInput(
-  input: PricingInput
+function validateServerPricingInput(
+  input: ServerPricingInput
 ) {
-  if (!input.customerId) {
-    throw new Error(
-      "Customer ID is required."
-    );
-  }
-
   if (
     !Array.isArray(
       input.items
@@ -429,6 +423,18 @@ function validatePricingInput(
       "A shipping state and postal code are required."
     );
   }
+}
+
+function validatePricingInput(
+  input: PricingInput
+) {
+  if (!input.customerId) {
+    throw new Error(
+      "Customer ID is required."
+    );
+  }
+
+  validateServerPricingInput(input);
 }
 
 function calculateRemainingMerchandise({
@@ -969,7 +975,27 @@ type CustomKitPricingInput = Omit<PricingInput, "items"> & {
   items: Array<PricingInput["items"][number] & { customKitGroupId?: string }>;
 };
 
-function getCompleteCustomKitGroups(items: CustomKitPricingInput["items"]) {
+export type ServerPricingInput = Omit<CustomKitPricingInput, "customerId"> & {
+  customerId: string | null;
+};
+
+const GUEST_CUSTOMER_PROFILE: CustomerPricingProfile = {
+  id: "",
+  rewardPoints: 0,
+  lifetimeSpend: 0,
+  vipTier: "Stone",
+  hasLifetimeFreeShipping: false,
+  isHeroAccount: false,
+  heroDiscountPercent: 0,
+  qualifiedReferralCount: 0,
+  referralLifetimeDiscountPercent: 0,
+  isTaxExempt: false,
+  taxExemptionType: null,
+  taxExemptionNumber: null,
+  taxExemptionExpiresAt: null,
+};
+
+function getCompleteCustomKitGroups(items: ServerPricingInput["items"]) {
   const groups = new Map<string, number[]>();
   items.forEach((item, index) => {
     if (!item.customKitGroupId) return;
@@ -983,14 +1009,14 @@ function getCompleteCustomKitGroups(items: CustomKitPricingInput["items"]) {
   );
 }
 
-function hasMatchingMerchandiseLines(campaign: CampaignPricingResult, items: CustomKitPricingInput["items"]) {
+function hasMatchingMerchandiseLines(campaign: CampaignPricingResult, items: ServerPricingInput["items"]) {
   return campaign.items.length === items.length &&
     campaign.items.every((line, index) =>
       line.productOptionId === items[index].productOptionId && line.quantity === items[index].quantity
     );
 }
 
-async function priceCartCampaign(supabase: SupabaseClient, items: CustomKitPricingInput["items"]) {
+async function priceCartCampaign(supabase: SupabaseClient, items: ServerPricingInput["items"]) {
   const campaign = await calculateCampaignPricing({ supabase, items });
   if (!items.some((item) => item.customKitGroupId)) return campaign;
   if (!hasMatchingMerchandiseLines(campaign, items)) {
@@ -1019,7 +1045,7 @@ async function priceCartCampaign(supabase: SupabaseClient, items: CustomKitPrici
 }
 
 async function buildCustomKitCandidate(
-  input: CustomKitPricingInput,
+  input: ServerPricingInput,
   campaign: CampaignPricingResult
 ) {
   const completeGroups = getCompleteCustomKitGroups(input.items);
@@ -1168,6 +1194,25 @@ export async function calculatePricing(
       }
     );
 
+  return runPricingPipeline(input, isAdmin);
+}
+
+export async function calculateServerPricing(
+  input: ServerPricingInput
+): Promise<PricingResult> {
+  validateServerPricingInput(input);
+  return runPricingPipeline(input, false);
+}
+
+async function runPricingPipeline(
+  input: ServerPricingInput,
+  isAdmin: boolean
+): Promise<PricingResult> {
+  const {
+    supabase,
+    customerId,
+  } = input;
+
   const [
     marketingRules,
     customerProfile,
@@ -1177,10 +1222,12 @@ export async function calculatePricing(
         supabase
       ),
 
-      loadCustomerProfile({
-        supabase,
-        customerId,
-      }),
+      customerId
+        ? loadCustomerProfile({
+            supabase,
+            customerId,
+          })
+        : Promise.resolve(GUEST_CUSTOMER_PROFILE),
     ]);
 
   /*
@@ -1741,7 +1788,7 @@ export async function calculatePricing(
 
   const snapshot =
     createPricingSnapshot({
-      customerId,
+      customerId: customerId ?? "",
       campaign,
       promo,
       referral,

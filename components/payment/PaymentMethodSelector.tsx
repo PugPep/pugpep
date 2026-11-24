@@ -21,17 +21,26 @@ const methods: MethodOption[] = [
   { value: "venmo", label: "Venmo", logo: "/venmo.png", accent: "#00bfff" },
   { value: "zelle", label: "Zelle", logo: "/zelle.png", accent: "#b86cff" },
   { value: "crypto", label: "Crypto", logo: "/aurpay.png", accent: "#f7931a", hidden: true },
-  { value: "credit_card", label: "Credit Card", logo: "/credit.png", accent: "#d4af37", comingSoon: true },
-  { value: "debit_card", label: "Debit Card", logo: "/debit.png", accent: "#20c997", comingSoon: true },
+  { value: "credit_card", label: "Credit / Debit Card", logo: "/credit.png", accent: "#7df9ff" },
+  { value: "debit_card", label: "Debit Card", logo: "/debit.png", accent: "#20c997", hidden: true },
 ];
 
-const visibleMethods = methods.filter(({ hidden }) => !hidden);
-
-export function PaymentMethodSelector({ method, setMethod, orderNumber }: {
+export function PaymentMethodSelector({
+  method,
+  setMethod,
+  orderNumber,
+  cardPaymentEnabled = false,
+}: {
   method: PaymentMethod;
   setMethod: (method: PaymentMethod) => void;
   orderNumber: string;
+  cardPaymentEnabled?: boolean;
 }) {
+  const visibleMethods = methods.filter(
+    ({ value, hidden }) => !hidden && (value !== "credit_card" || cardPaymentEnabled),
+  );
+  const columns = visibleMethods.length >= 4 ? 4 : 3;
+
   return (
     <div style={card}>
       <div style={sectionHeading}>
@@ -41,7 +50,10 @@ export function PaymentMethodSelector({ method, setMethod, orderNumber }: {
           <p style={{ ...sectionHelper, color: "#ffffff" }}>Select the option you plan to use.</p>
         </div>
       </div>
-      <div className="payment-method-grid" style={{ ...methodGrid, gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+      <div
+        className="payment-method-grid"
+        style={{ ...methodGrid, gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      >
         {visibleMethods.map(({ value, label, logo, accent, comingSoon }) => {
           const selected = method === value;
           return (

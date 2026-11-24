@@ -14,12 +14,54 @@ function DiscountRow({label,value}:{label:string;value:number}) {
  if (value <= 0) return null;
  return <div style={summaryRow}><span>{label}</span><strong style={{color:"#00ff99"}}>-{money(value)}</strong></div>;
 }
-export function OrderSummary({order,displayPricing,displayTotal,taxEnabled,confirming,confirmOrder,cardPaymentsUnavailable=false}:{
- order: PendingOrder; displayPricing: PricingResult | undefined;
- displayTotal:number;taxEnabled:boolean;confirming:boolean;
- confirmOrder:()=>void;cardPaymentsUnavailable?:boolean;
+export function OrderSummary({
+  order,
+  displayPricing,
+  displayTotal,
+  taxEnabled,
+  confirming,
+  confirmOrder,
+  cardPaymentsUnavailable = false,
+  cardCheckoutActive = false,
+  cardReady = false,
+  cardBusy = false,
+  submitCardOrder,
+}: {
+  order: PendingOrder;
+  displayPricing: PricingResult | undefined;
+  displayTotal: number;
+  taxEnabled: boolean;
+  confirming: boolean;
+  confirmOrder: () => void;
+  cardPaymentsUnavailable?: boolean;
+  cardCheckoutActive?: boolean;
+  cardReady?: boolean;
+  cardBusy?: boolean;
+  submitCardOrder?: () => void;
 }) {
- const confirmationDisabled = confirming || Boolean(order.confirmed) || cardPaymentsUnavailable;
+  const confirmationDisabled = cardCheckoutActive
+    ? confirming || Boolean(order.confirmed) || !cardReady || cardBusy
+    : confirming || Boolean(order.confirmed) || cardPaymentsUnavailable;
+
+  const buttonLabel = cardCheckoutActive
+    ? confirming || cardBusy
+      ? "Processing Card Payment..."
+      : order.confirmed
+        ? "Order Confirmed"
+        : `Pay ${money(displayTotal)} with Card →`
+    : confirming
+      ? "Confirming Order..."
+      : order.confirmed
+        ? "Order Confirmed"
+        : cardPaymentsUnavailable
+          ? "Card Payments Coming Soon"
+          : "Confirm Order →";
+
+  const helperText = cardCheckoutActive
+    ? "Complete your card details on the left and click Pay with Card to submit."
+    : cardPaymentsUnavailable
+      ? "Credit and debit card processing is not available yet. Choose another payment method to continue."
+      : "After sending payment with the selected method, click Confirm Order.";
  return <>
  <div style={summaryCard}>
   <div style={summaryHeader}><div><p style={summaryEyebrow}>ORDER REVIEW</p><h2 style={summaryTitle}>Your Total</h2></div><strong style={heroTotal}>{money(displayTotal)}</strong></div>
@@ -56,9 +98,9 @@ export function OrderSummary({order,displayPricing,displayTotal,taxEnabled,confi
   <div style={trustItem}><span style={trustIcon}>✓</span>Delivery details confirmed</div>
   <div style={trustItem}><span style={trustIcon}>✓</span>Pricing verified before submission</div>
  </div>
- <button type="button" onClick={confirmOrder} disabled={confirmationDisabled} style={{...confirmButton,opacity:confirmationDisabled ? 0.65 : 1,cursor:confirmationDisabled?"not-allowed":"pointer"}}>
-  {confirming ? "Confirming Order..." : order.confirmed ? "Order Confirmed" : cardPaymentsUnavailable ? "Card Payments Coming Soon" : "Confirm Order →"}
+ <button type="button" onClick={cardCheckoutActive && submitCardOrder ? submitCardOrder : confirmOrder} disabled={confirmationDisabled} style={{...confirmButton,opacity:confirmationDisabled ? 0.65 : 1,cursor:confirmationDisabled?"not-allowed":"pointer"}}>
+  {buttonLabel}
  </button>
- <p style={{ ...confirmNotice, color: "#ffffff" }}>{cardPaymentsUnavailable ? "Credit and debit card processing is not available yet. Choose another payment method to continue." : "After sending payment with the selected method, click Confirm Order."}</p>
+ <p style={{ ...confirmNotice, color: "#ffffff" }}>{helperText}</p>
  </>;
 }

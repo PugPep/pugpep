@@ -22,7 +22,7 @@ import {
 
 type TaxEngineInput = {
   supabase: SupabaseClient;
-  customerId: string;
+  customerId: string | null;
 
   campaign: CampaignPricingResult;
   promo: PromoPricingResult;
@@ -517,11 +517,17 @@ export async function calculateTaxPricing({
       settings.tax_provider
     );
 
-  const customer =
-    await loadCustomerTaxStatus({
-      supabase,
-      customerId,
-    });
+  const customer: CustomerTaxRow = customerId
+    ? await loadCustomerTaxStatus({
+        supabase,
+        customerId,
+      })
+    : {
+        is_tax_exempt: false,
+        tax_exemption_type: null,
+        tax_exemption_number: null,
+        tax_exemption_expires_at: null,
+      };
 
   const customerTaxExempt =
     isTaxExemptionActive(

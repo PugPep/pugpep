@@ -11,8 +11,11 @@ import type {
 type PaymentMethod =
   | "cashapp"
   | "venmo"
+  | "zelle"
   | "applecash"
-  | "crypto";
+  | "crypto"
+  | "credit_card"
+  | "debit_card";
 
 type PendingCustomer = {
   organization: string;
@@ -70,11 +73,20 @@ function formatPaymentMethod(
     case "venmo":
       return "Venmo";
 
+    case "zelle":
+      return "Zelle";
+
     case "applecash":
       return "Apple Cash";
 
     case "crypto":
       return "Crypto";
+
+    case "credit_card":
+      return "Credit / Debit Card";
+
+    case "debit_card":
+      return "Debit Card";
 
     default:
       return "Selected Payment Method";
