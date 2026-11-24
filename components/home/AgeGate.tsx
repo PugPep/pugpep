@@ -12,11 +12,11 @@ export default function AgeGate() {
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      setAccepted(stored === "yes");
+      localStorage.setItem(STORAGE_KEY, "yes");
     } catch {
-      setAccepted(false);
+      // Storage optional when server research gate is active.
     } finally {
+      setAccepted(true);
       setReady(true);
     }
   }, []);
