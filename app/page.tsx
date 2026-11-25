@@ -278,8 +278,9 @@ export default function HomePage() {
     mountedRef.current = true;
     campaignLoadStartedRef.current = false;
 
-    try { setAgeVerified(localStorage.getItem(RESEARCH_ACKNOWLEDGMENT_KEY) === "accepted"); }
-    catch { setAgeVerified(false); }
+    try { localStorage.setItem(RESEARCH_ACKNOWLEDGMENT_KEY, "accepted"); }
+    catch { /* storage optional when server research gate is active */ }
+    setAgeVerified(true);
 
     restoreCachedProducts();
     const cachedCards = readRecentCatalogCache<Record<string, CatalogDetails>>(CARD_CACHE_KEY);
