@@ -11,7 +11,7 @@ import {
 
 type VipEngineInput = {
   supabase: SupabaseClient;
-  customerId: string;
+  customerId: string | null;
 
   /*
    * Merchandise amount remaining before any future
@@ -149,6 +149,14 @@ export async function calculateVipPricing({
   customerId,
   eligibleMerchandiseAmount,
 }: VipEngineInput): Promise<VipPricingResult> {
+  if (!customerId) {
+    return {
+      vipTier: "Stone",
+      vipDiscountPercent: 0,
+      vipDiscount: 0,
+    };
+  }
+
   const customer =
     await loadCustomerVipData({
       supabase,

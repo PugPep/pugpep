@@ -17,7 +17,7 @@ import {
 
 type ReferralEngineInput = {
   supabase: SupabaseClient;
-  customerId: string;
+  customerId: string | null;
   campaign: CampaignPricingResult;
   marketingRules: MarketingRulesRecord;
 
@@ -124,6 +124,7 @@ export async function calculateReferralPricing({
     PricingWarning[] = [];
 
   if (
+    !customerId ||
     !marketingRules.referral_program_enabled
   ) {
     return {

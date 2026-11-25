@@ -22,7 +22,7 @@ import {
 
 type PromoEngineInput = {
   supabase: SupabaseClient;
-  customerId: string;
+  customerId: string | null;
   campaign: CampaignPricingResult;
   promoCode?: string | null;
   marketingRules: MarketingRulesRecord;
@@ -169,7 +169,7 @@ async function validatePromoCode({
   promoCode,
 }: {
   supabase: SupabaseClient;
-  customerId: string;
+  customerId: string | null;
   promoCode: string;
 }) {
   const {
@@ -180,11 +180,19 @@ async function validatePromoCode({
     {
       p_code: promoCode,
       p_customer_id:
-        customerId,
+        customerId ?? null,
     }
   );
 
   if (error) {
+    if (!customerId) {
+      return normalizePromoValidation({
+        valid: false,
+        code: promoCode,
+        discount_allowed: false,
+        message: "Sign in to your PugPep account to apply this promo code.",
+      });
+    }
     throw error;
   }
 
