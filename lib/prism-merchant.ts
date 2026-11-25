@@ -32,6 +32,7 @@ export class MerchantHttpError extends Error {
 
 export interface MerchantDeps {
   admin?: SupabaseClient;
+  userClient?: SupabaseClient;
   sendEmailFn?: (payload: Record<string, unknown>) => Promise<void>;
   sendSmsFn?: (to: string, body: string) => Promise<unknown>;
   expectedSecret?: string;
@@ -73,6 +74,18 @@ export function createAdminSupabaseClient(): SupabaseClient {
     throw new MerchantHttpError(503, "Store backend credentials are unavailable.");
   }
   return createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+export function createUserSupabaseClient(accessToken: string): SupabaseClient {
+  const url = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
+  const anonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").trim();
+  if (!url || !anonKey) {
+    throw new MerchantHttpError(503, "Store backend credentials are unavailable.");
+  }
+  return createClient(url, anonKey, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
@@ -137,6 +150,7 @@ async function resolveAccount(
   request: Request,
 ): Promise<{
   userId: string | null;
+  accessToken: string | null;
   account: { id: string; email: string; name: string } | null;
 }> {
   let token = (request.headers.get("x-prism-account") || "").trim();
@@ -144,7 +158,7 @@ async function resolveAccount(
     token = token.slice(7).trim();
   }
   if (!token) {
-    return { userId: null, account: null };
+    return { userId: null, accessToken: null, account: null };
   }
   if (token.length > 4096 || token.split(".").length !== 3) {
     throw new MerchantHttpError(401, "Sign in to your PugPep account again.");
@@ -172,6 +186,7 @@ async function resolveAccount(
 
   return {
     userId: user.id,
+    accessToken: token,
     account: {
       id: user.id,
       email: String(user.email || "").trim().toLowerCase(),
@@ -406,8 +421,16 @@ async function handleQuote(admin: SupabaseClient, request: Request, body: Record
   };
 }
 
-async function handlePrepare(admin: SupabaseClient, request: Request, body: Record<string, unknown>) {
-  const { userId } = await resolveAccount(admin, request);
+async function handlePrepare(
+  admin: SupabaseClient,
+  request: Request,
+  body: Record<string, unknown>,
+  deps: MerchantDeps = {},
+) {
+  const { userId, accessToken } = await resolveAccount(admin, request);
+  const rpcClient =
+    deps.userClient ??
+    (accessToken && !deps.admin ? createUserSupabaseClient(accessToken) : admin);
   const prismOrderId = typeof body.prismOrderId === "string" ? body.prismOrderId.trim() : "";
   if (!UUID_RE.test(prismOrderId)) {
     throw new MerchantHttpError(400, "Invalid checkout order ID.");
@@ -588,16 +611,25 @@ async function handlePrepare(admin: SupabaseClient, request: Request, body: Reco
       pricedInputItems,
     });
 
-    await persistOrderLedger({
-      supabase: admin,
-      order: pendingOrder,
-      pricing,
-      insertedItems,
-      itemsInPricingOrder: hasCustomKit,
-    });
+    try {
+      await persistOrderLedger({
+        supabase: rpcClient,
+        order: pendingOrder,
+        pricing,
+        insertedItems,
+        itemsInPricingOrder: hasCustomKit,
+      });
+    } catch (ledgerErr) {
+      const errCode = (ledgerErr as { code?: unknown } | null)?.code;
+      if (!userId && errCode === "P0001") {
+        console.warn("Guest financial ledger skipped by DB RPC:", (ledgerErr as { message?: string }).message);
+      } else {
+        throw ledgerErr;
+      }
+    }
 
     if (userId || pricing.promo.appliedPromoSource === "sales_rep") {
-      const { error: attributionError } = await admin.rpc(
+      const { error: attributionError } = await rpcClient.rpc(
         "finalize_sales_rep_order_attribution",
         {
           p_order_id: pendingOrder.id,
@@ -618,7 +650,7 @@ async function handlePrepare(admin: SupabaseClient, request: Request, body: Reco
       pricing.promo.appliedPromoCode &&
       pricing.discounts.generalPromoDiscount > 0
     ) {
-      const { error: promoRedeemError } = await admin.rpc(
+      const { error: promoRedeemError } = await rpcClient.rpc(
         "redeem_general_promo_for_order",
         {
           p_order_id: pendingOrder.id,
@@ -634,18 +666,22 @@ async function handlePrepare(admin: SupabaseClient, request: Request, body: Reco
 
     if (userId && pricing.rewards.pointsUsed > 0) {
       deductedRewardPoints = await deductRewardPoints({
-        supabase: admin,
+        supabase: rpcClient,
         customerId: userId,
         rewardPointsBefore,
         pointsUsed: pricing.rewards.pointsUsed,
       });
     }
 
-    const { error: lockError } = await admin.rpc("lock_order_financial_snapshot", {
+    const { error: lockError } = await rpcClient.rpc("lock_order_financial_snapshot", {
       p_order_id: pendingOrder.id,
     });
     if (lockError) {
-      throw lockError;
+      if (!userId && (lockError as { code?: unknown }).code === "P0001") {
+        console.warn("Guest financial snapshot lock skipped by DB RPC:", lockError.message);
+      } else {
+        throw lockError;
+      }
     }
 
     return {
@@ -658,7 +694,7 @@ async function handlePrepare(admin: SupabaseClient, request: Request, body: Reco
     if (deductedRewardPoints > 0 && userId) {
       try {
         await restoreRewardPoints({
-          supabase: admin,
+          supabase: rpcClient,
           customerId: userId,
           points: deductedRewardPoints,
         });
@@ -943,7 +979,7 @@ export async function handleMerchantRequest(
       return Response.json(await handleQuote(admin, request, body), { headers: PRIVATE_HEADERS });
     }
     if (operation === "prepare") {
-      return Response.json(await handlePrepare(admin, request, body), { headers: PRIVATE_HEADERS });
+      return Response.json(await handlePrepare(admin, request, body, deps), { headers: PRIVATE_HEADERS });
     }
     if (operation === "settle") {
       return Response.json(await handleSettle(admin, body), { headers: PRIVATE_HEADERS });

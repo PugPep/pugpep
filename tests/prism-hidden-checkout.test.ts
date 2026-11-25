@@ -116,7 +116,12 @@ function createFakeSupabase({
       limit: () => chain,
       maybeSingle: async () => {
         if (table === "orders") return { data: orderRow, error: null };
-        if (table === "customer_profiles") return { data: { full_name: "Test Researcher" }, error: null };
+        if (table === "customer_profiles") {
+          return {
+            data: { full_name: "Test Researcher", reward_points: 0, lifetime_spend: 0 },
+            error: null,
+          };
+        }
         if (table === "marketing_rules") {
           return {
             data: {
@@ -168,6 +173,24 @@ function createFakeSupabase({
           return { error: null };
         },
       }),
+      insert: (rows: unknown) => {
+        if (table === "orders") {
+          return Promise.resolve({ error: null });
+        }
+        if (table === "order_items") {
+          const arr = Array.isArray(rows) ? rows : [rows];
+          return {
+            select: async () => ({
+              data: arr.map((r, i) => ({
+                id: `item-${i + 1}`,
+                product_option_id: (r as { product_option_id: string }).product_option_id,
+              })),
+              error: null,
+            }),
+          };
+        }
+        return Promise.resolve({ error: null });
+      },
       then: (resolve: (val: unknown) => void) => {
         if (table === "product_options") {
           return resolve({
@@ -594,5 +617,86 @@ describe("PugPep hidden PRISM checkout", () => {
     });
     const res = await proxy(req, {} as never);
     expect(res.status).toBe(200);
+  });
+
+  it("executes prepare financial ledger RPCs via the signed-in userClient instead of service_role admin", async () => {
+    const { handleMerchantRequest } = await import("../lib/prism-merchant");
+    const admin = createFakeSupabase({
+      orderRow: null,
+      userForJwt: { id: USER_ID, email: "researcher@pugpep.com" },
+    });
+    const user = createFakeSupabase();
+
+    const prepRes = await handleMerchantRequest(
+      new Request("https://pugpep.com/api/prism/merchant", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-prism-merchant-secret": MERCHANT_SECRET,
+          "x-prism-account": "header.payload.sig",
+        },
+        body: JSON.stringify({
+          prismOperation: "prepare",
+          prismOrderId: ORDER_ID,
+          expectedAmountMinor: 11200,
+          cart: {
+            customer_name: "Test Researcher",
+            customer_email: "researcher@pugpep.com",
+            address: "100 Science Way",
+            city: "Austin",
+            state: "TX",
+            zip: "78701",
+            country: "US",
+            shipping_method: "standard",
+            items: [{ id: OPTION_ID, qty: 2 }],
+            consent: { age_ok: true, research_use_ok: true, terms_ok: true },
+          },
+        }),
+      }),
+      { admin: admin.client, userClient: user.client },
+    );
+
+    expect(prepRes.status).toBe(200);
+    expect(await prepRes.json()).toEqual({
+      prepared: true,
+      orderId: ORDER_ID,
+      orderNumber: expect.stringMatching(/^PUG-/),
+      total: 112,
+    });
+    expect(user.rpcCalls.some((c) => c.name === "add_order_ledger_entry")).toBe(true);
+    expect(user.rpcCalls.some((c) => c.name === "finalize_sales_rep_order_attribution")).toBe(true);
+    expect(user.rpcCalls.some((c) => c.name === "lock_order_financial_snapshot")).toBe(true);
+    expect(admin.rpcCalls.some((c) => c.name === "add_order_ledger_entry")).toBe(false);
+  });
+
+  it("createMountHandoffTransport serves initial bootstrap, status, and express quote without extra network round-trips", async () => {
+    const { createMountHandoffTransport } = await import("../lib/prism-checkout-transport");
+    const calls: string[] = [];
+    const transport = createMountHandoffTransport({
+      rawApi: {
+        bootstrap: async () => {
+          calls.push("bootstrap");
+          return { nonce: "n2" };
+        },
+        post: async (action) => {
+          calls.push(action);
+          return { ok: true };
+        },
+      },
+      initialBoot: { nonce: "n1", store_policy: { currency: "usd" }, cart: { items: [] } },
+      initialStatus: { status: "none" },
+      initialCart: { items: [{ product_id: OPTION_ID, quantity: 1 }] },
+      initialQuote: { amount_minor: 5000, publishable_key: "pk_test", connected_account: "acct_123" },
+      editable: true,
+    });
+
+    expect((await transport.bootstrap()).nonce).toBe("n1");
+    expect((await transport.post("psc_native_status")).status).toBe("none");
+    expect((await transport.post("psc_express_bootstrap")).amount_minor).toBe(5000);
+    expect(calls).toEqual([]);
+
+    await transport.post("psc_sync_wallet", {});
+    await transport.post("psc_native_status", {});
+    expect(calls).toEqual(["psc_sync_wallet", "psc_native_status"]);
   });
 });

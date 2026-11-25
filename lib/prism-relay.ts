@@ -143,6 +143,9 @@ export async function relayPrismCheckout(request: Request): Promise<Response> {
     }
 
     const returned = new Headers(PRIVATE);
+    if (isAsset && upstream.ok) {
+      returned.set("Cache-Control", "private, max-age=3600");
+    }
     const contentType = upstream.headers.get("content-type");
     if (contentType) returned.set("content-type", contentType);
     for (const cookie of upstream.headers.getSetCookie()) {

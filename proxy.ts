@@ -46,6 +46,9 @@ function isServiceOrPublicAsset(pathname: string, method: string): boolean {
 }
 
 function shouldSkipSessionRefresh(pathname: string): boolean {
+  if (pathname.startsWith("/api/prism/") || pathname.startsWith("/prism/")) {
+    return true;
+  }
   if (STATIC_SKIP_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     return true;
   }

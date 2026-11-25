@@ -13,6 +13,10 @@ import { PaymentMethodSelector } from "../../components/payment/PaymentMethodSel
 import { PaymentPanel } from "../../components/payment/PaymentPanel";
 import {
   PRISM_SDK_PATH_RE,
+  preparePugPepCardBootstrap,
+  prewarmPrismCheckout,
+} from "../../lib/prism-checkout-transport";
+import {
   type PrismClientConfig,
   type PrismOrderReceipt,
   type PrismQuoteData,
@@ -96,6 +100,7 @@ export default function PaymentPage() {
       })
       .then((cfg) => {
         if (!controller.signal.aborted) {
+          if (cfg) prewarmPrismCheckout(cfg.moduleUrl);
           setPrismConfig(cfg);
         }
       })
@@ -106,6 +111,22 @@ export default function PaymentPage() {
       });
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (!prismConfig || !order || order.confirmed) return;
+    const getToken = async () => {
+      const { data } = await supabase.auth.getSession();
+      return data.session?.access_token ?? null;
+    };
+    void preparePugPepCardBootstrap({
+      config: prismConfig,
+      order,
+      getToken,
+      termsAccepted: true,
+    }).catch(() => {
+      // Prewarm failure is non-fatal; selecting Credit / Debit Card retries cleanly.
+    });
+  }, [prismConfig, order, supabase]);
 
   const handleCardComplete = useCallback(
     (receipt: PrismOrderReceipt) => {

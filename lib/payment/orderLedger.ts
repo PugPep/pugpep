@@ -93,7 +93,9 @@ export async function persistOrderLedger({
       )
     );
 
-  await addLedgerEntry({
+  const writes: Array<Promise<void>> = [];
+
+  writes.push(addLedgerEntry({
     supabase,
     orderId: order.id,
     entryType: "credit",
@@ -108,7 +110,7 @@ export async function persistOrderLedger({
       snapshotVersion:
         snapshot.snapshotVersion,
     },
-  });
+  }));
 
   const discountEntries = [
     {
@@ -232,7 +234,7 @@ export async function persistOrderLedger({
       continue;
     }
 
-    await addLedgerEntry({
+    writes.push(addLedgerEntry({
       supabase,
       orderId: order.id,
       entryType: "debit",
@@ -248,10 +250,10 @@ export async function persistOrderLedger({
         entry.sourceId,
       sourceCode:
         entry.sourceCode,
-    });
+    }));
   }
 
-  await addLedgerEntry({
+  writes.push(addLedgerEntry({
     supabase,
     orderId: order.id,
     entryType: "credit",
@@ -261,9 +263,9 @@ export async function persistOrderLedger({
     amount:
       accounting
         .shippingCollected,
-  });
+  }));
 
-  await addLedgerEntry({
+  writes.push(addLedgerEntry({
     supabase,
     orderId: order.id,
     entryType: "liability",
@@ -279,10 +281,10 @@ export async function persistOrderLedger({
       jurisdiction:
         tax.salesTaxJurisdiction,
     },
-  });
+  }));
 
   for (const [index, item] of pricing.campaign.items.entries()) {
-    await addLedgerEntry({
+    writes.push(addLedgerEntry({
       supabase,
       orderId:
         order.id,
@@ -307,10 +309,10 @@ export async function persistOrderLedger({
         item.productOptionId,
       sourceCode:
         item.productSlug,
-    });
+    }));
   }
 
-  await addLedgerEntry({
+  writes.push(addLedgerEntry({
     supabase,
     orderId: order.id,
     entryType: "debit",
@@ -320,9 +322,9 @@ export async function persistOrderLedger({
       "Estimated shipping expense",
     amount:
       -accounting.shippingCost,
-  });
+  }));
 
-  await addLedgerEntry({
+  writes.push(addLedgerEntry({
     supabase,
     orderId: order.id,
     entryType: "debit",
@@ -332,9 +334,9 @@ export async function persistOrderLedger({
       "Estimated packaging expense",
     amount:
       -accounting.packagingCost,
-  });
+  }));
 
-  await addLedgerEntry({
+  writes.push(addLedgerEntry({
     supabase,
     orderId: order.id,
     entryType: "debit",
@@ -344,9 +346,9 @@ export async function persistOrderLedger({
       "Other direct cost",
     amount:
       -accounting.otherDirectCost,
-  });
+  }));
 
-  await addLedgerEntry({
+  writes.push(addLedgerEntry({
     supabase,
     orderId: order.id,
     entryType: "liability",
@@ -365,5 +367,7 @@ export async function persistOrderLedger({
     sourceCode:
       pricing.commission
         .salesRepName,
-  });
+  }));
+
+  await Promise.all(writes);
 }

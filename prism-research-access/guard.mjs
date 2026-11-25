@@ -96,7 +96,7 @@ export async function researchOutcome(request, config) {
   let decision = 'none', maxAge = 0;
   // Hashed build files (styles, scripts, images) for a browser with a valid signed grant: the page
   // document already got a fresh central decision, so skip one call per file to avoid unstyled pages.
-  if (grant && request.method === 'GET' && /^\/(?:assets|api\/prism-site-files)\/[^/]+$/.test(new URL(request.url).pathname)) return { pass: 'research' };
+  if (grant && ['GET', 'HEAD'].includes(request.method) && /^\/(?:(?:assets|api\/prism-site-files)\/[^/]+|prism\/0\.2\.2-candidate\.4[^/]*\/assets\/.+)$/.test(new URL(request.url).pathname)) return { pass: 'research' };
   if (grant) {
     try { ({ decision, maxAge } = await client.decision(grant.token, await config.getIngress(request))); }
     catch { decision = 'unavailable'; }
